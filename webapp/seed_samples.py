@@ -117,7 +117,7 @@ def seed_for_user(uid: int) -> dict:
             continue
         st = userdata.create_strategy(uid, s["name"], s.get("description", ""), s["rules_text"])
         parsed = parse_rules(s["rules_text"])
-        userdata.set_rules(st["id"], parsed["rules"])
+        userdata.set_rules(uid, st["id"], parsed["rules"])
         strategies[s["name"]] = st["id"]
         created["strategies"].append(s["name"])
 

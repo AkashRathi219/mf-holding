@@ -940,12 +940,12 @@ def stock_refresh(limit, full):
 
 
 @cli.command()
-@click.option("--json", is_flag=True, help="Output JSON only")
-def stock_status(json):
+@click.option("--json", "as_json", is_flag=True, help="Output JSON only")
+def stock_status(as_json):
     """Show stock backfill completion status (price / actions / reports)."""
     _setup_from_config()
     r = stock_status_report()
-    if json:
+    if as_json:
         click.echo(json.dumps(r, indent=2))
         return
     click.echo(f"Stock backfill status:")

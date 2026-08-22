@@ -321,7 +321,8 @@ def api_feedback(request: Request, body: dict):
     from datetime import datetime
     from pathlib import Path
     import json
-    path = BASE_DIR / "data" / "feedback.json"
+    # repo-root data/ (not webapp/data/) so all app data stays under one tree
+    path = BASE_DIR.parent / "data" / "feedback.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     records = []
     if path.exists():

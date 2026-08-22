@@ -132,9 +132,17 @@ def parse_rules(text: str) -> dict:
     return {"rules": rules, "unparsed": unparsed}
 
 
-def _asset_actual(metrics: dict, asset_key: str) -> float:
+def _asset_actual(metrics: dict, asset_key: str) -> float | None:
+    """Actual % for an asset bucket. A bucket absent from the split is a
+    genuine 0.0 only when the portfolio was fully resolved; on partial
+    resolution the true weight is unknown -> None (rule reported N/A)."""
     split = metrics.get("asset_split") or {}
-    return float(split.get(asset_key, 0.0))
+    if asset_key in split:
+        v = split.get(asset_key)
+        return None if v is None else float(v)
+    if metrics.get("_portfolio_resolved"):
+        return 0.0
+    return None
 
 
 def _actual_for(rule: dict, metrics: dict) -> float | None:
@@ -197,7 +205,18 @@ def evaluate_rules(rules: list[dict], metrics: dict) -> dict:
                 "remark": r.get("remark") or "",
             })
             continue
-        limit = float(r.get("value") or 0)
+        if r.get("value") is None:
+            # a persisted rule without a limit value cannot be scored
+            results.append({
+                "rule": _label(r),
+                "rule_type": r.get("rule_type"),
+                "field": r.get("field"), "operator": r.get("operator"),
+                "limit": _fmt_limit(r), "actual": "N/A",
+                "pass": None, "severity": r.get("severity") or "low", "na": True,
+                "remark": r.get("remark") or "rule has no limit value",
+            })
+            continue
+        limit = float(r.get("value"))
         op = r.get("operator") or "<="
         ok = actual <= limit if op == "<=" else actual >= limit
         unit = r.get("unit") or "%"
@@ -218,7 +237,9 @@ def evaluate_rules(rules: list[dict], metrics: dict) -> dict:
             "remark": r.get("remark") or "",
         })
     total = passed + failed
-    compliance = round(passed / total * 100, 1) if total else 100.0
+    # Zero evaluable rules is NOT full compliance — report None so the UI can
+    # show an explicit N/A instead of a misleading green 100%.
+    compliance = round(passed / total * 100, 1) if total else None
     return {"rows": results, "passed": passed, "failed": failed,
             "total": total, "na": len(results) - total, "compliance": compliance}
 

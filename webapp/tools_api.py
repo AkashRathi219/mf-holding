@@ -7,6 +7,7 @@ All endpoints require a valid session and scope rows to the logged-in user.
 from __future__ import annotations
 
 import datetime
+import json
 import re
 import time
 from pathlib import Path
@@ -73,7 +74,7 @@ def api_strategies_create(request: Request, body: dict):
                                         body.get("rules_text") or "")
     parsed = parse_rules(strategy["rules_text"])
     _apply_remarks(parsed["rules"], body.get("remarks"))
-    userdata.set_rules(strategy["id"], parsed["rules"])
+    userdata.set_rules(_uid(u), strategy["id"], parsed["rules"])
     strategy["rules"] = parsed["rules"]
     strategy["unparsed"] = parsed["unparsed"]
     return strategy
@@ -85,7 +86,7 @@ def api_strategies_get(strategy_id: int, request: Request):
     s = userdata.get_strategy(_uid(u), strategy_id)
     if not s:
         raise HTTPException(status_code=404, detail="Strategy not found.")
-    s["rules"] = userdata.get_rules(strategy_id)
+    s["rules"] = userdata.get_rules(strategy_id, _uid(u))
     return s
 
 
@@ -100,7 +101,7 @@ def api_strategies_update(strategy_id: int, request: Request, body: dict):
     if body.get("rules_text") is not None:
         parsed = parse_rules(s["rules_text"])
         _apply_remarks(parsed["rules"], body.get("remarks"))
-        userdata.set_rules(strategy_id, parsed["rules"])
+        userdata.set_rules(_uid(u), strategy_id, parsed["rules"])
         s["rules"] = parsed["rules"]
         s["unparsed"] = parsed["unparsed"]
     return s
@@ -685,7 +686,9 @@ def _markdown_report(label: str, kind: str, items: list[dict], pa: dict, metrics
     L.append(f"- **Allocated:** {pa.get('total_weight', 0)}%  ·  **Resolved:** "
              f"{pa.get('effective_total', 0)}%  ·  **Coverage:** {pa.get('coverage_pct', 0)}%")
     L.append(f"- **Securities (effective holdings):** {pa.get('n_holdings', 0)}")
-    L.append(f"- **Compliance:** {compliance.get('compliance')}%  "
+    _comp = compliance.get("compliance")
+    _comp_s = "N/A (no evaluable rules)" if _comp is None else f"{_comp}%"
+    L.append(f"- **Compliance:** {_comp_s} "
              f"({compliance.get('passed')} of {compliance.get('total')} rules passed)")
     L.append("")
 
@@ -860,10 +863,13 @@ def _analyze(items: list[dict], strategy_id: int | None, uid: int, wdb: dbm.WebD
     # instead of cost-based weights.
     items = _reweight_items(items)
     pa = wdb.portfolio_analysis(items)
-    stocks_eh = [h for h in pa["effective_holdings"] if h.get("asset_class") == "stocks"]
-    top_stock = stocks_eh[0] if stocks_eh else None
+    # "Max single holding" applies to ANY security (equity OR debt), not just
+    # stocks — effective_holdings is sorted by weight, so [0] is the largest.
+    eh = pa["effective_holdings"] or []
+    top_holding = eh[0] if eh else None
+    stocks_eh = [h for h in eh if h.get("asset_class") == "stocks"]
     metrics = {
-        "single_stock_max": top_stock["weight"] if top_stock else 0.0,
+        "single_stock_max": top_holding["weight"] if top_holding else 0.0,
         "sector_max": max((s["weight"] for s in pa["sector_table"]), default=0.0),
         "asset_split": pa.get("asset_split_raw") or {},
         "cap_split": pa.get("cap_split_raw") or {},
@@ -872,6 +878,9 @@ def _analyze(items: list[dict], strategy_id: int | None, uid: int, wdb: dbm.WebD
         "overlap_max": _overlap_max(items, wdb),
         "n_schemes": len({s["id"] for s in pa["schemes"]}),
         "n_holdings": pa["n_holdings"],
+        # absent asset buckets are a genuine 0 only when everything resolved
+        "_portfolio_resolved": (pa.get("n_holdings", 0) > 0
+                                and (pa.get("coverage_pct") or 0) >= 99.5),
     }
     result = {
         "analysis": pa,
@@ -879,21 +888,24 @@ def _analyze(items: list[dict], strategy_id: int | None, uid: int, wdb: dbm.WebD
         "strategy_id": strategy_id,
     }
     if strategy_id:
-        rules = userdata.get_rules(strategy_id)
+        rules = userdata.get_rules(strategy_id, uid)
         metrics = _apply_remark_directions(metrics, rules, pa, items)
         result["metrics"] = metrics
         result["rules"] = rules
         result["compliance"] = evaluate_rules(rules, metrics)
     else:
         result["rules"] = []
-        result["compliance"] = {"rows": [], "passed": 0, "failed": 0, "total": 0, "compliance": 100.0}
+        result["compliance"] = {"rows": [], "passed": 0, "failed": 0,
+                                "total": 0, "compliance": None}
 
     attribution = _attribution(pa)
     overlap = _overlap_pair(items, wdb)
     attribution["scheme overlap"] = [{"fund": f, "value": overlap["overlap"]}
                                      for f in overlap["funds"]]
+    attribution["single stock"] = ([{"fund": f["fund"], "value": round(top_holding["weight"], 3)}]
+                                   if top_holding else [])
     # Rich per-rule context for the collapsible breakdown rows.
-    contexts = _build_contexts(pa, top_stock, pa.get("sector_table") or [], overlap)
+    contexts = _build_contexts(pa, top_holding, pa.get("sector_table") or [], overlap)
     # Sector-wise top-N rule: show the top sectors instead of the top holdings.
     if any(r.get("rule_type") == "max_top5" and "sector" in (r.get("remark") or "").lower()
            for r in result["rules"] or []):
@@ -1023,13 +1035,13 @@ def _analyze_allocations(allocations: dict, strategy_id: int | None, uid: int) -
         "strategy_id": strategy_id,
     }
     if strategy_id:
-        rules = userdata.get_rules(strategy_id)
+        rules = userdata.get_rules(strategy_id, uid)
         result["rules"] = rules
         result["compliance"] = evaluate_rules(rules, metrics)
     else:
         result["rules"] = []
         result["compliance"] = {"rows": [], "passed": 0, "failed": 0, "total": 0,
-                                "na": 0, "compliance": 100.0}
+                                "na": 0, "compliance": None}
     for row in result["compliance"]["rows"]:
         row["funds"] = []
         row["context"] = None

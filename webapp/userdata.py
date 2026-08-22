@@ -198,9 +198,16 @@ def delete_strategy(user_id: int, strategy_id: int) -> None:
         con.close()
 
 
-def set_rules(strategy_id: int, rules: list[dict]) -> None:
+def set_rules(user_id: int, strategy_id: int, rules: list[dict]) -> None:
+    """Replace a strategy's rules. Scoped: only when the strategy belongs to
+    ``user_id`` (prevents cross-tenant writes)."""
     con = _conn()
     try:
+        owned = con.execute(
+            "SELECT 1 FROM strategies WHERE id=? AND user_id=?",
+            (strategy_id, user_id)).fetchone()
+        if not owned:
+            return
         con.execute("DELETE FROM rules WHERE strategy_id=?", (strategy_id,))
         for r in rules:
             con.execute(
@@ -213,9 +220,17 @@ def set_rules(strategy_id: int, rules: list[dict]) -> None:
         con.close()
 
 
-def get_rules(strategy_id: int) -> list[dict]:
+def get_rules(strategy_id: int, user_id: int | None = None) -> list[dict]:
+    """Rules for a strategy. When ``user_id`` is given the read is scoped —
+    another user's strategy yields [] instead of its rules."""
     con = _conn()
     try:
+        if user_id is not None:
+            owned = con.execute(
+                "SELECT 1 FROM strategies WHERE id=? AND user_id=?",
+                (strategy_id, user_id)).fetchone()
+            if not owned:
+                return []
         rows = con.execute("SELECT * FROM rules WHERE strategy_id=?", (strategy_id,)).fetchall()
         return [dict(r) for r in rows]
     finally:

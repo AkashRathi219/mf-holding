@@ -76,7 +76,10 @@ def main() -> int:
 
     if ok:
         print(f"bootstrap ok={ok} fail={fail} in {time.time() - t0:.1f}s")
-    return 0 if fail == 0 else 1
+    if fail:
+        print("WARNING: some boot-critical files failed to fetch; "
+              "starting uvicorn anyway (app may have degraded features)")
+    return 0
 
 
 if __name__ == "__main__":
