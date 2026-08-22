@@ -1,7 +1,22 @@
 {
-  "generated_at": "2026-08-22T08:23:32Z",
+  "generated_at": "2026-08-22T09:16:06Z",
   "schema": 1,
   "files": [
+    {
+      "path": "bond_market/raw/2026-08-21/cbm_trades_2026-08-21.csv",
+      "size": 37395,
+      "sha256": "1f85390134a3b549fded963c96ef2560ba5c2cf78993d1efc2cc1a7a5667c6c3"
+    },
+    {
+      "path": "bond_market/raw/2026-08-21/corp_master_2026-08-21.csv",
+      "size": 634599,
+      "sha256": "62d548df1568ad4b40a186f9edbc829a4e3455c30ac502afaea334ffac4360ad"
+    },
+    {
+      "path": "bond_market/raw/2026-08-21/wdm_list_2026-08-21.csv",
+      "size": 1244180,
+      "sha256": "c3417881106dcc2a262c7333ad636d297cec2d3d91bdbe60d7375bfe4ec2d6bb"
+    },
     {
       "path": "CAS_sample_portfolio_holdings.json",
       "size": 4516,
@@ -1199,8 +1214,8 @@
     },
     {
       "path": "nav_history/103176.json",
-      "size": 203795,
-      "sha256": "358d64b481de49588057b7a4b350a4ab41c1b6d84e1182cd96ad3e12b739351a"
+      "size": 206142,
+      "sha256": "d47a6dd56754a7643c640dc91552fbf116d7dd7cbafb4ed5b6eb5ad4a6ba6e5e"
     },
     {
       "path": "nav_history/103178.json",
@@ -2009,13 +2024,13 @@
     },
     {
       "path": "nav_history/112014.json",
-      "size": 223889,
-      "sha256": "d274c32e0ef900eb19956b6aaa330b7908ea75c0f3f23b3d73296ffcc3e12901"
+      "size": 227201,
+      "sha256": "a5e72902ad35de4992dc8358196dcb000ec0980bf38c0b65557bc4bddcf59ab8"
     },
     {
       "path": "nav_history/112016.json",
-      "size": 171599,
-      "sha256": "076abd73eeab175f0828a030a646e747b752d52eff551ee9220aeb8675317e2e"
+      "size": 173945,
+      "sha256": "82611035e1dfaf404e70e52a617c4cc66d6a98e6c9e4d4eaf081d9974c53a504"
     },
     {
       "path": "nav_history/112039.json",
@@ -5975,12 +5990,12 @@
     {
       "path": "nav_history/135654.json",
       "size": 103766,
-      "sha256": "0604c648dd2e52cd5aba90cae65d7a82c81a285d85ca7f1f1e5fdb92894bdd79"
+      "sha256": "9b9b0b41edc5a1943475ff74fdd3bbc7a83140b5cdc0ec2a58398a4449099cf8"
     },
     {
       "path": "nav_history/135655.json",
       "size": 103720,
-      "sha256": "f080b570abd4330fe6542027038fb15909d2ba1709bc3cce7dea73715943d4d2"
+      "sha256": "a7a190d380f7aa15f9fe5fa510712ca8d16d79f1e29b5635725940aeb38e7a8d"
     },
     {
       "path": "nav_history/135672.json",
@@ -8655,12 +8670,12 @@
     {
       "path": "nav_history/148454.json",
       "size": 50216,
-      "sha256": "29de2a462c8ed6c6d2ca068b68de50b1e089e95db13919d3203fa48ea46b6add"
+      "sha256": "e5b966aebe399c7b9c49c1ac67135ef13aa971cdec5438d4b4268e58385d3830"
     },
     {
       "path": "nav_history/148455.json",
       "size": 50186,
-      "sha256": "86b9a71bf1b6b3f752e50ac11f41d65e1798ab9c54608bb70e68c0a1b28df84b"
+      "sha256": "dac716775bb5812741b691066bcf0e7cef947ef455b237b33d0dd032df002dbc"
     },
     {
       "path": "nav_history/148456.json",
@@ -9170,12 +9185,12 @@
     {
       "path": "nav_history/148735.json",
       "size": 46216,
-      "sha256": "58845e7eccefcc9d5d1c0163a39f2ee73735534126c078394847464a30a229f3"
+      "sha256": "024eda2f4a628bb2744ce3fd02a15c3d08115a28aafdc12650a432fd5bfc9fc5"
     },
     {
       "path": "nav_history/148738.json",
       "size": 46307,
-      "sha256": "01c967a4365ec4dfb30fa80cf1441ebd6fc1c8128b5478fcbb8aa25ca8031dbe"
+      "sha256": "2cf5f71b1387919d02c135c8675a2fd1edd02cb7d5f4e62ef303a71a963300d2"
     },
     {
       "path": "nav_history/148743.json",
@@ -9269,13 +9284,13 @@
     },
     {
       "path": "nav_history/148795.json",
-      "size": 50790,
-      "sha256": "3573a908e948f365914282336a851679448205dd1fed6c11c7ac47062ebc1c8a"
+      "size": 50954,
+      "sha256": "df00f7017b8a6072d60378c7a95182997990273c69a3b65201915cfd4afcfc05"
     },
     {
       "path": "nav_history/148798.json",
-      "size": 51818,
-      "sha256": "8b3b223497ef2e02df05f51eff7464c164cc02a961ee8a0fd3462d97e3106c4c"
+      "size": 51986,
+      "sha256": "da040aedfe3d2b94c70c7f99293f81286af869244007e194919720fd4943de6d"
     },
     {
       "path": "nav_history/148799.json",
@@ -9374,8 +9389,8 @@
     },
     {
       "path": "nav_history/148926.json",
-      "size": 49691,
-      "sha256": "00d9a7f86df557374a43b8fc324e30c7967930709d98be99198232df888870e7"
+      "size": 49855,
+      "sha256": "4e4e7f35127d0fc4057e1a3bb767616499c75eb69b2bd71d2672e280639436dc"
     },
     {
       "path": "nav_history/148927.json",
@@ -9844,13 +9859,13 @@
     },
     {
       "path": "nav_history/149242.json",
-      "size": 45244,
-      "sha256": "3955dc7c972876ef542d97e020fb788c5fa5dc704fc9bed439751c97a4f20cd1"
+      "size": 45408,
+      "sha256": "82d3c7329e7e2254be5f6b7f19dad8152fe3cf464b5b6ff37b7217c75e14e840"
     },
     {
       "path": "nav_history/149243.json",
-      "size": 45252,
-      "sha256": "c2cc4712bc9fcb0ead5265c76a2ac3508116aa6b52c67e3374fed49fcfa28d67"
+      "size": 45416,
+      "sha256": "93e5f7f24ac86f2f550f615f449946c8add80018568e603cc336af31dec19a95"
     },
     {
       "path": "nav_history/149247.json",
@@ -11539,13 +11554,13 @@
     },
     {
       "path": "nav_history/150698.json",
-      "size": 35497,
-      "sha256": "8eb2cff91794b229dc7e961c8967a621adce67c207e9e00426e63b896fd98add"
+      "size": 35660,
+      "sha256": "f8b08e44d2aab70439cea512888c5666587ea53546f93f94795b525e39fabac2"
     },
     {
       "path": "nav_history/150701.json",
-      "size": 35463,
-      "sha256": "7c7ff21cc483d9bfa455b3733a8b06afc5292b7ae1585e9120f32d901d0d4cd3"
+      "size": 35627,
+      "sha256": "b6d61f37bbe78d97d7fdcf23c4fc8bf2c6bddcf10680512aa3b2af0997a89a92"
     },
     {
       "path": "nav_history/150702.json",
@@ -11669,13 +11684,13 @@
     },
     {
       "path": "nav_history/150744.json",
-      "size": 35421,
-      "sha256": "dcc4e146ea1a9b623d1c9e3ced1d8d322300e3fa92f51024dd490b47601207ff"
+      "size": 35587,
+      "sha256": "1968c58edb49a332e76865de202447b613c25c7ac84aa6b660055078d47e1cd7"
     },
     {
       "path": "nav_history/150746.json",
-      "size": 35424,
-      "sha256": "f75e1c3d9fef3edf4263be2be127496fb69ce45a128fb834d400dc82ee081043"
+      "size": 35592,
+      "sha256": "8d33cf364a942467586bd0dc8bd95cb69c093044ee144f2f58a182cb46d40c48"
     },
     {
       "path": "nav_history/150750.json",
@@ -11979,13 +11994,13 @@
     },
     {
       "path": "nav_history/150936.json",
-      "size": 33943,
-      "sha256": "a2203ef009f12135fbb1f5cbdb0eb73dc265da24e2870ab43a100b19f0190396"
+      "size": 34107,
+      "sha256": "0b102988001708ec13c8e7ff8f7e765de13ad8abdf4ecf9f5f4d49d62d3506b0"
     },
     {
       "path": "nav_history/150938.json",
-      "size": 33948,
-      "sha256": "d4263e17908ed1e5fbaeb644ec8ae426467dd861508fb23481f0a78522963a42"
+      "size": 34112,
+      "sha256": "884971f8c0e61fc2ca461b3a92b9d88f210a29812bce1421ef19d6e352ba0fad"
     },
     {
       "path": "nav_history/150948.json",
@@ -12314,13 +12329,13 @@
     },
     {
       "path": "nav_history/151216.json",
-      "size": 35815,
-      "sha256": "807c951ecc3fa3a3f7ccfdbdca9b4528196713daeb50e231cc090a1f850221e1"
+      "size": 38564,
+      "sha256": "5c9e469ca62b0390f22fca9ca077a76b500ec60eab8109998ff220166ec6ec1b"
     },
     {
       "path": "nav_history/151218.json",
-      "size": 35825,
-      "sha256": "334b93f8221fe6a3db01d165bae223579073ff8a2058086eaedc3d43fc5cdc58"
+      "size": 38567,
+      "sha256": "bbfb9fa54b9476254c0f429a5d7bf4d523a849457bb6232bc3d7145159cbc247"
     },
     {
       "path": "nav_history/151228.json",
@@ -12474,13 +12489,13 @@
     },
     {
       "path": "nav_history/151363.json",
-      "size": 31932,
-      "sha256": "f5b2bde1e19f752e042495b228cfeea8e9da23ceeabc1e20d941f3f91ae1c477"
+      "size": 32096,
+      "sha256": "dd66e6f4dd8adf0cc8bbbeb4ae7db96516904b176c927d76a82da08885ad60f8"
     },
     {
       "path": "nav_history/151364.json",
-      "size": 31935,
-      "sha256": "81a0bac68f6fee6d7a872e7d6cfeaf2ed395227b2cb8da81453c083936b67802"
+      "size": 32098,
+      "sha256": "7b45f77e77c04e95a37c94121916fa3aee0e8325c60caedf6969fa449690c0d7"
     },
     {
       "path": "nav_history/151365.json",
@@ -29830,7 +29845,7 @@
     {
       "path": "reference/bonds_catalog.json",
       "size": 8156676,
-      "sha256": "548683e9d629bf62c3cb5d95700fbb2cf8bcd4d01debaa8ff59d7984677b72d7"
+      "sha256": "3bdacb101f5e4281063abbbf5a5747bd60d6d516e814e25450050e67ea0be20d"
     },
     {
       "path": "reference/discovery_needed.csv",
@@ -42953,5 +42968,5 @@
       "sha256": "9a4b5e80d8c5a1f1261c2d1d7f7b086a9ed1f227812ccd4ced9edf5abb29c6d2"
     }
   ],
-  "total_bytes": 827632279
+  "total_bytes": 829564089
 }

@@ -816,9 +816,18 @@ def build_catalog(as_of: date | None = None) -> dict:
                 if v and not cur.get(k):
                     cur[k] = v
 
-    d, files = _latest_raw_set()
-    used_sources: list[str] = []
-    if d is not None and files:
+    raw_set = _latest_raw_set()
+    if raw_set is None:
+        # Fresh container / no cached dumps yet: build from local seeds +
+        # any live-API snapshot so the Bonds tab still works. The next
+        # successful fetch_day will populate everything.
+        print("  ! bonds: no cached raw dumps; catalog built from seeds only")
+        d, files = date.today(), {}
+        used_sources: list[str] = ["local seeds (no NSE raw dumps cached)"]
+    else:
+        d, files = raw_set
+        used_sources: list[str] = []
+    if files:
         cur_date = d
         for name in sorted(files):
             path = files[name]

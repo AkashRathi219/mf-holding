@@ -115,6 +115,24 @@ def main() -> None:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(secret, dst)
 
+    # Latest NSE bond raw dumps (~2 MB) so the container can rebuild the
+    # bond catalog immediately instead of waiting for its first fetch.
+    raw_root = ROOT / "data" / "bond_market" / "raw"
+    if raw_root.is_dir():
+        dated = sorted((p for p in raw_root.iterdir() if p.is_dir()),
+                       key=lambda p: p.name, reverse=True)
+        for day_dir in dated:
+            csvs = [p for p in day_dir.glob("*.csv") if p.stat().st_size > 0]
+            if not csvs:
+                continue
+            for p in csvs:
+                rel = p.relative_to(raw_root)
+                dst = STAGE / "bond_market" / "raw" / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(p, dst)
+            print(f"  staged bond raw dumps: {day_dir.name} ({len(csvs)} files)")
+            break
+
     entries = []
     total = 0
     for p in sorted(STAGE.rglob("*")):

@@ -48,15 +48,28 @@ def _amfi_job() -> dict:
 
 
 def _bond_job() -> dict:
-    from datetime import date as _date
+    from datetime import date as _date, timedelta as _td
     from src.refresh_log import track
     with track("bond_refresh") as _meta:
+        try:
+            from .remote_store import ensure_prefix
+            _meta["cached_dumps_pulled"] = ensure_prefix("bond_market")
+        except Exception:
+            pass
         from src.bonds import build_catalog, fetch_day
-        files = fetch_day(_date.today())
+        # Walk back over weekends/holidays until a day with published files.
+        files: dict = {}
+        d = _date.today()
+        for _ in range(7):
+            files = fetch_day(d)
+            if files:
+                break
+            d -= _td(days=1)
         catalog = build_catalog()
-        _meta.update(files=len(files), bonds=catalog["n_bonds"],
-                     as_of=catalog["as_of"])
-        return {"fetched": len(files), "bonds": catalog["n_bonds"]}
+        _meta.update(files=len(files), fetched_for=str(d),
+                     bonds=catalog["n_bonds"], as_of=catalog["as_of"])
+        return {"files": len(files), "fetched_for": str(d),
+                "bonds": catalog["n_bonds"]}
 
 
 def _nav_job() -> dict:
