@@ -38,11 +38,14 @@ scheduler:
   timezone: Asia/Kolkata
   retry_days: 5
   # Daily NAV refresh: append the latest AMFI NAV points to data/nav_history/*
-  # once a day so the webapp's NAV charts stay current.
+  # so the webapp's NAV charts stay current. Runs TWICE a day, 12h apart,
+  # so the freshest possible NAV is always <12h old.
   nav_refresh:
     enabled: true
     hour: 20
     minute: 30
+    hour2: 8              # second run of the day (08:30 IST)
+    minute2: 30
     days: 10
   # Daily stock refresh: update closing prices + corporate actions + NSE
   # financial-report announcements for resolved equity stocks.

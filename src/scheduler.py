@@ -62,6 +62,9 @@ class MonthlyScheduler:
         )
 
         # ---- Daily NAV refresh (keeps data/nav_history/*.json current) ----
+        # Runs twice a day 12h apart (hour:minute + optional hour2:minute2)
+        # so the latest NAV is never more than ~12h old. The AMFI tier-1
+        # piggyback only rides the evening run (monthly data, no need x2).
         nav_cfg = sched.get("nav_refresh", {})
         if self.nav_refresh_fn and nav_cfg.get("enabled", True):
             nav_trigger = CronTrigger(
@@ -80,6 +83,24 @@ class MonthlyScheduler:
                 f"Daily NAV refresh set: {nav_cfg.get('hour', 20):02d}:"
                 f"{nav_cfg.get('minute', 30):02d} IST"
             )
+            if nav_cfg.get("hour2") is not None:
+                nav_trigger2 = CronTrigger(
+                    hour=nav_cfg.get("hour2"),
+                    minute=nav_cfg.get("minute2", nav_cfg.get("minute", 30)),
+                    timezone="Asia/Kolkata",
+                )
+                self.scheduler.add_job(
+                    self._run_nav_refresh,
+                    trigger=nav_trigger2,
+                    args=[False],   # morning run: skip the AMFI piggyback
+                    id="daily_nav_refresh_2",
+                    name="Daily NAV Refresh (2nd)",
+                    replace_existing=True,
+                )
+                logger.info(
+                    f"Daily NAV refresh (2nd) set: {nav_cfg.get('hour2'):02d}:"
+                    f"{nav_cfg.get('minute2', nav_cfg.get('minute', 30)):02d} IST"
+                )
 
         # ---- Daily stock refresh (price + actions + reports) ----
         stock_cfg = sched.get("stock_refresh", {})
@@ -162,11 +183,11 @@ class MonthlyScheduler:
         except Exception as e:
             logger.error(f"Scheduled pipeline failed: {e}")
 
-    async def _run_nav_refresh(self):
+    async def _run_nav_refresh(self, piggyback_amfi: bool = True):
         logger.info("Daily NAV refresh triggered")
         # Piggyback: attempt the AMFI tier-1 holdings fetch first so it
         # populates the moment the provider recovers — never blocks NAVs.
-        if self.amfi_fn:
+        if self.amfi_fn and piggyback_amfi:
             try:
                 amfi_summary = await asyncio.to_thread(self.amfi_fn)
                 logger.info(f"AMFI piggyback fetch: {amfi_summary}")
