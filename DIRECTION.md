@@ -13,12 +13,24 @@ Everything relevant now lives under `data/`. App code is under `src/`, registry 
 
 ```
 mf_holding/
-├── DIRECTION.md          # this file
-├── main.py               # CLI entry point (fetch / ingest / report / parse)
+├── DIRECTION.md             # this file
+├── README.md                # overview + quick start
+├── main.py                  # CLI entry point (fetch / ingest / report / parse)
 ├── requirements.txt
 ├── config/
-│   ├── amc_registry.json # 57 SEBI AMCs + disclosure URLs
-│   └── settings.yaml     # paths (all under data/), parser, scheduler
+│   ├── amc_registry.json    # 57 SEBI AMCs + disclosure URLs
+│   └── settings.yaml        # paths (all under data/), parser, scheduler
+├── docs/                    # all documentation (index: docs/README.md)
+│   ├── DATA_SOURCES_RESEARCH.md / SCHEME_DETAILS_STRATEGY.md   # deep specs
+│   ├── DEPLOY_RAILWAY.md · DATA_CADENCE.md · ANALYSIS_RESULTS.md
+│   ├── MODEL_PORTFOLIOS.md · CLIENT_PORTFOLIOS.md · DATA_HEALTH_PLAN.md
+│   ├── APP_REVIEW_ACTIONS.md                    # ops tracker
+│   └── plans/                                   # approved build plans (roadmaps)
+│       ├── PLAN_SEO_LANDING_PAGES.md
+│       ├── PLAN_TRY_APP.md
+│       └── PLAN_PERFORMANCE_ANALYTICS.md
+├── website/                 # ✅ drop-in SEO pages for the main website (placeholders inside)
+├── docs/internal/           # ⛔ git-ignored — internal-only material, never committed
 ├── data/
 │   ├── parsed/                              # ✅ canonical holdings data
 │   │   ├── advisorkhoj/                     #   46 AMC JSONs (advisorkhoj pipeline)
@@ -57,7 +69,7 @@ mf_holding/
 
 ## How holdings are produced (three sources, one priority order)
 Holdings for each scheme come from up to three sources, merged in **priority order**
-(also see `DATA_SOURCES_RESEARCH.md`):
+(also see `docs/DATA_SOURCES_RESEARCH.md`):
 
 1. **AMFI — authoritative, preferred.** The official SEBI/AMFI monthly portfolio
    disclosure (aggregated, standardised, `% to NAV` for every holding). Ingested via

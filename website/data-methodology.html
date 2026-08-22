@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  Factsheet Engine AI — Data Methodology Page (GHOST PAGE #2)
+  ============================================================================
+  Self-contained: inline CSS/JS, no external dependencies.
+
+  GHOST-PAGE DEPLOYMENT (applies to all three pages: /product, /data-methodology,
+  /investors):
+    • Do NOT add these pages to the main site's menu, footer or any internal
+      linking. They must be unreachable by browsing the site normally.
+    • Discovery paths ONLY: Google Search Console URL submission, direct URL
+      shares (WhatsApp/Reddit/email), and backlinks from external posts.
+    • The three pages DO cross-link each other — that cluster is intentional.
+    • Keep them out of user-visible breadcrumb trails and HTML sitemaps.
+      XML sitemap inclusion below is fine and desired.
+
+  BEFORE PUBLISH — find & replace:
+    1) https://www.YOURSITE.com        -> your main-site URL (canonical/OG)
+    2) https://YOURAPP.railway.app     -> webapp URL (/register link)
+
+  PASTE INTO YOUR MAIN SITE:
+  ---- sitemap.xml entries (all three ghost pages) ---------------------------
+  <url><loc>https://www.YOURSITE.com/product</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://www.YOURSITE.com/data-methodology</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.YOURSITE.com/investors</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  (robots.txt AI-crawler allows + llms.txt block: see product-landing.html handoff)
+  ============================================================================
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>How Factsheet Engine AI Builds Trustworthy Holdings Data — Methodology</title>
+<meta name="description" content="The full mechanism behind our mutual-fund holdings dataset: three disclosure sources merged in a fixed priority order (AMFI first), fund-level matching, index/ETF benchmark resolution, per-scheme confidence scoring, daily refresh pipelines and honest gap disclosure.">
+<meta name="keywords" content="AMFI monthly portfolio disclosure, mutual fund holdings data methodology, source priority, confidence scoring, ISIN completeness, index fund benchmark resolution, data aggregation challenges India">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta name="theme-color" content="#0e2a6b">
+
+<!-- TODO: replace domain before publish -->
+<link rel="canonical" href="https://www.YOURSITE.com/data-methodology">
+
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Factsheet Engine AI">
+<meta property="og:title" content="Data methodology — how Factsheet Engine AI builds holdings data you can defend">
+<meta property="og:description" content="Fixed source priority starting with AMFI's standardised disclosures, transparent confidence scoring on every scheme, documented refresh cadence and explicit gap disclosure.">
+<meta property="og:url" content="https://www.YOURSITE.com/data-methodology">
+<meta property="og:image" content="https://www.YOURSITE.com/assets/og-methodology.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Factsheet Engine AI — Data Methodology">
+<meta name="twitter:description" content="Three sources, one priority order. Confidence badges on every scheme. Daily refresh. Honest gaps.">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Dataset",
+  "name": "Factsheet Engine AI — Indian Mutual Fund Portfolio Holdings Dataset",
+  "description": "Normalised dataset of monthly portfolio holdings for Indian mutual-fund schemes: over 250,000 holding rows across 50+ AMCs (as of August 2026), each holding carrying scheme identity, security identity (ISIN where available), sector, weight (% of NAV) and source attribution. Built by merging AMFI standardised monthly portfolio disclosures, individual AMC website disclosures and a third-party republisher in a fixed priority order, with index/ETF schemes resolved to benchmark constituent lists.",
+  "url": "https://www.YOURSITE.com/data-methodology",
+  "creator": { "@type": "Organization", "name": "Factsheet Engine AI", "url": "https://www.YOURSITE.com" },
+  "temporalCoverage": "2016/2026",
+  "isAccessibleForFree": false,
+  "keywords": ["mutual fund India", "portfolio holdings", "% to NAV", "ISIN", "AMFI", "SEBI", "overlap analysis"],
+  "variableMeasured": ["scheme name", "AMC", "security name", "ISIN", "sector", "percent of NAV", "disclosure date", "source"],
+  "citation": "https://www.YOURSITE.com/data-methodology"
+}
+</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What is the source priority order for holdings data?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Holdings are merged in one fixed priority order applied identically to every scheme: AMFI's standardised monthly portfolio disclosure ranks first because it publishes percentage-to-NAV weights for every holding of every scheme in one machine-readable place; individual AMC website monthly portfolios rank second; a third-party republisher ranks last and only fills schemes that have neither of the official disclosures." }
+    },
+    {
+      "@type": "Question",
+      "name": "How are index funds and ETFs handled?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Index and ETF schemes hold their benchmark rather than an actively disclosed portfolio, so they are resolved against official index constituent lists instead of AMC documents. Equity index schemes map to their index constituents with full ISIN lists; schemes whose benchmarks cannot be locally resolved are explicitly flagged as unresolved rather than silently omitted." }
+    },
+    {
+      "@type": "Question",
+      "name": "What does a confidence badge measure?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Each scheme carries a 0-100 data-confidence score that starts from its source quality (official AMFI disclosure scores highest, third-party republication lowest), subtracts a penalty as the disclosure ages beyond about five weeks, and blends in holdings quality measured by ISIN coverage and weight coverage of its holding rows. Scores map to tiers: High (green) at 80 or above, Medium (amber) at 55 or above, Low (red) below that, and Grey when no disclosure exists at all." }
+    },
+    {
+      "@type": "Question",
+      "name": "How often is the data refreshed?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Portfolio holdings follow the industry's monthly disclosure cycle and are re-fetched at the start of every month. NAV history, stock prices, corporate actions and the NSE bond catalogue are refreshed daily through scheduled automated pipelines. Every figure in the workspace displays its own as-of date." }
+    },
+    {
+      "@type": "Question",
+      "name": "What happens when a scheme has no disclosure?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Schemes without any obtainable disclosure are labelled 'no disclosure' and excluded from holdings views rather than being silently dropped or filled with estimates. The platform maintains an explicit backlog of uncovered schemes so users can see exactly where the boundaries of the data are." }
+    }
+  ]
+}
+</script>
+
+<style>
+  :root{
+    --navy-deep:#0e2a6b; --navy:#1b3f9e; --blue:#2456d6; --sidebar:#0e1a33;
+    --text:#17202f; --text2:#5b6b7f; --border:#e3e8ef; --bg:#f5f7fa;
+    --green:#16845c; --green-soft:#e6f6ef; --amber:#b7791f; --amber-soft:#fdf3e0;
+    --red:#c0392b; --radius:12px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;color:var(--text);background:#fff;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto;padding:0 24px}
+
+  .nav{position:sticky;top:0;z-index:50;background:rgba(14,26,51,.96);backdrop-filter:blur(8px)}
+  .nav-inner{max-width:1120px;margin:0 auto;padding:12px 24px;display:flex;align-items:center;gap:18px}
+  .brand{display:flex;align-items:center;gap:8px;color:#fff;font-weight:700;font-size:16px;text-decoration:none}
+  .brand .logo{background:linear-gradient(135deg,#2456d6,#4f7df7);border-radius:8px;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;font-size:15px}
+  .nav-links{display:flex;gap:20px;margin-left:auto;flex-wrap:wrap}
+  .nav-links a{color:#c6d2ea;font-size:13.5px;font-weight:600;text-decoration:none}
+  .nav-links a:hover{color:#fff}
+  @media(max-width:760px){.nav-links a:not(.keep){display:none}}
+
+  .hero{background:linear-gradient(160deg,#0e2a6b 0%,#1b3f9e 55%,#2456d6 100%);color:#fff;padding:72px 0 56px}
+  .hero .kicker{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#9db9ff}
+  .hero h1{font-size:clamp(28px,4.4vw,42px);line-height:1.18;letter-spacing:-.02em;max-width:860px;margin-top:10px}
+  .hero p{margin-top:16px;font-size:16.5px;color:rgba(255,255,255,.85);max-width:780px}
+
+  section{padding:64px 0}
+  section.alt{background:var(--bg)}
+  h2{font-size:clamp(22px,3vw,30px);letter-spacing:-.02em;line-height:1.25;margin-bottom:14px}
+  .kicker{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--blue)}
+  p.lede{color:var(--text2);max-width:800px;font-size:16px;margin-bottom:30px}
+
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(16,24,40,.08);font-size:14px}
+  th{background:var(--bg);text-align:left;padding:12px 14px;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);border-bottom:1px solid var(--border)}
+  td{padding:13px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td b{white-space:nowrap}
+  .rank{display:inline-flex;width:26px;height:26px;border-radius:50%;background:#eaf0ff;color:var(--blue);font-weight:800;font-size:13px;align-items:center;justify-content:center;margin-right:8px}
+  .chain{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:22px 0;font-size:13.5px;font-weight:700}
+  .chain span.node{background:#fff;border:2px solid var(--blue);border-radius:999px;padding:8px 16px;color:var(--blue)}
+  .chain span.arrow{color:var(--text2);font-size:16px}
+  .chain span.node.dim{border-color:var(--border);color:var(--text2)}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .panel{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:22px}
+  .panel h3{font-size:15.5px;margin-bottom:8px}
+  .panel p{font-size:14px;color:var(--text2)}
+
+  .tier{display:inline-block;padding:3px 12px;border-radius:999px;font-size:12px;font-weight:700}
+  .t-high{background:var(--green-soft);color:var(--green)}
+  .t-med{background:var(--amber-soft);color:var(--amber)}
+  .t-low{background:#fdeceb;color:var(--red)}
+  .t-none{background:#eef1f5;color:var(--text2)}
+
+  details{border:1px solid var(--border);border-radius:10px;background:#fff;margin-bottom:10px;overflow:hidden}
+  summary{cursor:pointer;padding:16px 20px;font-weight:700;font-size:15px;list-style:none;display:flex;justify-content:space-between;align-items:center}
+  summary::after{content:"+";font-size:20px;color:var(--blue);font-weight:400}
+  details[open] summary::after{content:"–"}
+  details .a{padding:0 20px 18px;font-size:14.5px;color:var(--text2);max-width:840px}
+
+  .callout{background:var(--green-soft);border-left:4px solid var(--green);padding:18px 20px;border-radius:8px;font-size:14.5px;margin-top:26px}
+  .final{background:linear-gradient(160deg,#0e2a6b 0%,#1b3f9e 55%,#2456d6 100%);color:#fff;text-align:center}
+  .final h2{color:#fff}
+  .final p{color:rgba(255,255,255,.82);max-width:620px;margin:0 auto 26px}
+  .btn{display:inline-block;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:700;text-decoration:none;background:#fff;color:var(--blue)}
+  .btn:hover{background:#eaf0ff}
+
+  footer{background:var(--sidebar);color:#8fa0c4;padding:40px 0;font-size:13px}
+  footer .cols{display:flex;gap:40px;flex-wrap:wrap;justify-content:space-between;margin-bottom:24px}
+  footer a{color:#c6d2ea;text-decoration:none}
+  footer a:hover{color:#fff}
+  .disclaimer{border-top:1px solid rgba(255,255,255,.12);padding-top:18px;font-size:12px;color:rgba(143,160,196,.85);max-width:900px}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="/product"><span class="logo">📊</span> Factsheet Engine AI</a>
+    <div class="nav-links">
+      <a href="/product">Product</a>
+      <a href="#sources">Sources</a>
+      <a href="#matching">Matching</a>
+      <a href="#confidence">Confidence</a>
+      <a href="#cadence">Cadence</a>
+      <a href="#gaps">Gaps</a>
+      <!-- TODO: point at live webapp -->
+      <a class="keep" href="https://YOURAPP.railway.app/register" style="color:#fff">Get started free ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="kicker">Methodology</span>
+    <h1>How we build holdings data you can defend in front of a client.</h1>
+    <p>Fund-holdings analytics is only as good as its pipeline. This page documents the
+       exact mechanics — sources, priority order, matching logic, confidence scoring,
+       refresh cadence and gap disclosure — so you can inspect every claim before you rely on it.</p>
+  </div>
+</header>
+
+<main>
+<section id="sources">
+  <div class="wrap">
+    <span class="kicker">Step 1 — Acquisition</span>
+    <h2>Three public sources, one fixed priority order</h2>
+    <p class="lede">Every scheme's holdings are produced from up to three sources and merged identically for all schemes. Within the same source, the snapshot with the best %-of-NAV coverage wins.</p>
+
+    <table>
+      <tr><th style="width:34%">Source</th><th>What it provides</th><th style="width:30%">Why it ranks here</th></tr>
+      <tr>
+        <td><span class="rank">1</span><b>AMFI monthly portfolio disclosure</b></td>
+        <td>The industry-standardised monthly portfolio of every scheme: security, ISIN, sector, rating, market value and <b>% to NAV for every holding</b>, published within ten working days of month-end.</td>
+        <td>Authoritative, complete, machine-readable — the primary outcome in one place.</td>
+      </tr>
+      <tr>
+        <td><span class="rank">2</span><b>Individual AMC websites</b></td>
+        <td>Each asset manager's own monthly portfolio document, parsed into the same normalised shape (scheme, date, weighted holdings).</td>
+        <td>Official and granular, but fragmented across 50+ different formats and locations.</td>
+      </tr>
+      <tr>
+        <td><span class="rank">3</span><b>Third-party republisher</b></td>
+        <td>Scheme-level holdings with names and ISINs; weights often need to be computed from values.</td>
+        <td>Used only to fill schemes that have neither official source yet.</td>
+      </tr>
+      <tr>
+        <td><span class="rank">✓</span><b>Benchmark resolution (index &amp; ETF)</b></td>
+        <td>Official index constituent lists with constituent weights.</td>
+        <td>Index/ETF schemes hold their benchmark, not a discretionary book — this resolves them correctly instead of counting them as missing.</td>
+      </tr>
+    </table>
+
+    <div class="chain" aria-label="Source priority chain">
+      <span class="node">AMFI</span><span class="arrow">→</span>
+      <span class="node">AMC website</span><span class="arrow">→</span>
+      <span class="node dim">Republisher</span><span class="arrow">→</span>
+      <span class="node dim">Benchmark (index/ETF)</span>
+    </div>
+    <p style="font-size:14px;color:var(--text2)">If a scheme's data ever traces to the republisher, the interface labels it — you're never left guessing which tier produced a number.</p>
+  </div>
+</section>
+
+<section id="matching" class="alt">
+  <div class="wrap">
+    <span class="kicker">Step 2 — Normalisation &amp; matching</span>
+    <h2>Making thousands of disclosures comparable</h2>
+    <p class="lede">Coverage claims mean nothing until "every scheme" is defined rigorously. Ours is matched against the industry's combined NAV universe — 2,691 funds / 3,812 fund-and-plan rows as of the August 2026 universe file.</p>
+    <div class="grid2">
+      <div class="panel"><h3>Direct ≡ Regular, matched at fund level</h3><p>Direct and Regular plans hold the same underlying portfolio, so schemes are compared and counted at fund level. This prevents double-counting plans and keeps coverage statistics honest.</p></div>
+      <div class="panel"><h3>Index &amp; ETF resolution</h3><p>Index-based schemes are matched to their tracked benchmark's constituent list. Resolved equity index schemes inherit full constituent holdings with ISINs; genuinely unresolvable cases (e.g., certain debt or overseas indices without public weight files) are explicitly categorised.</p></div>
+      <div class="panel"><h3>Identity cleaning</h3><p>Holding rows pass ISIN validation and company-name normalisation. A dedicated reference database of unique equity ISINs backs enrichment with sector and market-cap buckets.</p></div>
+      <div class="panel"><h3>ISIN completeness drive</h3><p>Missing-ISIN holdings were cut by ~94% through re-parses from cleaner monthly workbooks and systematic lookups against index constituents — because overlap math is only correct when both sides identify securities the same way.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="confidence">
+  <div class="wrap">
+    <span class="kicker">Step 3 — Scoring</span>
+    <h2>A confidence badge on every scheme</h2>
+    <p class="lede">Not all holdings data is equally trustworthy, and pretending otherwise is how bad decisions happen. Each scheme carries a 0–100 transparency score built from three signals:</p>
+    <div class="grid2">
+      <div class="panel"><h3>① Source quality (base score)</h3><p>Official AMFI disclosure scores highest; own-AMC disclosures next; benchmark-resolved index portfolios follow; third-party republication scores lowest.</p></div>
+      <div class="panel"><h3>② Disclosure recency (age penalty)</h3><p>Fresh disclosures lose nothing; staleness beyond roughly five weeks progressively reduces the score, heavily penalising anything older than six months.</p></div>
+      <div class="panel"><h3>③ Holdings quality (blend)</h3><p>The score is blended with row-level quality: what fraction of the scheme's holdings carry valid ISINs and clean %NAV weights.</p></div>
+      <div class="panel"><h3>Tiers you'll see</h3>
+        <p><span class="tier t-high">High ≥ 80</span>&nbsp; <span class="tier t-med">Medium ≥ 55</span>&nbsp; <span class="tier t-low">Low &lt; 55</span>&nbsp; <span class="tier t-none">No-data</span></p>
+        <p style="margin-top:8px">Hovering a badge shows exactly what drove it: source, disclosure age, ISIN coverage. No black boxes.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="cadence" class="alt">
+  <div class="wrap">
+    <span class="kicker">Step 4 — Freshness</span>
+    <h2>Documented refresh cadence</h2>
+    <p class="lede">Scheduled pipelines run continuously; every screen states its own as-of date so staleness can never hide.</p>
+    <table>
+      <tr><th>Datatype</th><th>Cadence</th><th>Notes</th></tr>
+      <tr><td><b>Portfolio holdings</b></td><td>Monthly</td><td>Re-fetched at the start of each month as AMCs publish; retried across the disclosure window.</td></tr>
+      <tr><td><b>NAV history</b></td><td>Daily</td><td>Latest NAVs appended every working day, with automated gap-fill for schemes missing history.</td></tr>
+      <tr><td><b>Stock prices &amp; actions</b></td><td>Daily</td><td>Closing prices, dividends/splits and exchange announcements refreshed for all held equities.</td></tr>
+      <tr><td><b>NSE bond catalogue</b></td><td>Daily</td><td>Listed G-Secs, SDLs, T-Bills and corporate bonds with price/YTM coverage tracked openly.</td></tr>
+    </table>
+    <div class="callout"><b>Integrity commitment:</b> freshness is measured, not asserted — internal health scoring tracks disclosure age and pipeline success, and the same honesty applies to us that we apply to AMCs.</div>
+  </div>
+</section>
+
+<section id="gaps">
+  <div class="wrap">
+    <span class="kicker">Step 5 — Boundaries</span>
+    <h2>Honest gap disclosure</h2>
+    <p class="lede">Around 98% of active fund-level schemes carry holdings today. The remainder are catalogued, not hidden:</p>
+    <div class="grid2">
+      <div class="panel"><h3>"No disclosure" is a label, not a void</h3><p>Schemes whose managers publish nothing usable are flagged as such and excluded from holdings views — never silently dropped or padded with estimates.</p></div>
+      <div class="panel"><h3>An explicit backlog</h3><p>Unresolved schemes are maintained in a categorized backlog (no-disclosure managers, debt-index schemes needing external weight files, overseas benchmarks) and worked down month by month.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="alt">
+  <div class="wrap">
+    <span class="kicker">FAQ</span>
+    <h2>Methodology questions, answered plainly</h2>
+    <br>
+    <details open><summary>What is the source priority order for holdings data?</summary><div class="a">Holdings are merged in one fixed priority order applied identically to every scheme: AMFI's standardised monthly portfolio disclosure ranks first because it publishes percentage-to-NAV weights for every holding of every scheme in one machine-readable place; individual AMC website monthly portfolios rank second; a third-party republisher ranks last and only fills schemes that have neither of the official disclosures.</div></details>
+    <details><summary>How are index funds and ETFs handled?</summary><div class="a">Index and ETF schemes hold their benchmark rather than an actively disclosed portfolio, so they are resolved against official index constituent lists instead of AMC documents. Equity index schemes map to their index constituents with full ISIN lists; schemes whose benchmarks cannot be locally resolved are explicitly flagged as unresolved rather than silently omitted.</div></details>
+    <details><summary>What does a confidence badge measure?</summary><div class="a">Each scheme carries a 0-100 data-confidence score that starts from its source quality (official AMFI disclosure scores highest, third-party republication lowest), subtracts a penalty as the disclosure ages beyond about five weeks, and blends in holdings quality measured by ISIN coverage and weight coverage of its holding rows. Scores map to tiers: High (green) at 80 or above, Medium (amber) at 55 or above, Low (red) below that, and Grey when no disclosure exists at all.</div></details>
+    <details><summary>How often is the data refreshed?</summary><div class="a">Portfolio holdings follow the industry's monthly disclosure cycle and are re-fetched at the start of every month. NAV history, stock prices, corporate actions and the NSE bond catalogue are refreshed daily through scheduled automated pipelines. Every figure in the workspace displays its own as-of date.</div></details>
+    <details><summary>What happens when a scheme has no disclosure?</summary><div class="a">Schemes without any obtainable disclosure are labelled 'no disclosure' and excluded from holdings views rather than being silently dropped or filled with estimates. The platform maintains an explicit backlog of uncovered schemes so users can see exactly where the boundaries of the data are.</div></details>
+  </div>
+</section>
+
+<section class="final">
+  <div class="wrap">
+    <h2>Inspect the mechanism, then use it.</h2>
+    <p>Create a free workspace and see the priority labels, confidence badges and as-of dates on every scheme yourself.</p>
+    <!-- TODO: point at live webapp -->
+    <a class="btn" href="https://YOURAPP.railway.app/register">Open Factsheet Engine AI ↗</a>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="cols">
+      <div><b style="color:#fff">📊 Factsheet Engine AI</b><br>Data methodology<br>Last reviewed: Aug 2026</div>
+      <div>
+        <a href="/product">Product overview</a><br><br>
+        <a href="https://YOURAPP.railway.app/login">Sign in</a>
+      </div>
+    </div>
+    <p class="disclaimer">This methodology page describes data-engineering practice only and is not investment advice. Figures describe the dataset as of the stated dates and do not represent investment performance. Consult a SEBI-registered investment adviser before making investment decisions. © 2026 Factsheet Engine AI.</p>
+  </div>
+</footer>
+
+<script>
+  // Minimal enhancement only — all content is static HTML (crawler-safe).
+  document.querySelectorAll('details').forEach(function(d){
+    d.addEventListener('toggle', function(){
+      if(d.open){ document.querySelectorAll('details').forEach(function(o){ if(o!==d) o.open=false; }); }
+    });
+  });
+</script>
+</body>
+</html>

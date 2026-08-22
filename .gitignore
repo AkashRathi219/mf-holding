@@ -11,6 +11,9 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
+# --- internal only (never commit) ---
+docs/internal/
+
 # --- os noise ---
 .DS_Store
 Thumbs.db
