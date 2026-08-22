@@ -31,12 +31,27 @@ _EMAIL_RE = None  # simple validation below; keep it dependency-free
 
 
 def _get_secret() -> bytes:
+    """Token-signing secret, stable across redeploys.
+
+    Order: SECRET_KEY env var -> local .secret_key file -> R2 copy (pulled via
+    remote_store so Railway containers reuse the same key) -> generate + save.
+    """
     if os.environ.get("SECRET_KEY"):
         return os.environ["SECRET_KEY"].encode()
     if SECRET_PATH.exists():
         return SECRET_PATH.read_bytes()
+    try:
+        from .remote_store import ensure
+        got = ensure("webapp/.secret_key", dest=SECRET_PATH)
+        if got and SECRET_PATH.exists():
+            return SECRET_PATH.read_bytes()
+    except Exception:
+        pass  # fall through to generation (dev / no-R2 environments)
     secret = secrets.token_bytes(48)
-    SECRET_PATH.write_bytes(secret)
+    try:
+        SECRET_PATH.write_bytes(secret)
+    except OSError:
+        pass
     return secret
 
 
@@ -121,7 +136,15 @@ def register_user(email: str, name: str, org: str, password: str) -> dict:
     finally:
         con.close()
     token = _make_token(uid, email, name)
-    return {"token": token, "user": {"id": uid, "email": email, "name": name, "org": org}}
+    return {"token": token,
+            "user": {"id": uid, "email": email, "name": name, "org": org},
+            "superadmin": email in _superadmin_emails()}
+
+
+def _superadmin_emails() -> set[str]:
+    import os
+    return {e.strip().lower() for e in os.environ.get(
+        "SUPERADMIN_EMAILS", "akash@aracharatventures.com").split(",") if e.strip()}
 
 
 def login_user(email: str, password: str) -> dict:
@@ -141,7 +164,9 @@ def login_user(email: str, password: str) -> dict:
     if not hmac.compare_digest(_hash_password(password, salt), pw_hash):
         raise AuthError("Invalid email or password.")
     token = _make_token(uid, db_email, name)
-    return {"token": token, "user": {"id": uid, "email": db_email, "name": name, "org": org}}
+    return {"token": token,
+            "user": {"id": uid, "email": db_email, "name": name, "org": org},
+            "superadmin": db_email.lower() in _superadmin_emails()}
 
 
 def user_from_token(token: str) -> dict | None:

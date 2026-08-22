@@ -107,6 +107,14 @@ def main() -> None:
         else:
             print(f"  !! {p} missing (skipped)")
 
+    # Token-signing secret ships too, so sessions survive redeploys
+    # (auth._get_secret pulls it back via remote_store when absent).
+    secret = ROOT / "webapp" / ".secret_key"
+    if secret.exists():
+        dst = STAGE / "webapp" / ".secret_key"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(secret, dst)
+
     entries = []
     total = 0
     for p in sorted(STAGE.rglob("*")):
