@@ -59,7 +59,7 @@ def main() -> int:
         print("R2 env vars missing, skipping bootstrap")
         return 0
 
-    from webapp.remote_store import download_to
+    from webapp.remote_store import download_to, ensure_prefix
 
     ok = fail = 0
     for key in BOOT_CRITICAL:
@@ -75,6 +75,15 @@ def main() -> int:
             else:
                 print(f"  {key:48s} FAILED")
                 fail += 1
+
+    # Small runtime dirs the daily jobs read wholesale (universe CSV/navall).
+    try:
+        pulled = ensure_prefix("universe")
+        if pulled:
+            print(f"  universe/                                          +{pulled} files")
+            ok += 1
+    except Exception as e:  # noqa: BLE001
+        print(f"  universe pull failed: {e}")
 
     if ok:
         print(f"bootstrap ok={ok} fail={fail} in {time.time() - t0:.1f}s")

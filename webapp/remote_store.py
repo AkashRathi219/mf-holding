@@ -105,3 +105,37 @@ def download_to(relpath: str, dest: Path) -> Path | None:
     tmp.write_bytes(body)
     tmp.replace(dest)
     return dest
+
+
+def ensure_prefix(relprefix: str) -> int:
+    """Download every object under a key prefix that isn't already local.
+
+    Returns the number of files fetched. Used for small runtime dirs the jobs
+    need wholesale (e.g. 'universe')."""
+    if not is_configured():
+        return 0
+    base = _key("")
+    pref = _key(relprefix.strip("/"))
+    fetched = 0
+    token = None
+    while True:
+        kwargs = {"Bucket": _bucket(), "Prefix": pref}
+        if token:
+            kwargs["ContinuationToken"] = token
+        try:
+            resp = _get_client().list_objects_v2(**kwargs)
+        except Exception:
+            return fetched
+        for o in resp.get("Contents", []):
+            rel = o["Key"][len(base):].lstrip("/")
+            if not rel:
+                continue
+            target = DATA_DIR / rel
+            if target.exists():
+                continue
+            if download_to(rel, target):
+                fetched += 1
+        token = resp.get("NextContinuationToken")
+        if not token:
+            break
+    return fetched

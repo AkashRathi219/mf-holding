@@ -59,6 +59,23 @@ def _bond_job() -> dict:
         return {"fetched": len(files), "bonds": catalog["n_bonds"]}
 
 
+def _nav_job() -> dict:
+    """Daily NAV refresh + per-scheme gap-fill from last-known date to today."""
+    from src.refresh_log import track
+    with track("nav_daily", mode="scheduled") as meta:
+        try:
+            from .remote_store import ensure_prefix
+            meta["universe_pulled"] = ensure_prefix("universe")
+        except Exception:
+            pass
+        from src.nav_daily import fill_gaps_from_last_known, update_latest_navs
+        s1 = update_latest_navs(days=7)
+        meta.update(s1)
+        gaps = fill_gaps_from_last_known()
+        meta.update({f"gap_{k}": v for k, v in gaps.items()})
+        return {**s1, "gapfill": gaps}
+
+
 def _noop_pipeline(*args, **kwargs) -> None:
     # Monthly AMC-site downloads stay out of the web container (heavy PDFs);
     # they run from a workstation via `python main.py run` / the CLI scheduler.
@@ -90,7 +107,7 @@ def _start_scheduler_thread() -> None:
             from src.stock_refresh import refresh_all
             sched = MonthlyScheduler(
                 _noop_pipeline, config, base_dir=BASE_DIR.parent,
-                nav_refresh_fn=update_latest_navs,
+                nav_refresh_fn=_nav_job,
                 stock_refresh_fn=refresh_all,
                 bond_refresh_fn=_bond_job,
                 amfi_fn=_amfi_job,
@@ -663,10 +680,9 @@ _admin_running: set[str] = set()
 
 
 def _admin_jobs() -> dict:
-    from src.nav_daily import update_latest_navs
     from src.stock_refresh import refresh_all
     return {
-        "nav_daily": lambda: update_latest_navs(days=7),
+        "nav_daily": _nav_job,
         "amfi_fetch": _amfi_job,
         "bond_refresh": _bond_job,
         "stock_refresh": lambda: refresh_all(daily=True),

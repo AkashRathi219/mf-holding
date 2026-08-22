@@ -1,4 +1,4 @@
-"""Daily NAV refresh agent.
+﻿"""Daily NAV refresh agent.
 
 Appends the latest NAV points (from AMFI's NAV-history report) to the per-scheme
 history files under ``data/nav_history/`` so the webapp's NAV charts stay current.
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -115,7 +116,7 @@ def _update_latest_navs_impl(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
             path.write_text(json.dumps(doc), encoding="utf-8")
             created += 1
         else:
-            skipped += 1  # non-universe scheme with no existing file — ignore
+            skipped += 1  # non-universe scheme with no existing file â€” ignore
 
     return {
         "window": f"{start.isoformat()}..{end.isoformat()}",
@@ -126,6 +127,109 @@ def _update_latest_navs_impl(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
         "skipped": skipped,
         "total_nav_points": len(rows),
     }
+
+
+def fill_gaps_from_last_known(out_dir: Path = OUT_DIR, max_age_days: int = 6,
+                              max_window_days: int = 120,
+                              deep_code_cap: int = 400) -> dict:
+    """Per-scheme historical gap-fill: from each scheme's LAST KNOWN date to today.
+
+    1. Scan nav_history files; a code is stale when its latest point is older
+       than ``max_age_days``.
+    2. Gaps within ``max_window_days`` are merged from ONE bulk AMFI fetch
+       (oldest gap start -> today) for exactly those codes.
+    3. Deeper gaps are delegated to the official chunked backfill
+       (``nav_freshness.backfill_codes_amfi``), capped by ``deep_code_cap``
+       so one pathological run can't hammer the portal.
+
+    Returns a summary dict; telemetry under pipeline 'nav_gapfill'.
+    """
+    from .refresh_log import track
+    with track("nav_gapfill", max_age_days=max_age_days) as meta:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        today = date.today()
+
+        def _dkey(s):
+            m = re.match(r"^(\d{1,2})-([A-Za-z]{3})-(\d{4})$", str(s or "").strip())
+            if not m:
+                return None
+            try:
+                return datetime.strptime(
+                    f"{int(m.group(1)):02d}-{m.group(2)[:3]}-{m.group(3)}",
+                    "%d-%b-%Y").date()
+            except ValueError:
+                return None
+
+        scanned_files = len(list(out_dir.glob("*.json")))
+        stale_recent: dict[str, date] = {}
+        stale_deep: dict[str, int] = {}
+        for path in out_dir.glob("*.json"):
+            try:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+                hist = doc.get("history") or []
+            except Exception:
+                continue
+            last = hist[-1].get("date") if hist else None
+            ld = _dkey(last)
+            if ld is None:
+                continue
+            gap = (today - ld).days
+            if gap > max_age_days:
+                if gap <= max_window_days:
+                    stale_recent[path.stem] = ld
+                else:
+                    stale_deep[path.stem] = gap
+        meta.update(scanned=scanned_files,
+                    stale_recent=len(stale_recent), stale_deep=len(stale_deep))
+
+        merged_codes = 0
+        points = 0
+        if stale_recent:
+            start = min(stale_recent.values()) - timedelta(days=3)
+            text = _fetch_amfi(start, today)
+            rows = _parse_nav_text(text)
+            by_code: dict[str, list[tuple]] = {}
+            for code, datestr, nav, *_ in rows:
+                if code in stale_recent:
+                    by_code.setdefault(code, []).append((datestr, nav))
+            for code, pts in by_code.items():
+                path = out_dir / f"{code}.json"
+                doc, hist = _load_history(path)
+                existing_dates = {h.get("date") for h in hist}
+                new = [p for p in pts if p[1] not in existing_dates]
+                if not new:
+                    continue
+                for dstr, nav in new:
+                    hist.append({"date": dstr, "nav": nav})
+                hist.sort(key=lambda h: _date_key(h.get("date", "")))
+                doc["history"] = hist
+                doc["fetched_at"] = datetime.now().isoformat(timespec="seconds")
+                path.write_text(json.dumps(doc), encoding="utf-8")
+                merged_codes += 1
+                points += len(new)
+
+        deep_summary = None
+        if stale_deep:
+            if len(stale_deep) > deep_code_cap:
+                meta.update(deep_skipped=len(stale_deep))
+            else:
+                from .nav_freshness import backfill_codes_amfi
+                deepest = max(stale_deep.values())
+                try:
+                    deep_summary = backfill_codes_amfi(
+                        sorted(stale_deep), days=min(400, deepest + 10))
+                except Exception as e:  # noqa: BLE001 - logged via track on raise?
+                    meta.update(deep_error=str(e)[:200])
+
+        result = {"scanned": meta.get("scanned", 0),
+                  "stale_recent": len(stale_recent),
+                  "stale_deep": len(stale_deep),
+                  "merged_codes": merged_codes,
+                  "points_added": points,
+                  "deep_backfill": (deep_summary or {}).get("updated")
+                  if isinstance(deep_summary, dict) else deep_summary}
+        meta.update(result)
+        return result
 
 
 def main() -> int:

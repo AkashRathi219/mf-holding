@@ -92,10 +92,22 @@ def _norm_code(raw: str) -> str:
         return raw
 
 
+def _resolve_universe_csv() -> Path:
+    """Latest 'Combined NAV - *.csv' under data/universe/ (exact-name first,
+    so a refreshed dated file keeps working without code changes)."""
+    if UNIVERSE_CSV.exists():
+        return UNIVERSE_CSV
+    candidates = sorted(
+        (p for p in UNIVERSE_CSV.parent.glob("Combined NAV - *.csv") if p.is_file()),
+        key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else UNIVERSE_CSV
+
+
 def load_universe() -> list[dict]:
     """Return fund+plan rows (with a valid AMFI code) from the universe CSV."""
     rows = []
-    with open(UNIVERSE_CSV, encoding="utf-8-sig", newline="") as fh:
+    csv_path = _resolve_universe_csv()
+    with open(csv_path, encoding="utf-8-sig", newline="") as fh:
         for r in csv.DictReader(fh):
             code = _norm_code(r.get("Amficode"))
             name = (r.get("Fund Name") or "").strip()
