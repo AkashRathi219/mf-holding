@@ -1538,12 +1538,13 @@ async function mvStrategies(el) {
       </div>`).join("") || `<div class="empty">No strategies yet.</div>`;
     el.innerHTML = `
       <div class="card" style="margin-bottom:14px">
-        <h3>New / edit strategy</h3>
+        <h3>New / edit mandate (IPS)</h3>
         <div class="toolbar" style="margin-bottom:6px">
-          <div class="field" style="flex:1"><input id="mvStratName" placeholder="Strategy name"></div>
+          <div class="field" style="flex:1"><input id="mvStratName" placeholder="Mandate name — e.g. Conservative Hybrid IPS"></div>
         </div>
-        <textarea id="mvStratText" rows="4" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit"
-          placeholder="Rules text, e.g. Max 10% single stock. Max 20% sector. Min 30% debt. Max 5% cash. Max top-5 25%. Max overlap 30%."></textarea>
+        <div class="page-sub" style="margin:2px 0 4px">Investment-policy rules, one per line:</div>
+        <textarea id="mvStratText" rows=4 style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit"
+          placeholder="e.g. Max 10% single stock. Max 20% sector. Min 30% debt. Max 5% cash. Max top-5 25%. Max overlap 30%."></textarea>
         <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <button class="btn btn-outline btn-sm" id="mvStratParse">Parse rules</button>
           <button class="btn btn-primary" id="mvStratSave">Save strategy</button>
@@ -1695,11 +1696,11 @@ async function mvClients(el) {
     }).join("") || `<div class="empty">No clients yet.</div>`;
     el.innerHTML = `
       <div class="card" style="margin-bottom:14px">
-        <h3 id="mvClientFormTitle">New client</h3>
+        <h3 id="mvClientFormTitle">Onboard a client</h3>
         <div class="toolbar">
-          <div class="field" style="flex:1"><label class="page-sub">Name</label><input id="mvClientName"></div>
-          <div class="field" style="flex:1"><label class="page-sub">Org</label><input id="mvClientOrg"></div>
-          <div class="field" style="flex:1"><label class="page-sub">Notes</label><input id="mvClientNotes" placeholder="optional note"></div>
+          <div class="field" style="flex:1"><label class="page-sub">Client name</label><input id="mvClientName" placeholder="e.g. Rajesh Sharma"></div>
+          <div class="field" style="flex:1"><label class="page-sub">Family / Group</label><input id="mvClientOrg" placeholder="e.g. Sharma HUF"></div>
+          <div class="field" style="flex:2"><label class="page-sub">Mandate notes</label><input id="mvClientNotes" placeholder="Objectives, risk profile, horizon…"></div>
           <button class="btn btn-primary" id="mvClientSave" style="align-self:flex-end">Save client</button>
         </div>
         <div class="page-sub" style="margin-top:6px">After saving, use <b>Upload document</b> on the client card to attach a CAS document (JSON or PDF) \u2014 it is parsed into the client's portfolio at current market value. Other document types will be covered later.</div>
@@ -1779,13 +1780,13 @@ async function mvClientPortfolios(el) {
       </div>`).join("") || `<div class="empty">No client portfolios yet.</div>`;
     el.innerHTML = `
       <div class="card" style="margin-bottom:14px">
-        <h3>New client portfolio</h3>
+        <h3>Deploy a mandate to a client</h3>
         <div class="toolbar">
-          <div class="field" style="flex:1"><label class="page-sub">Client name</label><input id="mvDepClientName" placeholder="e.g. Rajesh Sharma"></div>
-          <div class="field" style="flex:1"><label class="page-sub">Strategy</label><select id="mvDepStrategy">${stratOptions || '<option value="">No strategies</option>'}</select></div>
-          <button class="btn btn-primary" id="mvDepRun" style="align-self:flex-end">Create portfolio</button>
+          <div class="field" style="flex:1"><label class="page-sub">Client (new or existing)</label><input id="mvDepClientName" placeholder="e.g. Rajesh Sharma"></div>
+          <div class="field" style="flex:1"><label class="page-sub">IPS / compliance strategy</label><select id="mvDepStrategy">${stratOptions || '<option value="">No strategies</option>'}</select></div>
+          <button class="btn btn-primary" id="mvDepRun" style="align-self:flex-end">Create client portfolio</button>
         </div>
-        <div class="page-sub" style="margin-top:6px">A client portfolio is created for the client name and linked to the selected strategy. Add the client's actual holdings via the Clients tab (CAS upload) or the Portfolio Tools.</div>
+        <div class="page-sub" style="margin-top:6px">Creates the client (if new) and links their portfolio to the selected strategy. Attach actual holdings via the Clients tab (CAS upload) or Portfolio Tools.</div>
       </div>
       <div class="card"><h3>Client portfolios</h3>${rows}</div>
       <div id="mvCpAna"></div>`;
@@ -1815,16 +1816,19 @@ async function mvCpDelete(id) {
 
 // ---------------- Analysis ----------------
 async function mvAnalyzeCp(id) {
-  // Render the compliance analysis inline in the currently-visible view.
-  let container = document.getElementById("mvCpAna");
-  if (!container) {
-    container = document.createElement("div");
-    container.id = "mvCpAna";
-    let host = document.getElementById("mview-clientportfolios");
-    if (!host || host.style.display === "none") host = document.getElementById("mview-overview");
-    if (!host || host.style.display === "none") host = document.getElementById("mview-clientportfolios");
-    (host || document.body).appendChild(container);
-  }
+  // Render the compliance analysis inline in the CURRENTLY-VISIBLE view.
+  // Always (re)create the container inside the visible pane — reusing one
+  // left behind in a hidden pane made results appear "missing" on Overview.
+  const panes = ["overview", "strategies", "clients", "clientportfolios"];
+  const visible = panes.find(k => {
+    const p = document.getElementById("mview-" + k);
+    return p && p.style.display !== "none";
+  }) || "overview";
+  const host = document.getElementById("mview-" + visible) || document.body;
+  document.querySelectorAll("#mvCpAna").forEach(old => old.remove());
+  const container = document.createElement("div");
+  container.id = "mvCpAna";
+  host.appendChild(container);
   container.innerHTML = `<div class="empty"><span class="spin"></span> Analysing\u2026</div>`;
   container.scrollIntoView({ behavior: "smooth", block: "start" });
   try {

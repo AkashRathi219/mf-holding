@@ -8,39 +8,39 @@
 </head>
 <body>
 <div class="auth-wrap">
-  <div class="auth-side">
-    <div>
-      <div class="brand"><span class="logo">📊</span> Factsheet Engine AI</div>
-      <h1>Portfolio diagnostics &amp; client proposals for Indian wealthtech.</h1>
-      <p>Query 2,50,000+ mutual-fund holdings across 50+ AMCs. Detect portfolio overlap,
-         concentration risk, and generate white-label client proposals in seconds.</p>
-      <div class="stats">
-        <div><strong id="statSchemes">—</strong><span>schemes covered</span></div>
-        <div><strong id="statHoldings">—</strong><span>holding rows</span></div>
-        <div><strong id="statAMCs">—</strong><span>AMCs</span></div>
+    <div class="auth-side">
+      <div>
+        <div class="brand"><span class="logo">📊</span> Factsheet Engine AI</div>
+        <h1>Portfolio diagnostics &amp; client proposals for SEBI-registered Advisers.</h1>
+        <p>Query 2,50,000+ mutual-fund holdings across 50+ AMCs. Detect portfolio overlap,
+           concentration risk, and generate white-label client proposals in seconds.</p>
+        <div class="stats">
+          <div><strong id="statSchemes">—</strong><span>schemes covered</span></div>
+          <div><strong id="statHoldings">—</strong><span>holding rows</span></div>
+          <div><strong id="statAMCs">—</strong><span>AMCs</span></div>
+        </div>
+      </div>
+      <footer>Built for RIAs · RAs · MFDs. Diagnostic tool for factual analysis only — not investment advice.</footer>
+    </div>
+    <div class="auth-form-wrap">
+      <div class="auth-card">
+        <h2>Adviser sign-in</h2>
+        <p class="sub">Access your mandates, model portfolios and compliance reports.</p>
+        <div class="auth-error" id="loginError"></div>
+        <form id="loginForm">
+          <div class="field">
+            <label for="email">Work email</label>
+            <input type="email" id="email" autocomplete="email" required placeholder="you@yourfirm.in">
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input type="password" id="password" autocomplete="current-password" required placeholder="••••••••">
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%" id="loginBtn">Sign in to workspace</button>
+        </form>
+        <div class="auth-switch">New adviser here? <a href="/register">Create an account</a></div>
       </div>
     </div>
-    <footer>Diagnostic tool for factual analysis only. Not investment advice. · B2B · RIAs · MFDs</footer>
-  </div>
-  <div class="auth-form-wrap">
-    <div class="auth-card">
-      <h2>Welcome back</h2>
-      <p class="sub">Sign in to access the analytics engine.</p>
-      <div class="auth-error" id="loginError"></div>
-      <form id="loginForm">
-        <div class="field">
-          <label for="email">Email</label>
-          <input type="email" id="email" autocomplete="email" required placeholder="you@firm.com">
-        </div>
-        <div class="field">
-          <label for="password">Password</label>
-          <input type="password" id="password" autocomplete="current-password" required placeholder="••••••••">
-        </div>
-        <button type="submit" class="btn btn-primary" style="width:100%" id="loginBtn">Sign in</button>
-      </form>
-      <div class="auth-switch">New here? <a href="/register">Create an account</a></div>
-    </div>
-  </div>
 </div>
 <script src="/static/js/utils.js?v=3"></script>
 <script>

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-22T05:33:38Z",
+  "generated_at": "2026-08-22T06:22:11Z",
   "schema": 1,
   "files": [
     {
@@ -42933,10 +42933,20 @@
       "sha256": "813e207a2917151df834d9f52ae811e61cbe3c4af52aa4b841d7160d30b89d65"
     },
     {
+      "path": "userdata.db",
+      "size": 1028096,
+      "sha256": "9cda0bdd4ccd376396bbdaec03e9ae1e0236bcc58506736e2b298e3203b4cf63"
+    },
+    {
       "path": "webapp.db",
       "size": 41512960,
       "sha256": "fa104cc59eaaddc24428c98f12368c2f5a4877ebecf98b1c8d856444d43b4ab5"
+    },
+    {
+      "path": "webapp_auth.db",
+      "size": 16384,
+      "sha256": "0be439b9bec6231b4d2c3c6bcdca44faef2fcddc514ecc20538b116f1f5d1fde"
     }
   ],
-  "total_bytes": 826145398
+  "total_bytes": 827189878
 }

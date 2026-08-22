@@ -24,21 +24,22 @@
   </div>
   <div class="auth-form-wrap">
     <div class="auth-card">
-      <h2>Create your account</h2>
-      <p class="sub">Access for financial advisors, RIAs and MFDs.</p>
+      <h2>Register as an Adviser</h2>
+      <p class="sub">For SEBI-registered Investment Advisers (RIA), Research Analysts (RA) &amp; MFDs.</p>
       <div class="auth-error" id="regError"></div>
       <form id="regForm">
         <div class="field">
-          <label for="name">Full name</label>
-          <input type="text" id="name" autocomplete="name" required placeholder="Priya Sharma">
+          <label for="name">Adviser name</label>
+          <input type="text" id="name" autocomplete="name" required placeholder="Priya Sharma, CFP">
         </div>
         <div class="field">
-          <label for="org">Firm / organization <span class="hint">(optional)</span></label>
-          <input type="text" id="org" autocomplete="organization" placeholder="Sharma Wealth Advisors">
+          <label for="org">Firm / RIA-RA entity <span class="hint">(optional)</span></label>
+          <input type="text" id="org" autocomplete="organization" placeholder="Sharma Wealth Advisors LLP">
+          <div class="hint">Include your ARN / SEBI RIA-RA registration number if you wish.</div>
         </div>
         <div class="field">
           <label for="email">Work email</label>
-          <input type="email" id="email" autocomplete="email" required placeholder="you@firm.com">
+          <input type="email" id="email" autocomplete="email" required placeholder="you@yourfirm.in">
         </div>
         <div class="field">
           <label for="password">Password</label>
@@ -49,9 +50,9 @@
           <label for="password2">Confirm password</label>
           <input type="password" id="password2" autocomplete="new-password" required placeholder="Repeat password">
         </div>
-        <button type="submit" class="btn btn-primary" style="width:100%" id="regBtn">Create account</button>
+        <button type="submit" class="btn btn-primary" style="width:100%" id="regBtn">Create adviser workspace</button>
       </form>
-      <div class="auth-switch">Already registered? <a href="/login">Sign in</a></div>
+      <div class="auth-switch">Already registered? <a href="/login">Adviser sign-in</a></div>
     </div>
   </div>
 </div>

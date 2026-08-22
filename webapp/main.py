@@ -549,6 +549,19 @@ def api_health():
     return {"status": "ok"}
 
 
+@app.get("/api/version")
+def api_version():
+    """Which exact build is serving this request (Railway injects the git SHA)."""
+    import os
+    from datetime import datetime
+    return {
+        "commit": os.environ.get("RAILWAY_GIT_COMMIT_SHA", ""),
+        "service": os.environ.get("RAILWAY_SERVICE_NAME", ""),
+        "environment": os.environ.get("RAILWAY_ENVIRONMENT_NAME", ""),
+        "server_time": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
 @app.get("/api/stocks/status")
 def api_stocks_status(request: Request):
     """Stock backfill completion status (price / actions / reports)."""

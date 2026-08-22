@@ -34,7 +34,7 @@ def main() -> int:
             except Exception as e2:
                 print(f"FAILED   {acc['email']}: {e} / {e2}")
                 continue
-        seeded = seed_for_user(uid)
+        seeded = seed_for_user(uid, reset=True)
         print("   seeded:", {k: len(v) for k, v in seeded.items()})
     return 0
 
