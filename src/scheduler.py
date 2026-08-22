@@ -164,10 +164,16 @@ class MonthlyScheduler:
 
     async def _run_nav_refresh(self):
         logger.info("Daily NAV refresh triggered")
+        # Piggyback: attempt the AMFI tier-1 holdings fetch first so it
+        # populates the moment the provider recovers — never blocks NAVs.
+        if self.amfi_fn:
+            try:
+                amfi_summary = await asyncio.to_thread(self.amfi_fn)
+                logger.info(f"AMFI piggyback fetch: {amfi_summary}")
+            except Exception as e:
+                logger.warning(f"AMFI piggyback fetch unavailable: {e}")
         days = int(self.settings.get("scheduler", {}).get("nav_refresh", {}).get("days", 10))
         try:
-            # The AMFI fetch is blocking (urllib) — run it in a worker thread so
-            # the scheduler's event loop is never blocked.
             summary = await asyncio.to_thread(self.nav_refresh_fn, days=days)
             logger.info(f"Daily NAV refresh complete: {summary}")
         except Exception as e:

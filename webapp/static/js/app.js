@@ -5,6 +5,7 @@ const screens = {
   securities: { key: "securities", title: "Security Directory", sub: "3,941 unique ISINs · 846 pure listed stocks", init: initSecurities },
   bonds: { key: "bonds", title: "Bonds", sub: "NSE debt market: G-Sec, SDL, T-Bills & corporate bonds with YTM", init: initBonds },
   models: { key: "models", title: "Model Portfolios", sub: "Strategies, clients, client portfolios & compliance", init: initModels },
+  admin: { key: "admin", title: "Superadmin · Data Ops", sub: "Refresh pipelines, telemetry and error logs", init: initAdmin },
 };
 
 let filters = null;
@@ -17,6 +18,7 @@ async function boot() {
     userInfo = res.user;
     document.getElementById("userName").textContent = userInfo.name;
     document.getElementById("userEmail").textContent = userInfo.email;
+    if (res.superadmin) document.getElementById("navAdminLink").style.display = "";
   } catch (e) {
     return; // redirected to /login
   }
@@ -2301,6 +2303,99 @@ async function loadApiSamples() {
     const schemes = await App.api("/schemes?limit=2");
     document.getElementById("payloadSchemes").textContent = JSON.stringify(schemes, null, 2).slice(0, 1800);
   } catch (e) {}
+}
+
+// ---------------- superadmin: data ops ----------------
+const ADMIN_PIPELINES = ["nav_daily", "amfi_fetch", "bond_refresh", "stock_refresh"];
+let adminTimer = null;
+
+function initAdmin() {
+  const body = document.getElementById("adminBody");
+  body.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <h3 style="margin:0">Refresh pipelines <span id="admSched" class="badge grey"></span></h3>
+      <button class="btn btn-outline btn-sm" onclick="initAdmin()">Reload</button>
+    </div>
+    <div id="adminCards" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px;margin-bottom:16px"></div>
+    <div class="card">
+      <h3>Recent refresh events <span class="page-sub">(newest first · last 200)</span></h3>
+      <div class="table-wrap" style="max-height:52vh;overflow:auto">
+        <table class="data"><thead><tr><th>Time</th><th>Pipeline</th><th>Status</th><th class="r">Took</th><th>Detail / error</th></tr></thead>
+        <tbody id="admLogRows"><tr><td colspan="5" class="empty"><span class="spin"></span> Loading…</td></tr></tbody></table>
+      </div>
+    </div>`;
+  refreshAdminData();
+  if (adminTimer) clearInterval(adminTimer);
+  adminTimer = setInterval(() => {
+    if (document.getElementById("screen-admin") &&
+        document.getElementById("screen-admin").style.display !== "none") refreshAdminData();
+    else clearInterval(adminTimer);
+  }, 30000);
+}
+
+function admBadge(status) {
+  if (status === "success") return '<span class="badge green">success</span>';
+  if (status === "error") return '<span class="badge red">error</span>';
+  if (status === "started") return '<span class="badge amber">running</span>';
+  return `<span class="badge grey">${App.esc(status || "no runs")}</span>`;
+}
+
+function admDetail(d, err) {
+  if (err) return `<span class="mono" style="color:#c94f4f">${App.esc(String(err).slice(0, 160))}</span>`;
+  const skip = new Set(["ts", "pipeline", "status", "duration_s", "error", "trace"]);
+  const parts = Object.entries(d || {}).filter(([, v]) => v !== null && v !== "")
+    .map(([k, v]) => `${App.esc(k)}=<b>${App.esc(String(v).slice(0, 40))}</b>`);
+  return parts.length ? parts.join(" · ") : "—";
+}
+
+async function refreshAdminData() {
+  try {
+    const [sum, logs] = await Promise.all([
+      App.api("/admin/refresh-summary"),
+      App.api("/admin/refresh-logs?limit=200"),
+    ]);
+    const sched = document.getElementById("admSched");
+    sched.className = "badge " + (sum.scheduler_enabled ? "green" : "grey");
+    sched.textContent = sum.scheduler_enabled ? "scheduler ON" : "scheduler OFF";
+
+    document.getElementById("adminCards").innerHTML = ADMIN_PIPELINES.map(name => {
+      const p = (sum.pipelines || {})[name] || {};
+      const running = (sum.running || []).includes(name);
+      return `<div class="card" style="margin:0">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <strong>${name}</strong>${admBadge(running ? "started" : p.last_status)}
+        </div>
+        <div class="kv" style="margin:8px 0 6px">
+          <dt>Last run</dt><dd>${p.last_ts ? App.esc(p.last_ts.replace("T", " ")) : "—"}</dd>
+          <dt>Took</dt><dd>${p.last_duration_s != null ? p.last_duration_s + "s" : "—"}</dd>
+          <dt>24h</dt><dd><span class="badge green">${p.ok_24h || 0} ok</span> ${(p.err_24h || 0) ? `<span class="badge red">${p.err_24h} err</span>` : ""}</dd>
+          ${p.last_error ? `<dt>Error</dt><dd class="mono" style="color:#c94f4f;font-size:.75rem">${App.esc(String(p.last_error).slice(0, 140))}</dd>` : ""}
+          ${!p.last_error && Object.keys(p.last_detail || {}).length ? `<dt>Detail</dt><dd class="page-sub">${admDetail(p.last_detail)}</dd>` : ""}
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="adminRun('${name}')"
+          ${running ? "disabled" : ""}>${running ? "Running…" : "Run now"}</button>
+      </div>`;
+    }).join("");
+
+    document.getElementById("admLogRows").innerHTML = (logs.items || []).map(e => `<tr>
+        <td class="mono">${App.esc((e.ts || "").replace("T", " "))}</td>
+        <td>${e.pipeline}</td>
+        <td>${admBadge(e.status)}</td>
+        <td class="num">${e.duration_s != null ? e.duration_s + "s" : "—"}</td>
+        <td>${admDetail(e.status === "error" ? null : e, e.error)}</td>
+      </tr>`).join("") || `<tr><td colspan="5" class="empty">No events yet.</td></tr>`;
+  } catch (e) {
+    document.getElementById("adminBody").innerHTML =
+      `<div class="empty">${App.esc(e.message)}</div>`;
+  }
+}
+
+async function adminRun(pipeline) {
+  try {
+    await App.api(`/admin/run/${pipeline}`, { method: "POST", body: "{}" });
+    App.toast(`'${pipeline}' started.`);
+    setTimeout(refreshAdminData, 1200);
+  } catch (e) { App.toast(e.message, true); }
 }
 
 // boot

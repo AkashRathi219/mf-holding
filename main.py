@@ -820,6 +820,15 @@ def nav_daily(days):
     _setup_from_config()
     summary = update_latest_navs(days=days)
     click.echo(json.dumps(summary, indent=2))
+    # Piggyback: attempt the AMFI tier-1 holdings fetch so it populates as
+    # soon as the provider recovers (never blocks the NAV refresh).
+    try:
+        from webapp.amfi_fetch import fetch_mfdata, save
+        data = fetch_mfdata()
+        paths = save(data, "latest") if data else []
+        click.echo(f"AMFI piggyback fetch: {len(data)} AMCs -> {len(paths)} files")
+    except Exception as e:
+        click.echo(f"AMFI piggyback fetch unavailable: {e}")
 
 
 @cli.command()

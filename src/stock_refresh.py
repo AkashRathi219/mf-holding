@@ -16,6 +16,14 @@ from .stock_reports import run as run_reports
 
 
 def refresh_all(daily: bool = True, limit: int | None = None) -> dict:
+    from .refresh_log import track
+    with track("stock_refresh", daily=daily, limit=limit) as _meta:
+        summary = _refresh_all_impl(daily=daily, limit=limit)
+        _meta.update(summary)
+        return summary
+
+
+def _refresh_all_impl(daily: bool = True, limit: int | None = None) -> dict:
     print("  [1/4] identity…", flush=True)
     ident = build_identity(force=False)
     print(f"        {len(ident)} ISINs", flush=True)

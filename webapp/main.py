@@ -23,8 +23,91 @@ from .tools_api import router as tools_router
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 
+SUPERADMIN_EMAILS = {e.strip().lower() for e in os.environ.get(
+    "SUPERADMIN_EMAILS", "akash@aracharatventures.com").split(",") if e.strip()}
+
 app = FastAPI(title="Factsheet Engine AI", docs_url="/api/docs", openapi_url="/api/openapi.json")
 app.include_router(tools_router)
+
+
+# --------------------------------------------------------------------------
+# Scheduled jobs (opt-in via ENABLE_SCHEDULER=1; set on Railway)
+# --------------------------------------------------------------------------
+
+_job_runner_started = False
+
+
+def _amfi_job() -> dict:
+    from src.refresh_log import track
+    with track("amfi_fetch") as _meta:
+        from webapp.amfi_fetch import fetch_mfdata, save
+        data = fetch_mfdata()
+        paths = save(data, "latest") if data else []
+        _meta.update(amcs=len(data), files=len(paths))
+        return {"amcs": len(data), "files": len(paths)}
+
+
+def _bond_job() -> dict:
+    from datetime import date as _date
+    from src.refresh_log import track
+    with track("bond_refresh") as _meta:
+        from src.bonds import build_catalog, fetch_day
+        files = fetch_day(_date.today())
+        catalog = build_catalog()
+        _meta.update(files=len(files), bonds=catalog["n_bonds"],
+                     as_of=catalog["as_of"])
+        return {"fetched": len(files), "bonds": catalog["n_bonds"]}
+
+
+def _noop_pipeline(*args, **kwargs) -> None:
+    # Monthly AMC-site downloads stay out of the web container (heavy PDFs);
+    # they run from a workstation via `python main.py run` / the CLI scheduler.
+    from src.refresh_log import record
+    record("monthly_holdings_fetch", "skipped",
+           note="runs from workstation pipeline, not the web container")
+
+
+def _start_scheduler_thread() -> None:
+    """Run the cron jobs inside the web process when ENABLE_SCHEDULER=1."""
+    global _job_runner_started
+    if _job_runner_started or os.environ.get("ENABLE_SCHEDULER") != "1":
+        return
+    import asyncio
+
+    import yaml
+
+    from src.scheduler import MonthlyScheduler
+
+    def _loop() -> None:
+        async def runner() -> None:
+            config = {}
+            cfg_path = BASE_DIR.parent / "config" / "settings.yaml"
+            try:
+                config = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+            except Exception:
+                pass
+            from src.nav_daily import update_latest_navs
+            from src.stock_refresh import refresh_all
+            sched = MonthlyScheduler(
+                _noop_pipeline, config, base_dir=BASE_DIR.parent,
+                nav_refresh_fn=update_latest_navs,
+                stock_refresh_fn=refresh_all,
+                bond_refresh_fn=_bond_job,
+                amfi_fn=_amfi_job,
+            )
+            sched.start()
+            while True:
+                await asyncio.sleep(3600)
+
+        asyncio.run(runner())
+
+    threading.Thread(target=_loop, name="job-scheduler", daemon=True).start()
+    _job_runner_started = True
+
+
+@app.on_event("startup")
+def _on_startup() -> None:
+    _start_scheduler_thread()
 
 
 @app.middleware("http")
@@ -99,7 +182,9 @@ def api_login(body: LoginIn):
 
 @app.get("/api/auth/me")
 def api_me(request: Request):
-    return {"user": _require_user(request)}
+    user = _require_user(request)
+    return {"user": user,
+            "superadmin": (user.get("email") or "").lower() in SUPERADMIN_EMAILS}
 
 
 # --------------------------------------------------------------------------
@@ -558,8 +643,76 @@ def api_version():
         "commit": os.environ.get("RAILWAY_GIT_COMMIT_SHA", ""),
         "service": os.environ.get("RAILWAY_SERVICE_NAME", ""),
         "environment": os.environ.get("RAILWAY_ENVIRONMENT_NAME", ""),
+        "scheduler_enabled": os.environ.get("ENABLE_SCHEDULER") == "1",
         "server_time": datetime.now().isoformat(timespec="seconds"),
     }
+
+
+# --------------------------------------------------------------------------
+# Superadmin: refresh telemetry + manual job triggers
+# --------------------------------------------------------------------------
+
+def _require_superadmin(request: Request) -> dict:
+    user = _require_user(request)
+    if (user.get("email") or "").lower() not in SUPERADMIN_EMAILS:
+        raise HTTPException(status_code=403, detail="Superadmin access required.")
+    return user
+
+
+_admin_running: set[str] = set()
+
+
+def _admin_jobs() -> dict:
+    from src.nav_daily import update_latest_navs
+    from src.stock_refresh import refresh_all
+    return {
+        "nav_daily": lambda: update_latest_navs(days=7),
+        "amfi_fetch": _amfi_job,
+        "bond_refresh": _bond_job,
+        "stock_refresh": lambda: refresh_all(daily=True),
+    }
+
+
+@app.get("/api/admin/refresh-summary")
+def admin_refresh_summary(request: Request):
+    _require_superadmin(request)
+    from src.refresh_log import LOG_PATH, summary
+    s = summary()
+    return {"pipelines": s["pipelines"],
+            "generated_at": s["generated_at"],
+            "scheduler_enabled": os.environ.get("ENABLE_SCHEDULER") == "1",
+            "running": sorted(_admin_running),
+            "log_file": str(LOG_PATH)}
+
+
+@app.get("/api/admin/refresh-logs")
+def admin_refresh_logs(request: Request, limit: int = 200):
+    _require_superadmin(request)
+    from src.refresh_log import read
+    return {"items": read(max(1, min(limit, 1000)))}
+
+
+@app.post("/api/admin/run/{pipeline}")
+def admin_run_job(pipeline: str, request: Request):
+    _require_superadmin(request)
+    jobs = _admin_jobs()
+    if pipeline not in jobs:
+        raise HTTPException(status_code=404,
+                            detail=f"Unknown pipeline '{pipeline}'. Known: {sorted(jobs)}")
+    if pipeline in _admin_running:
+        raise HTTPException(status_code=409, detail=f"'{pipeline}' is already running.")
+    _admin_running.add(pipeline)
+
+    def runner() -> None:
+        try:
+            jobs[pipeline]()
+        except Exception:  # errors are recorded by refresh_log.track
+            pass
+        finally:
+            _admin_running.discard(pipeline)
+
+    threading.Thread(target=runner, name=f"admin-{pipeline}", daemon=True).start()
+    return {"status": "started", "pipeline": pipeline}
 
 
 @app.get("/api/scope-stats")

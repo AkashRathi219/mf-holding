@@ -54,8 +54,17 @@ def update_latest_navs(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
     """Fetch the last ``days`` days of AMFI NAVs and merge into nav_history files.
 
     Returns a summary dict. Raises on network/AMFI failure so the caller (the
-    scheduler) can log and retry next cycle.
+    scheduler) can log and retry next cycle. Telemetry is written to
+    data/logs/refresh_log.jsonl (src.refresh_log).
     """
+    from .refresh_log import track
+    with track("nav_daily", days=days) as _meta:
+        summary = _update_latest_navs_impl(days, out_dir)
+        _meta.update(summary)
+        return summary
+
+
+def _update_latest_navs_impl(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     end = date.today()
     start = end - timedelta(days=days)
