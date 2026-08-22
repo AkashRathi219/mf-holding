@@ -16,10 +16,18 @@ from .stock_reports import run as run_reports
 
 
 def refresh_all(daily: bool = True, limit: int | None = None) -> dict:
+    print("  [1/4] identity…", flush=True)
     ident = build_identity(force=False)
+    print(f"        {len(ident)} ISINs", flush=True)
+    print("  [2/4] prices (bhavcopy -> Yahoo -> Google)…", flush=True)
     price = run_price(ident=ident, daily=daily, limit=limit)
+    print(f"        ok={sum(1 for r in price if r.get('status') == 'ok')}", flush=True)
+    print("  [3/4] corporate actions…", flush=True)
     actions = run_actions(ident=ident, limit=limit)
+    print(f"        ok={sum(1 for r in actions if r.get('status') == 'ok')}", flush=True)
+    print("  [4/4] NSE financial-report announcements…", flush=True)
     reports = run_reports(ident=ident, limit=limit)
+    print(f"        ok={sum(1 for r in reports if r.get('status') == 'ok')}", flush=True)
     return {
         "identity": len(ident),
         "price_ok": sum(1 for r in price if r.get("status") == "ok"),

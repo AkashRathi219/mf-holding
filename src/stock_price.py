@@ -7,13 +7,16 @@ Fetch chain per stock (first success wins, later sources fill gaps):
 1. **Manual CSV** - ``data/raw/stock_manual/<ISIN or SYMBOL>.csv``
    (``date,close`` or ``date,open,high,low,close,volume``). Authoritative when present.
 2. **NSE bhavcopy archives (primary)** - one daily file covers every NSE-listed
-   symbol (OHLC). Files are downloaded by a parallel pool of workers (one agent
-   per daily file) and cached under ``data/stock_bhavcopy/``. Coverage starts
-   ~2020 (the ``sec_bhavdata_full`` era); older dates are filled from the
-   existing Yahoo history.
-3. **Yahoo Finance** - fills pre-2020 history and any symbol the bhavcopy misses
-   (delisted/odd series), full daily close for ``<SYMBOL>.NS``.
-4. **Google Finance** - latest close only (no public history API).
+   symbol (OHLC). Primary endpoint: ``sec_bhavdata_full`` CSV on
+   ``archives.nseindia.com``; fallback: the UDiFF Common Bhavcopy ZIP on
+   ``nsearchives.nseindia.com`` (official archive since NSE deprecated legacy
+   formats). Files are downloaded by a parallel pool of workers and cached
+   under ``data/stock_bhavcopy/``. Coverage starts ~2020; older dates come
+   from the existing Yahoo history.
+3. **Google Finance (daily incremental only)** - latest close as a fast
+   top-up before the heavier Yahoo range call.
+4. **Yahoo Finance** - history/gap filler: pre-2020 depth, symbols the
+   bhavcopy misses (delisted/odd series), full daily close for ``<SYMBOL>.NS``.
 
 For a backfill, the daily bhavcopy files are downloaded ONCE and reused for all
 stocks (``run()`` builds an in-memory ``{date: {symbol: row}}`` index), so 868
@@ -31,10 +34,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import io
 import json
 import re
 import sys
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -44,8 +49,13 @@ from .stock_common import (ACTIONS_DIR, HISTORY_DIR, MANUAL_DIR, date_key, http_
 from .stock_identity import load_identity
 
 BHAVCOPY_CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "stock_bhavcopy"
+# Primary: per-symbol full bhavdata CSV (archives host).
 BHAVCOPY_ARCHIVE_URL = ("https://archives.nseindia.com/products/content/"
                         "sec_bhavdata_full_{ddmmyyyy}.csv")
+# Fallback (directive: NSE deprecated legacy formats w.e.f. Jul-2024; the
+# official archive is the UDiFF Common Bhavcopy ZIP on the nsearchives host):
+BHAVCOPY_UDIFF_URL = ("https://nsearchives.nseindia.com/content/cm/"
+                      "BhavCopy_NSE_CM_0_0_0_{yyyymmdd}_F_0000.csv.zip")
 # Earliest reliably available "sec_bhavdata_full" file.
 BHAVCOPY_START = date(2020, 1, 1)
 
@@ -125,13 +135,17 @@ def _bhav_path(d: date) -> Path:
 
 
 def _download_bhavcopy_day(d: date) -> date | None:
-    """Fetch + cache one daily bhavcopy file. Returns the date on success."""
+    """Fetch + cache one daily bhavcopy file. Returns the date on success.
+
+    Chain: sec_bhavdata_full CSV (archives host) -> UDiFF Common Bhavcopy ZIP
+    (nsearchives host). The UDiFF zip is extracted and cached as-is; the parser
+    sniffs the format from the header row."""
     path = _bhav_path(d)
     if path.exists():
         # Reject cached HTML/PDF responses.
         try:
             raw = path.read_bytes()
-            if raw[:6].startswith(b"SYMBOL"):
+            if raw[:6].startswith(b"SYMBOL") or raw[:6].startswith(b"TradDt"):
                 return d
         except OSError:
             pass
@@ -139,16 +153,30 @@ def _download_bhavcopy_day(d: date) -> date | None:
             path.unlink()
         except OSError:
             pass
-    url = BHAVCOPY_ARCHIVE_URL.format(ddmmyyyy=d.strftime("%d%m%Y"))
+    data = None
     try:
-        raw = http_get(url, timeout=30, retries=2)
-        if not raw[:6].startswith(b"SYMBOL"):
-            return None
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(raw)
-        return d
+        data = http_get(BHAVCOPY_ARCHIVE_URL.format(ddmmyyyy=d.strftime("%d%m%Y")),
+                        timeout=30, retries=2)
+        if not data[:6].startswith(b"SYMBOL"):
+            data = None
     except Exception:
+        data = None
+    if data is None:
+        try:
+            zipped = http_get(BHAVCOPY_UDIFF_URL.format(
+                yyyymmdd=d.strftime("%Y%m%d")), timeout=40, retries=2)
+            with zipfile.ZipFile(io.BytesIO(zipped)) as zf:
+                inner = next(n for n in zf.namelist() if n.lower().endswith(".csv"))
+                data = zf.read(inner)
+            if not data[:6].startswith(b"TradDt"):
+                data = None
+        except Exception:
+            data = None
+    if data is None:
         return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return d
 
 
 def download_bhavcopy_range(start: date, end: date, workers: int = 10) -> list[date]:
@@ -167,7 +195,11 @@ def download_bhavcopy_range(start: date, end: date, workers: int = 10) -> list[d
 
 
 def _parse_bhavcopy_day(d: date) -> dict[str, dict]:
-    """Parse a cached daily file -> {symbol: {open, high, low, close, volume}}."""
+    """Parse a cached daily file -> {symbol: {open, high, low, close, volume}}.
+
+    Supports both archive formats:
+      - sec_bhavdata_full (SYMBOL/OPEN_PRICE/... headers)
+      - UDiFF Common Bhavcopy (TradDt/TckrSymb/OpnPric/... headers)"""
     path = _bhav_path(d)
     out: dict[str, dict] = {}
     if not path.exists():
@@ -177,21 +209,27 @@ def _parse_bhavcopy_day(d: date) -> dict[str, dict]:
             reader = csv.DictReader(fh)
             # NSE bhavcopy headers carry a leading space (' CLOSE_PRICE').
             reader.fieldnames = [c.strip() for c in (reader.fieldnames or [])]
+            fields = set(reader.fieldnames or [])
+            ud = "TradDt" in fields  # UDiFF Common Bhavcopy format
             for r in reader:
-                sym = (r.get("SYMBOL") or "").strip()
+                sym = (r.get("TckrSymb" if ud else "SYMBOL") or "").strip()
                 if not sym:
                     continue
-                close = _num(r.get("CLOSE_PRICE"))
+                if ud:
+                    # equity series only; skip indices/ETF-units/debt rows
+                    if (r.get("SctySrs") or "").strip() not in {"EQ", "BE", "BZ", "SM", "ST", "SZ"}:
+                        continue
+                close = _num(r.get("ClsPric" if ud else "CLOSE_PRICE"))
                 # suspended/blank rows must never overwrite a good stored close
                 if close is None or close <= 0:
                     continue
                 out[sym] = {
                     "date": d.strftime("%d-%b-%Y"),
-                    "open": _num(r.get("OPEN_PRICE")),
-                    "high": _num(r.get("HIGH_PRICE")),
-                    "low": _num(r.get("LOW_PRICE")),
+                    "open": _num(r.get("OpnPric" if ud else "OPEN_PRICE")),
+                    "high": _num(r.get("HghPric" if ud else "HIGH_PRICE")),
+                    "low": _num(r.get("LwPric" if ud else "LOW_PRICE")),
                     "close": close,
-                    "volume": _num(r.get("TTL_TRD_QNTY")),
+                    "volume": _num(r.get("TtlTradgVol" if ud else "TTL_TRD_QNTY")),
                 }
     except Exception:
         pass
@@ -384,7 +422,26 @@ def refresh_stock(isin: str, ident: dict, daily: bool, session=None,
             _save_history(isin, doc)
             return {"isin": isin, "symbol": symbol, "status": "ok", "points": len(merged)}
 
-    # 3. Yahoo fallback (symbol absent from bhavcopy / pre-2020 gap).
+    # 3. Google latest close (fast incremental top-up; runs BEFORE the slower
+    #    Yahoo range call). In daily mode this completes today's series and we
+    #    return; in full-backfill mode Google is skipped because a single point
+    #    cannot fill history ranges — Yahoo handles those next.
+    if daily:
+        g = _fetch_google(symbol) if symbol else None
+        if g:
+            merged_map = {p["date"]: p for p in existing if p.get("close") is not None}
+            for p in g:
+                merged_map[p["date"]] = p
+            merged = _dedupe_sort(list(merged_map.values()))
+            doc = {**doc, "isin": isin, "symbol": symbol, "name": name,
+                   "currency": "INR", "source": "Google Finance",
+                   "fetched_at": now_iso(), "history": merged}
+            _save_history(isin, doc)
+            return {"isin": isin, "symbol": symbol, "status": "ok",
+                    "points": len(merged), "source_used": "google"}
+
+    # 4. Yahoo fallback (history/gap filler: pre-2020 coverage, symbols absent
+    #    from bhavcopy, or non-daily runs needing ranged data).
     last_date = max((p["date"] for p in existing), default=None)
     frm = since or BHAVCOPY_START
     if last_date:
@@ -400,16 +457,6 @@ def refresh_stock(isin: str, ident: dict, daily: bool, session=None,
         merged = _dedupe_sort(list(merged_map.values()))
         doc = {**doc, "isin": isin, "symbol": symbol, "name": name,
                "currency": "INR", "source": "Yahoo Finance",
-               "fetched_at": now_iso(), "history": merged}
-        _save_history(isin, doc)
-        return {"isin": isin, "symbol": symbol, "status": "ok", "points": len(merged)}
-
-    # 4. Google latest close (last resort).
-    g = _fetch_google(symbol) if symbol else None
-    if g:
-        merged = _dedupe_sort(existing + g)
-        doc = {**doc, "isin": isin, "symbol": symbol, "name": name,
-               "currency": "INR", "source": "Google Finance",
                "fetched_at": now_iso(), "history": merged}
         _save_history(isin, doc)
         return {"isin": isin, "symbol": symbol, "status": "ok", "points": len(merged)}

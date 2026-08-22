@@ -25,8 +25,8 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from .stock_common import (ACTIONS_DIR, date_key, http_get, load_json, now_iso,
-                           save_json)
+from .stock_common import (ACTIONS_DIR, date_key, http_get, load_json, nse_session,
+                           now_iso, save_json)
 from .stock_identity import load_identity
 
 YAHOO_EVENTS_URL = ("https://query1.finance.yahoo.com/v8/finance/chart/{sym}?"
@@ -60,11 +60,16 @@ def _fetch_yahoo_events(symbol: str) -> tuple[list[dict], list[dict]]:
 
 
 def _fetch_nse_announcements(symbol: str) -> list[dict]:
-    """Best-effort NSE corporate announcements mentioning dividends/splits."""
+    """Best-effort NSE corporate announcements mentioning dividends/splits.
+
+    Uses the cookie-warmed NSE session and a single fast retry — when Akamai
+    blocks the call we skip the symbol instead of burning ~14s of backoff
+    (868 symbols x retries was hanging the refresh for hours)."""
     out = []
     try:
         raw = http_get(NSE_ANNOUNCE_URL.format(sym=symbol),
-                       headers={"Referer": "https://www.nseindia.com/"}, timeout=30)
+                       headers={"Referer": "https://www.nseindia.com/"},
+                       timeout=20, opener=nse_session(), retries=1)
         data = json.loads(raw.decode("utf-8", "replace"))
         for a in data or []:
             text = f"{a.get('attchmntText') or ''} {a.get('an_subject') or ''}"

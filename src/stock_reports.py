@@ -19,7 +19,8 @@ import json
 import sys
 import time
 
-from .stock_common import REPORTS_DIR, http_get, load_json, now_iso, save_json
+from .stock_common import (REPORTS_DIR, http_get, load_json, nse_session, now_iso,
+                           save_json)
 from .stock_identity import load_identity
 
 NSE_ANNOUNCE_URL = ("https://www.nseindia.com/api/corporate-announcements?index=equities&symbol={sym}")
@@ -37,7 +38,8 @@ def _is_financial(text: str) -> bool:
 def _fetch_nse(symbol: str) -> list[dict]:
     try:
         raw = http_get(NSE_ANNOUNCE_URL.format(sym=symbol),
-                       headers={"Referer": "https://www.nseindia.com/"}, timeout=30)
+                       headers={"Referer": "https://www.nseindia.com/"},
+                       timeout=20, opener=nse_session(), retries=1)
         data = json.loads(raw.decode("utf-8", "replace"))
     except Exception:
         return []

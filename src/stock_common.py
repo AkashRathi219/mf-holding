@@ -53,6 +53,31 @@ def make_opener(cookies: bool = False) -> urllib.request.OpenerDirector:
     return urllib.request.build_opener(*handlers)
 
 
+NSE_HOME = "https://www.nseindia.com/"
+_nse_session: urllib.request.OpenerDirector | None = None
+
+
+def nse_session() -> urllib.request.OpenerDirector:
+    """Cookie-warmed opener for www.nseindia.com JSON APIs (Akamai-guarded).
+
+    Visiting the home page once sets the session cookies the API endpoints
+    expect; without this warm-up most calls return 403 and each caller burns
+    its retry budget. The opener is process-cached."""
+    global _nse_session
+    if _nse_session is None:
+        op = make_opener(cookies=True)
+        try:
+            req = urllib.request.Request(
+                NSE_HOME,
+                headers={"User-Agent": UA, "Accept": "text/html,application/xhtml+xml",
+                         "Accept-Language": "en-US,en;q=0.9"})
+            op.open(req, timeout=20)
+        except Exception:
+            pass  # warm-up is best-effort; callers still get the cookie jar
+        _nse_session = op
+    return _nse_session
+
+
 def http_get(url: str, headers: dict | None = None, timeout: int = 30,
              opener: urllib.request.OpenerDirector | None = None,
              retries: int = 3) -> bytes:
