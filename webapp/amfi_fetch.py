@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from pathlib import Path
 
 import httpx
@@ -24,6 +25,39 @@ AMFI_DIR = BASE_DIR / "data" / "parsed" / "amfi"
 MFDATA_BASE = "https://mfdata.in/api/v1"
 
 UA = {"User-Agent": "FactsheetEngineAI/0.1 (data research)"}
+
+
+class ProviderDown(Exception):
+    """mfdata.in unreachable or answering 5xx — retried, then surfaced."""
+
+
+def _get_json(client: httpx.Client, url: str, attempts: int = 3) -> dict | list:
+    """GET JSON with backoff on 5xx/transport errors; raises ProviderDown with
+    a human-readable reason when the provider is genuinely unavailable."""
+    last_err: Exception | None = None
+    for attempt in range(attempts):
+        if attempt:
+            time.sleep(2 * attempt)  # 0s, 2s, 4s
+        try:
+            resp = client.get(url)
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPStatusError as e:
+            code = e.response.status_code
+            if code < 500:
+                raise  # 4xx: real request problem, don't retry
+            last_err = e
+        except (httpx.TransportError, httpx.TimeoutException) as e:
+            last_err = e
+    detail = ""
+    if isinstance(last_err, httpx.HTTPStatusError):
+        detail = f"HTTP {last_err.response.status_code}"
+        if last_err.response.status_code == 522:
+            detail += " (Cloudflare: provider origin server is down)"
+    elif last_err is not None:
+        detail = type(last_err).__name__
+    raise ProviderDown(f"mfdata.in unavailable — {detail}. "
+                       f"Will auto-retry on the next scheduled run.")
 
 
 def _weight(rec: dict, key: str = "weight_pct") -> float | None:
@@ -46,9 +80,7 @@ def fetch_mfdata(month: str | None = None, timeout: int = 60) -> list[dict]:
     or provider errors (caller decides whether to fail hard).
     """
     with httpx.Client(timeout=timeout, headers=UA, follow_redirects=True) as client:
-        fam_resp = client.get(f"{MFDATA_BASE}/families")
-        fam_resp.raise_for_status()
-        families = fam_resp.json()
+        families = _get_json(client, f"{MFDATA_BASE}/families")
         families = families if isinstance(families, list) else families.get("data", [])
 
         out: list[dict] = []
@@ -59,10 +91,10 @@ def fetch_mfdata(month: str | None = None, timeout: int = 60) -> list[dict]:
             if month:
                 url += f"?month={month}"
             try:
-                hr = client.get(url)
-                hr.raise_for_status()
-                data = hr.json()
+                data = _get_json(client, url)
                 holdings = data.get("data") or data
+            except ProviderDown:
+                raise  # provider-wide outage: abort fast, caller logs it
             except Exception:
                 continue  # skip a family that fails; keep the rest
             schemes: dict[str, dict] = {}
