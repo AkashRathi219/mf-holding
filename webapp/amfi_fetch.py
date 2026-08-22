@@ -85,13 +85,20 @@ def fetch_mfdata(month: str | None = None, timeout: int = 60) -> list[dict]:
         return out
 
 
-def save(out: list[dict], month: str) -> Path:
+def save(out: list[dict], month: str) -> list[Path]:
+    """Write one file per AMC in the schema the webapp reader expects
+    (``{amc, as_of, schemes}`` per file — ``webapp/db._load_amfi_schemes``
+    iterates data/parsed/amfi/*.json as individual dicts)."""
+    import re
     AMFI_DIR.mkdir(parents=True, exist_ok=True)
-    path = AMFI_DIR / f"amfi_{month}.json"
-    # one combined file; AMC is carried per-record
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(out, fh, ensure_ascii=False)
-    return path
+    stamp = re.sub(r"[^0-9A-Za-z_-]+", "-", month or "latest").strip("-") or "latest"
+    paths: list[Path] = []
+    for rec in out:
+        slug = re.sub(r"[^a-z0-9]+", "_", str(rec.get("amc") or "").lower()).strip("_") or "amc"
+        p = AMFI_DIR / f"{stamp}_{slug}.json"
+        p.write_text(json.dumps(rec, ensure_ascii=False, indent=1), encoding="utf-8")
+        paths.append(p)
+    return paths
 
 
 def main() -> int:
@@ -107,9 +114,13 @@ def main() -> int:
             click.echo(f"ERROR: provider unreachable: {e}", err=True)
             click.echo("Hint: mfdata.in may be down; retry later or point at another provider.", err=True)
             raise SystemExit(1)
-        path = save(data, month or "latest")
+        if not data:
+            click.echo("No scheme holdings returned by the provider.")
+            return 1
+        paths = save(data, month or "latest")
         schemes = sum(len(d["schemes"]) for d in data)
-        click.echo(f"Saved {len(data)} AMCs / {schemes} schemes -> {path}")
+        click.echo(f"Saved {len(data)} AMCs / {schemes} schemes -> {len(paths)} files in {AMFI_DIR}")
+        return 0
 
     return _cli()
 

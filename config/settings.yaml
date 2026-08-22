@@ -43,6 +43,12 @@ scheduler:
     enabled: true
     hour: 21
     minute: 30
+  # Monthly AMFI/mfdata portfolio-disclosure fetch (tier-1 holdings source).
+  # Runs days 8-12 (disclosures publish ~day 10); retries daily until done.
+  amfi_refresh:
+    enabled: true
+    hour: 7
+    minute: 15
 
 paths:
   pdfs_dir: data/raw/pdfs

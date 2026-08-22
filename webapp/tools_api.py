@@ -902,8 +902,9 @@ def _analyze(items: list[dict], strategy_id: int | None, uid: int, wdb: dbm.WebD
     overlap = _overlap_pair(items, wdb)
     attribution["scheme overlap"] = [{"fund": f, "value": overlap["overlap"]}
                                      for f in overlap["funds"]]
-    attribution["single stock"] = ([{"fund": f["fund"], "value": round(top_holding["weight"], 3)}]
-                                   if top_holding else [])
+    # "Max single holding" attribution: the contributing funds behind the
+    # largest effective holding (of ANY asset class, not just stocks).
+    attribution["single stock"] = _top_contrib(_contrib([top_holding])) if top_holding else []
     # Rich per-rule context for the collapsible breakdown rows.
     contexts = _build_contexts(pa, top_holding, pa.get("sector_table") or [], overlap)
     # Sector-wise top-N rule: show the top sectors instead of the top holdings.

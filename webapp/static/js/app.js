@@ -112,7 +112,7 @@ async function loadDashboard() {
     { l: "Holding rows", v: App.formatNum(m.holdings), s: App.formatPct(m.isin_completeness, 1) + " with ISIN", cls: "green" },
     { l: "Pure listed stocks", v: App.formatNum(m.pure_stocks), s: "of " + App.formatNum(m.securities) + " securities", cls: "" },
     { l: "ISIN completeness", v: App.formatPct(m.isin_completeness, 1), s: "of holding rows", cls: "accent" },
-    { l: "Schemes covered", v: App.formatPct(m.schemes_with_holdings / m.schemes * 100, 1), s: "coverage rate", cls: "green" },
+    { l: "Schemes covered", v: m.schemes ? App.formatPct(m.schemes_with_holdings / m.schemes * 100, 1) : "\u2014", s: "coverage rate", cls: "green" },
   ];
   document.getElementById("kpis").innerHTML = kpis.map(k =>
     `<div class="kpi card ${k.cls}"><div class="kpi-label">${k.l}</div><div class="kpi-value">${k.v}</div><div class="kpi-sub">${k.s}</div></div>`
@@ -593,7 +593,10 @@ async function loadBonds() {
       const segBadge = segmentBadge(x.segment);
       const ratingBadge = x.rating ? App.badge(x.rating, "green")
         : x.rating_band ? App.badge(x.rating_band, "grey") : `<span class="page-sub">—</span>`;
-      const ytm = x.ytm != null ? App.formatPct(x.ytm, 2) : `<span class="page-sub">—</span>`;
+      const ytmTitle = (x.ytm != null && x.last_trade_date) ? ` title="YTM ${App.esc(x.ytm_source || "")}; price/yield quoted at last trade ${App.esc(x.last_trade_date)} (${tradeAgeAgo(x.last_trade_date)})"` : "";
+      const ytm = x.ytm != null
+        ? `<strong ${ytmTitle}>${App.formatPct(x.ytm, 2)}</strong>${(x.last_trade_date && Date.now() - new Date(x.last_trade_date + "T00:00:00").getTime() > 90 * 86400000) ? ` <span class="page-sub" title="Price is older than 90 days — YTM is quoted at that trade date">stale</span>` : ""}`
+        : `<span class="page-sub">—</span>`;
       const price = x.price != null ? App.formatNum(x.price, 2) : `<span class="page-sub">—</span>`;
       const lastTrade = x.last_trade_date
         ? `${App.esc(x.last_trade_date)} <span class="page-sub" title="Last date this bond actually traded on NSE; illiquid bonds may stay untraded for years">· ${tradeAgeAgo(x.last_trade_date)}</span>`
@@ -603,7 +606,7 @@ async function loadBonds() {
         <td><strong>${App.esc(x.name)}</strong></td>
         <td>${segBadge}</td>
         <td>${App.esc(x.issuer || "—")}</td>
-        <td class="num">${x.coupon != null ? App.formatNum(x.coupon, 2) : "—"}</td>
+        <td class="num">${x.coupon != null ? App.formatNum(x.coupon, 2) + "%" : "—"}</td>
         <td class="mono">${App.esc(x.maturity_date || "—")}</td>
         <td>${ratingBadge}</td>
         <td class="num">${price}</td>
@@ -636,6 +639,17 @@ function tradeAgeAgo(isoDate) {
   if (days < 31) return Math.round(days / 7) + "w ago";
   if (days < 365) return Math.round(days / 30) + "mo ago";
   return (days / 365).toFixed(1) + "y ago";
+}
+
+// Shared overlap-matrix heat scale (identical on every screen that renders
+// the matrix so the same pair never gets different colours).
+function overlapHeat(v) {
+  if (v <= 0) return "heat-0";
+  if (v < 10) return "heat-1";
+  if (v < 20) return "heat-2";
+  if (v < 30) return "heat-3";
+  if (v < 45) return "heat-4";
+  return "heat-5";
 }
 
 async function openBondDetail(isin) {
@@ -1200,7 +1214,7 @@ function pfRenderResults(r) {
       fmtVal: v => App.formatPct(v, 1),
     });
   }
-  Charts._renderDonut(document.getElementById("pfPieSector"), pfPieFull100(r.sector_split || [], effTotal), {
+  Charts._renderDonut(document.getElementById("pfPieSector"), pfNormalize100(r.sector_split || []), {
     center: App.formatPct(effTotal, 1), centerLabel: "resolved",
     legendEl: document.getElementById("pfPieSectorLegend"), tipEl: document.getElementById("pfPieSectorTip"),
     fmtVal: v => App.formatPct(v, 1),
@@ -1301,16 +1315,8 @@ function renderOverlapResults(r) {
   const out = document.getElementById("overlapResults");
   const ids = r.ids;
   const headers = `<th>Scheme</th>` + ids.map(id => `<th>${App.esc(r.schemes.find(s => s.id === id).fund_name.length > 28 ? r.schemes.find(s => s.id === id).fund_name.slice(0, 27) + "…" : r.schemes.find(s => s.id === id).fund_name)}</th>`).join("");
-  const heat = (v) => {
-    if (v <= 0) return "heat-0";
-    if (v < 20) return "heat-1";
-    if (v < 40) return "heat-2";
-    if (v < 60) return "heat-3";
-    if (v < 80) return "heat-4";
-    return "heat-5";
-  };
   const matrixRows = r.matrix.map(m => {
-    const cells = ids.map(id => `<td class="cell ${heat(m["c_" + id])}">${m["c_" + id].toFixed(1)}</td>`).join("");
+    const cells = ids.map(id => `<td class="cell ${overlapHeat(m["c_" + id])}">${m["c_" + id].toFixed(1)}%</td>`).join("");
     return `<tr><td style="text-align:left;max-width:260px">${App.esc(m.scheme)}</td>${cells}</tr>`;
   }).join("");
 
@@ -1323,7 +1329,7 @@ function renderOverlapResults(r) {
       <div class="card" style="margin-bottom:12px">
         <h3>${App.esc(d.scheme)}</h3>
         <div class="kv" style="margin-bottom:10px">
-          <dt>Yield to maturity</dt><dd>${App.formatPct(d.ytm ? d.ytm * 100 : null)}</dd>
+          <dt>Yield to maturity</dt><dd>${App.formatPct(d.ytm != null ? d.ytm * 100 : null, 2)}</dd>
           <dt>Duration</dt><dd>${App.formatNum(d.duration, 2)} yrs</dd>
           <dt>Avg maturity</dt><dd>${App.formatNum(d.avg_maturity, 2)} yrs</dd>
         </div>
@@ -1693,6 +1699,7 @@ async function mvClients(el) {
         <div class="toolbar">
           <div class="field" style="flex:1"><label class="page-sub">Name</label><input id="mvClientName"></div>
           <div class="field" style="flex:1"><label class="page-sub">Org</label><input id="mvClientOrg"></div>
+          <div class="field" style="flex:1"><label class="page-sub">Notes</label><input id="mvClientNotes" placeholder="optional note"></div>
           <button class="btn btn-primary" id="mvClientSave" style="align-self:flex-end">Save client</button>
         </div>
         <div class="page-sub" style="margin-top:6px">After saving, use <b>Upload document</b> on the client card to attach a CAS document (JSON or PDF) \u2014 it is parsed into the client's portfolio at current market value. Other document types will be covered later.</div>
@@ -1986,11 +1993,12 @@ function renderCompliance(out, r) {
   const allH = pa.effective_holdings || [];
   const topPie = allH.map(h => ({ label: h.company, value: h.weight }));
   const capEntries = capPieData(pa.cap_split_raw || {});
+  const capTotal = capEntries.reduce((a, e) => a + (e.value || 0), 0);
   // Items-based: pies show the full 100% breakup of the RESOLVED portfolio
   // (normalised). Allocation models: cap split is a within-equity breakdown.
   let pieData, pieTitle;
   if (isAlloc) {
-    pieData = capEntries.length ? capEntries : [{ label: "No cap split", value: 100 }];
+    pieData = capEntries.length ? pfPieFull100(capEntries, capTotal) : [{ label: "No cap split", value: 100 }];
     pieTitle = "Equity cap split";
   } else if (topPie.length) {
     pieData = pfPieFull100(topPie, effTotal);
@@ -2006,7 +2014,6 @@ function renderCompliance(out, r) {
           <div class="kv"><dt>Direct stocks</dt><dd>${App.formatPct((pa.allocations || {}).direct_stock_pct, 1)}</dd></div>
         </div>`;
   const debt = pa.debt_analysis || {};
-  const capTotal = capEntries.reduce((a, e) => a + (e.value || 0), 0);
   const capPieFull = pfPieFull100(capEntries, capTotal);
   const effHoldingsCard = !isAlloc && allH.length ? `
     <div class="card">
@@ -2022,7 +2029,7 @@ function renderCompliance(out, r) {
     <div class="card">
       <h3>Portfolio details <span class="badge blue">${App.esc(r.label || "\u2014")}</span></h3>
       <div class="kv" style="margin-bottom:8px">
-        <dt>Compliance</dt><dd><strong>${App.formatPct(pd.compliance, 1)}</strong></dd>
+        <dt>Compliance</dt><dd><strong>${pd.compliance == null ? "N/A" : App.formatPct(pd.compliance, 1)}</strong></dd>
         <dt>Rules passed</dt><dd>${pd.passed}/${pd.total || 0}</dd>
         <dt>Allocated</dt><dd>${App.formatPct(pd.total_weight, 1)}</dd>
         <dt>Resolved / coverage</dt><dd>${App.formatPct(pd.effective_total, 1)} / ${App.formatPct(pd.coverage_pct, 1)}</dd>
@@ -2075,7 +2082,6 @@ function renderCompliance(out, r) {
       </div>
     </div>` : "";
   const ovM = r.overlap_matrix || [];
-  const ovHeat = (v) => v <= 0 ? "heat-0" : v < 10 ? "heat-1" : v < 20 ? "heat-2" : v < 30 ? "heat-3" : v < 45 ? "heat-4" : "heat-5";
   const shortScheme = (s) => {
     let t = (s || "").replace(/portfolio of/i, "").replace(/as on.*/i, "").replace(/\bFund\b/gi, "").replace(/\bPlan\b/gi, "").replace(/\bDirect\b/gi, "").replace(/\bRegular\b/gi, "");
     const w = t.trim().split(/\s+/).filter(Boolean).slice(0, 3).join(" ");
@@ -2100,7 +2106,7 @@ function renderCompliance(out, r) {
           <thead><tr><th>Scheme</th>${ovM.map(m => `<th title="${App.esc(m.scheme)}">${App.esc(shortScheme(m.scheme))}</th>`).join("")}</tr></thead>
           <tbody>${ovM.map(m => `<tr><td>${App.esc(m.scheme)}</td>${ovM.map(k => m.id === k.id
             ? `<td class="cell" style="background:transparent">\u2014</td>`
-            : `<td class="cell ${ovHeat(m["c_" + k.id] || 0)}">${((m["c_" + k.id] || 0)).toFixed(1)}</td>`).join("")}</tr>`).join("")}</tbody>
+            : `<td class="cell ${overlapHeat(m["c_" + k.id] || 0)}">${((m["c_" + k.id] || 0)).toFixed(1)}%</td>`).join("")}</tr>`).join("")}</tbody>
         </table>
       </div>
       <h4 style="margin:14px 0 6px">Highest overlap pairs</h4>
@@ -2165,7 +2171,7 @@ function renderCompliance(out, r) {
     <div class="grid" style="grid-template-columns: 1.5fr 1fr; align-items:start;">
       <div class="card">
         <h3>${App.esc(r.label || "Portfolio")} \u2014 compliance
-          <span class="badge ${c.compliance >= 100 ? "green" : c.compliance >= 50 ? "amber" : "red"}">${App.formatPct(c.compliance, 1)}</span>
+          <span class="badge ${c.total === 0 || c.compliance == null ? "grey" : c.compliance >= 100 ? "green" : c.compliance >= 50 ? "amber" : "red"}">${c.total === 0 || c.compliance == null ? "N/A \u00b7 no rules" : App.formatPct(c.compliance, 1)}</span>
           ${r.markdown ? `<button class="btn btn-outline btn-sm" style="float:right" onclick="downloadMdReport()">\u2B07 Download .md report</button>` : ""}
         </h3>
         <div class="kv" style="margin-bottom:12px">

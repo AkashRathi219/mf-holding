@@ -995,6 +995,38 @@ def bond_refresh(days, build_only, live):
         indent=2))
 
 
+@cli.command()
+@click.option("--month", "-m", default=None, help="YYYY-MM disclosure month (default: latest)")
+@click.option("--timeout", type=int, default=90)
+def amfi_fetch(month, timeout):
+    """Fetch mfdata.in monthly portfolio disclosures -> data/parsed/amfi/.
+
+    This is the AUTHORITATIVE tier-1 source in the holdings priority order
+    (AMFI/mfdata > AMC websites > Advisorkhoj > index)."""
+    _setup_from_config()
+    from webapp.amfi_fetch import fetch_mfdata, save
+    try:
+        data = fetch_mfdata(month=month, timeout=timeout)
+    except Exception as e:
+        click.echo(f"ERROR: provider unreachable: {e}", err=True)
+        raise SystemExit(1)
+    if not data:
+        click.echo("No scheme holdings returned by the provider.")
+        raise SystemExit(1)
+    paths = save(data, month or "latest")
+    schemes = sum(len(d["schemes"]) for d in data)
+    click.echo(json.dumps({"amcs": len(data), "schemes": schemes,
+                           "files": len(paths), "dir": str(paths[0].parent)}, indent=2))
+
+
+def run_amfi_monthly() -> dict:
+    """Scheduler entry (never raises): refresh the AMFI-tier disclosures."""
+    from webapp.amfi_fetch import fetch_mfdata, save
+    data = fetch_mfdata()
+    paths = save(data, "latest") if data else []
+    return {"amcs": len(data), "files": len(paths)}
+
+
 def catalog_path():
     from src.bonds import CATALOG_JSON
     return CATALOG_JSON
@@ -1022,7 +1054,8 @@ def schedule_start():
         scheduler = MonthlyScheduler(run_pipeline, config, base_dir=BASE_DIR,
                                      nav_refresh_fn=update_latest_navs,
                                      stock_refresh_fn=refresh_all,
-                                     bond_refresh_fn=bond_refresh_daily)
+                                     bond_refresh_fn=bond_refresh_daily,
+                                     amfi_fn=run_amfi_monthly)
         scheduler.start()
 
         next_run = scheduler.get_next_run()

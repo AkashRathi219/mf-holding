@@ -13,13 +13,15 @@ logger = logging.getLogger(__name__)
 
 class MonthlyScheduler:
     def __init__(self, pipeline_fn, settings: dict, base_dir: Path,
-                 nav_refresh_fn=None, stock_refresh_fn=None, bond_refresh_fn=None):
+                 nav_refresh_fn=None, stock_refresh_fn=None, bond_refresh_fn=None,
+                 amfi_fn=None):
         self.pipeline_fn = pipeline_fn
         self.settings = settings
         self.base_dir = base_dir
         self.nav_refresh_fn = nav_refresh_fn
         self.stock_refresh_fn = stock_refresh_fn
         self.bond_refresh_fn = bond_refresh_fn
+        self.amfi_fn = amfi_fn
         self.scheduler = AsyncIOScheduler(timezone="Asia/Kolkata")
 
     def setup(self):
@@ -119,6 +121,27 @@ class MonthlyScheduler:
                 f"{bond_cfg.get('minute', 30):02d} IST"
             )
 
+        # ---- Monthly AMFI/mfdata disclosure fetch (tier-1 holdings source) ----
+        amfi_cfg = sched.get("amfi_refresh", {})
+        if self.amfi_fn and amfi_cfg.get("enabled", True):
+            amfi_trigger = CronTrigger(
+                day="8-12",  # disclosures publish ~day 10; retry daily until done
+                hour=amfi_cfg.get("hour", 7),
+                minute=amfi_cfg.get("minute", 15),
+                timezone="Asia/Kolkata",
+            )
+            self.scheduler.add_job(
+                self._run_amfi,
+                trigger=amfi_trigger,
+                id="monthly_amfi_fetch",
+                name="Monthly AMFI Disclosure Fetch",
+                replace_existing=True,
+            )
+            logger.info(
+                f"Monthly AMFI fetch set: days 8-12 at {amfi_cfg.get('hour', 7):02d}:"
+                f"{amfi_cfg.get('minute', 15):02d} IST"
+            )
+
     async def _run_pipeline(self):
         now = datetime.now()
         marker = self.base_dir / "logs" / f"success_{now.year}-{now.month:02d}.marker"
@@ -165,6 +188,14 @@ class MonthlyScheduler:
             logger.info(f"Daily bond refresh complete: {summary}")
         except Exception as e:
             logger.error(f"Daily bond refresh failed: {e}")
+
+    async def _run_amfi(self):
+        logger.info("Monthly AMFI fetch triggered")
+        try:
+            summary = await asyncio.to_thread(self.amfi_fn)
+            logger.info(f"Monthly AMFI fetch complete: {summary}")
+        except Exception as e:
+            logger.error(f"Monthly AMFI fetch failed: {e}")
 
     def start(self):
         self.setup()

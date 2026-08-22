@@ -120,11 +120,16 @@ def _load_debt_constituents(csv_path: Path) -> list[dict]:
     return rows
 
 
+def _kw_hit(n: str, keyword: str) -> bool:
+    """Whole-token keyword match: 'nifty 50' must NOT hit inside 'nifty 500'."""
+    return re.search(rf"(?<![a-z0-9]){re.escape(keyword)}(?![a-z0-9])", n) is not None
+
+
 def resolve(name: str) -> tuple[str | None, str | None]:
     """Return (constituent_csv, matched_keyword) for an equity Nifty fund, else None."""
     n = _norm(name)
     for keyword, csv_name in INDEX_MAP:
-        if keyword in n:
+        if _kw_hit(n, keyword):
             return csv_name, keyword
     return None, None
 
@@ -165,7 +170,7 @@ def main() -> None:
         is_debt = False
         if csv_name is None:
             for keyword, name in DEBT_INDEX_MAP:
-                if keyword in _norm(fund):
+                if _kw_hit(_norm(fund), keyword):
                     csv_name, is_debt = name, True
                     break
         if csv_name:

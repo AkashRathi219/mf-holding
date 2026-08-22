@@ -13,7 +13,10 @@ const Charts = {
     ctx.clearRect(0, 0, w, h);
     const pad = { l: 46, r: 12, t: 16, b: opts.labelsBottom !== false ? 74 : 30 };
     const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
-    const max = Math.max(1, ...values.map(Number));
+    const max = Math.max(1, ...values.map(v => {
+      const n = Number(v);
+      return isFinite(n) ? n : 0;
+    }));
     const n = labels.length;
     const slot = plotW / n, barW = Math.min(34, slot * 0.62);
     ctx.textBaseline = "middle";
@@ -29,17 +32,13 @@ const Charts = {
     // bars
     const colors = opts.colors || Array(n).fill("#2456d6");
     values.forEach((v, i) => {
-      const bh = Math.max(2, (v / max) * plotH);
+      const vn = Number(v);
+      const val = isFinite(vn) ? vn : 0;          // null/NaN -> zero-height bar
+      const bh = Math.max(2, (val / max) * plotH);
       const x = pad.l + slot * i + (slot - barW) / 2;
       const y = pad.t + plotH - bh;
       ctx.fillStyle = colors[i] || "#2456d6";
-      ctx.beginPath();
-      const r = 3;
-      ctx.moveTo(x, y + r); ctx.lineTo(x, y + bh);
-      ctx.arc(x + barW / 2, y + bh, barW / 2, Math.PI, 0);
-      ctx.lineTo(x + barW, y + r);
-      ctx.arc(x + barW / 2, y + r, barW / 2, Math.PI, 0); // rounded cap — approximated
-      ctx.fill();
+      ctx.fillRect(x, y, barW, bh);
       ctx.fillStyle = "#f8fafc";
       ctx.fillRect(x + 1, y + 1, barW - 2, bh - 2);
       ctx.fillStyle = colors[i] || "#2456d6";
@@ -137,7 +136,9 @@ const Charts = {
         const cr = canvas.getBoundingClientRect();
         const x = ev.clientX - cr.left - size / 2;
         const y = ev.clientY - cr.top - size / 2;
-        let ang = Math.atan2(y, x);
+        // Slices are drawn from -PI/2 (12 o'clock); map the pointer angle into
+        // that same space so every quadrant of the ring is hoverable.
+        let ang = Math.atan2(y, x) + Math.PI / 2;
         if (ang < 0) ang += Math.PI * 2;
         let idx = -1;
         slices.forEach((s, i) => { if (idx < 0 && ang >= s.start && ang < s.end) idx = i; });

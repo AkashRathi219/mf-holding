@@ -36,11 +36,11 @@ import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from .stock_common import (HISTORY_DIR, MANUAL_DIR, date_key, http_get, load_json,
-                           make_opener, norm_date, now_iso, save_json)
+from .stock_common import (ACTIONS_DIR, HISTORY_DIR, MANUAL_DIR, date_key, http_get,
+                           load_json, make_opener, norm_date, now_iso, save_json)
 from .stock_identity import load_identity
 
 BHAVCOPY_CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "stock_bhavcopy"
@@ -181,12 +181,16 @@ def _parse_bhavcopy_day(d: date) -> dict[str, dict]:
                 sym = (r.get("SYMBOL") or "").strip()
                 if not sym:
                     continue
+                close = _num(r.get("CLOSE_PRICE"))
+                # suspended/blank rows must never overwrite a good stored close
+                if close is None or close <= 0:
+                    continue
                 out[sym] = {
                     "date": d.strftime("%d-%b-%Y"),
                     "open": _num(r.get("OPEN_PRICE")),
                     "high": _num(r.get("HIGH_PRICE")),
                     "low": _num(r.get("LOW_PRICE")),
-                    "close": _num(r.get("CLOSE_PRICE")),
+                    "close": close,
                     "volume": _num(r.get("TTL_TRD_QNTY")),
                 }
     except Exception:
@@ -248,7 +252,9 @@ def _fetch_yahoo(symbol: str, frm: date, tod: date, session=None) -> list[dict] 
         for t, c in zip(ts, closes):
             if c is None:
                 continue
-            d = datetime.fromtimestamp(t)
+            # Yahoo epochs are exchange-local opens; convert via UTC explicitly
+            # so a non-IST server cannot shift dates by a day.
+            d = datetime.fromtimestamp(t, tz=timezone.utc)
             points.append({"date": d.strftime("%d-%b-%Y"), "close": float(c)})
         return _dedupe_sort(points) or None
     except Exception:
@@ -278,6 +284,68 @@ def _save_history(isin: str, doc: dict) -> None:
     save_json(HISTORY_DIR / f"{isin}.json", doc)
 
 
+def _split_events(isin: str) -> list[tuple[str, float]]:
+    """[(split ex-date 'YYYY-MM-DD', price factor)] from the actions file.
+
+    A '2:1' split (numerator:denominator) halves the raw pre-split price, so
+    historical RAW points must be multiplied by denominator/numerator to match
+    Yahoo's split-adjusted scale."""
+    doc = load_json(ACTIONS_DIR / f"{isin}.json", {}) or {}
+    out: list[tuple[str, float]] = []
+    for s in doc.get("splits") or []:
+        try:
+            num_s, den_s = str(s.get("ratio") or "").split(":")
+            num, den = float(num_s), float(den_s)
+        except ValueError:
+            continue
+        if num <= 0 or den <= 0:
+            continue
+        dk = date_key(norm_date(str(s.get("date") or "")))
+        m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", dk or "")
+        if not m:
+            continue
+        out.append((f"{m.group(1)}-{m.group(2)}-{m.group(3)}", den / num))
+    out.sort()
+    return out
+
+
+def _apply_split_adjustments(isin: str, points: list[dict], watermark: str | None
+                             ) -> tuple[list[dict], str]:
+    """Scale raw bhavcopy-era points for splits not yet applied.
+
+    Idempotent: ``watermark`` ('splits_applied_through') records the last split
+    date already baked into the stored series, so repeated refreshes never
+    double-adjust. Only points on/after BHAVCOPY_START are touched - earlier
+    points come from Yahoo and are already adjusted.
+    """
+    splits = _split_events(isin)
+    if not splits:
+        return points, (watermark or "")
+    pending = [s for s in splits if s[0] > (watermark or "")]
+    if pending:
+        for p in points:
+            pk_m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", date_key(p.get("date", "") or ""))
+            if not pk_m:
+                continue
+            pk = f"{pk_m.group(1)}-{pk_m.group(2)}-{pk_m.group(3)}"
+            try:
+                if datetime.strptime(pk, "%Y-%m-%d").date() < BHAVCOPY_START:
+                    continue  # Yahoo-era point: already adjusted
+            except ValueError:
+                continue
+            factor = 1.0
+            for sd, f in pending:
+                if pk < sd:
+                    factor *= f
+            if factor == 1.0:
+                continue
+            for k in ("open", "high", "low", "close"):
+                v = p.get(k)
+                if isinstance(v, (int, float)) and v:
+                    p[k] = round(v * factor, 6)
+    return points, splits[-1][0]
+
+
 def refresh_stock(isin: str, ident: dict, daily: bool, session=None,
                   bhav_index: dict | None = None, since: date | None = None) -> dict:
     symbol = ident.get("symbol") or ""
@@ -294,6 +362,12 @@ def refresh_stock(isin: str, ident: dict, daily: bool, session=None,
                "fetched_at": now_iso(), "history": merged}
         _save_history(isin, doc)
         return {"isin": isin, "symbol": symbol, "status": "ok", "points": len(merged)}
+
+    # Split normalization: raw bhavcopy closes are put on the same
+    # split-adjusted scale as Yahoo before merging (idempotent via watermark).
+    existing, wm = _apply_split_adjustments(
+        isin, [dict(p) for p in existing], doc.get("splits_applied_through"))
+    doc["splits_applied_through"] = wm
 
     # 2. NSE bhavcopy (primary). For a full backfill the index covers 2020+;
     #    dates before that are kept from the existing (Yahoo) history.
