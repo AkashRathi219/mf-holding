@@ -57,7 +57,9 @@ App.formatDate = function (d) {
 App.sourceLabel = function (s) {
   const map = {
     amc_website: "AMC website",
-    advisorkhoj: "Advisorkhoj",
+    // Internal key kept for the background aggregator fallback (stable link);
+    // user-facing scope attributes the data to the AMC's own disclosures.
+    advisorkhoj: "AMC disclosure",
     amfi: "AMFI",
     index: "Index",
     universe_only: "Universe only",

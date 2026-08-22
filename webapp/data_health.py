@@ -5,8 +5,9 @@ Components (weights):
                     credit; no-disclosure funds excluded from denominator)
 - completeness  15  holdings ISIN completeness
 - nav           20  share of nav_history files whose latest value is <= 10d old
-- holdings      15  portfolio-disclosure freshness (as_of <= 45d; Advisorkhoj
-                    >180d staleness tracked separately, feeds open item MF-A2)
+- holdings      15  portfolio-disclosure freshness (as_of <= 45d; stale
+                    AMC-disclosure-archive snapshots tracked separately,
+                    feeds open item MF-A2)
 - stocks_bonds  10   stale stock price files + bond catalog YTM/price coverage
 - pipelines     15  refresh telemetry vs expected cadence (refresh_log)
 
@@ -31,7 +32,9 @@ WEIGHTS = {"coverage": 25, "completeness": 15, "nav": 20,
            "holdings": 15, "stocks_bonds": 10, "pipelines": 15}
 
 # Pipeline -> max hours since last successful run before it loses points.
-CADENCE_HOURS = {"nav_daily": 48, "stock_refresh": 48,
+# nav_daily runs twice a day (12h apart), so a 12h window keeps it green;
+# stock/bond are once-daily (48h grace); amfi is monthly (35d).
+CADENCE_HOURS = {"nav_daily": 12, "stock_refresh": 48,
                  "bond_refresh": 48, "amfi_fetch": 35 * 24}
 
 MAX_AGE_DAYS = 10          # NAV / stock price freshness bar
@@ -134,8 +137,9 @@ def _holdings(wdb) -> tuple[float, dict]:
         "median_age_days": round(statistics.median(ages), 1),
         "max_age_days": max(ages),
         f"within_{HOLDINGS_STALE_DAYS}d": within,
-        "advisorkhoj_total": ak_total,
-        f"advisorkhoj_stale_gt_{ADVISORKHOJ_STALE_DAYS}d": ak_stale,
+        # Internal source key; surfaced as "AMC disclosure (archive)" upstream.
+        "amc_disclosure_archive_total": ak_total,
+        f"amc_disclosure_archive_stale_gt_{ADVISORKHOJ_STALE_DAYS}d": ak_stale,
     }
 
 
@@ -262,6 +266,8 @@ def read_history(limit: int = 200) -> list[dict]:
 # ---- per-scheme confidence badge + superadmin reliance metrics --------------
 
 # Base trust by holdings source (mirrors _SOURCE_PRIORITY in webapp/db.py).
+# 'advisorkhoj' is the internal key for the stable-link AMC-disclosure archive
+# kept as background fallback; user-facing labels say "AMC disclosure".
 SOURCE_BASE = {"amfi": 100, "amc_website": 88, "index": 85, "advisorkhoj": 62}
 TIER_COLORS = {"green": "#3f9d63", "amber": "#d09a2f",
                "red": "#c94f4f", "grey": "#9aa0a6"}
@@ -283,9 +289,10 @@ def scheme_confidence(scheme: dict, stats: dict | None = None) -> dict:
 
     Validation bonus: a FRESH (<=45d) snapshot that passes the merge-time
     weight checks (max <=100, sum <=120) with >=90% coverage on ISIN and %NAV
-    earns +10 — provenance matters less than proven quality, so e.g. fully
-    validated advisorkhoj data can reach High instead of being capped at
-    Medium. Stale or unvalidated snapshots keep pure source-based scoring.
+    earns +10 — provenance matters less than proven quality, so fully
+    validated AMC-disclosure-archive data can reach High instead of being
+    capped at Medium. Stale or unvalidated snapshots keep pure source-based
+    scoring.
     """
     cov = scheme.get("coverage") or "has_holdings"
     src = scheme.get("source") or ""
@@ -300,16 +307,18 @@ def scheme_confidence(scheme: dict, stats: dict | None = None) -> dict:
                 "reason": "discovery_needed", **detail}
 
     score = float(SOURCE_BASE.get(src, 50))
+    # Monthly disclosure cycle: nothing is stale before 45 days; 46-60d is a
+    # mild concern; real decay starts past two missed cycles (>60d).
     if age is None:
         score -= 25          # undated disclosure
-    elif age <= 35:
-        pass                 # monthly cycle + slack: full credit
     elif age <= 45:
-        score -= 5
+        pass                 # within the monthly cycle: full credit
+    elif age <= 60:
+        score -= 8           # a few days late - watch
     elif age <= 90:
-        score -= 18
+        score -= 20          # second missed cycle
     elif age <= 180:
-        score -= 32
+        score -= 35
     else:
         score -= 48          # MF-A2 stale territory
 

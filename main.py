@@ -210,6 +210,9 @@ _IRRELEVANT_PATTERNS = (
     "iap", "investor-awareness", "investor awareness",
     "annual-aum", "aaum", "aum-", "aum ",
     "bank-list", "live-bank",
+    # Quarterly SEBI insider-disclosure dumps (NOT monthly portfolios):
+    "disclosure-of-investments", "investments-made-by",
+    "disclosure made by", "investment-made-by",
 )
 
 
@@ -406,8 +409,22 @@ async def run_pipeline(
             actual_month, actual_year = month, year
             used_fallback = False
 
+            def _within_recency(link) -> bool:
+                """Keep only docs dated within the recent window: target month
+                and up to 2 months before it (monthly disclosures arrive late;
+                anything older is a stale/quarterly artifact). Undated links
+                are kept for the fallback logic to judge."""
+                if link.month is None or link.year is None:
+                    return True
+                idx_t = year * 12 + month
+                idx_l = link.year * 12 + link.month
+                return idx_t - 2 <= idx_l <= idx_t
+
+            doc_links = [l for l in doc_links if _within_recency(l)]
+
             if not doc_links:
-                # Fall back to the most recent document dated on/before the target month.
+                # Fall back to the most recent document dated within the
+                # recency window (target-2 .. target), never years-old files.
                 all_links = await adapter.discover_documents_all(
                     portfolio_url=portfolio_url,
                     factsheet_url=factsheet_url,
@@ -416,6 +433,7 @@ async def run_pipeline(
                     link for link in all_links
                     if link.month is not None and link.year is not None
                     and (link.year, link.month) <= (year, month)
+                    and _within_recency(link)
                 ]
                 if dated:
                     latest = max((link.year, link.month) for link in dated)
@@ -1209,6 +1227,39 @@ def sif_nav(timeout):
     doc = save_sif_nav(timeout=timeout)
     click.echo(json.dumps({"count": doc["count"], "fetched_on": doc["fetched_on"],
                            "file": "data/parsed/sif/sif_latest_nav.json"}, indent=2))
+
+
+@cli.command("portfolio-links")
+@click.option("--year", "-y", type=int, default=datetime.now().year)
+@click.option("--month", "-m", type=int, default=datetime.now().month)
+@click.option("--amc", "-a", type=str, default=None, help="AMC name filter (partial match)")
+def portfolio_links(year, month, amc):
+    """Discover each AMC's OWN portfolio links for a month and save them.
+
+    AMC sites rotate their disclosure URLs every month, so resolved links are
+    persisted to data/logs/portfolio_links/{YYYY-MM}.json as provenance and a
+    re-download manifest. Advisorkhoj stays enabled in the background as the
+    stable fallback source."""
+    _setup_from_config()
+    from src.amc_direct import save_links
+    summary = save_links(year=year, month=month, amc_filter=amc)
+    click.echo(json.dumps(summary, indent=2))
+
+
+@cli.command("portfolio-download")
+@click.option("--year", "-y", type=int, default=datetime.now().year)
+@click.option("--month", "-m", type=int, default=datetime.now().month)
+@click.option("--amc", "-a", type=str, default=None, help="AMC name filter (partial match)")
+def portfolio_download(year, month, amc):
+    """Download PDFs from the saved portfolio-links file into data/raw/pdfs/.
+
+    Files land under {AMC}/{YYYY}/{MM}/ using each link's detected disclosure
+    month, so `parse-batch` / `ingest` pick them up as source='amc_website'
+    with the correct as-of period."""
+    _setup_from_config()
+    from src.amc_direct import download_saved
+    summary = download_saved(year=year, month=month, amc_filter=amc)
+    click.echo(json.dumps(summary, indent=2))
 
 
 def catalog_path():
