@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create account · Factsheet Engine AI</title>
+<link rel="stylesheet" href="/static/css/style.css?v=3">
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="auth-side">
+    <div>
+      <div class="brand"><span class="logo">📊</span> Factsheet Engine AI</div>
+      <h1>Try the engine. No card required.</h1>
+      <p>Create a free account and explore the full holdings dataset — scheme explorer,
+         overlap diagnostics, proposal generator and the mapping API.</p>
+      <div class="stats">
+        <div><strong>3,941</strong><span>securities</span></div>
+        <div><strong>22</strong><span>sectors tagged</span></div>
+        <div><strong>99%</strong><span>ISIN coverage</span></div>
+      </div>
+    </div>
+    <footer>Diagnostic tool for factual analysis only. Not investment advice.</footer>
+  </div>
+  <div class="auth-form-wrap">
+    <div class="auth-card">
+      <h2>Create your account</h2>
+      <p class="sub">Access for financial advisors, RIAs and MFDs.</p>
+      <div class="auth-error" id="regError"></div>
+      <form id="regForm">
+        <div class="field">
+          <label for="name">Full name</label>
+          <input type="text" id="name" autocomplete="name" required placeholder="Priya Sharma">
+        </div>
+        <div class="field">
+          <label for="org">Firm / organization <span class="hint">(optional)</span></label>
+          <input type="text" id="org" autocomplete="organization" placeholder="Sharma Wealth Advisors">
+        </div>
+        <div class="field">
+          <label for="email">Work email</label>
+          <input type="email" id="email" autocomplete="email" required placeholder="you@firm.com">
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" autocomplete="new-password" required placeholder="Min 8 characters">
+          <div class="hint">Use at least 8 characters.</div>
+        </div>
+        <div class="field">
+          <label for="password2">Confirm password</label>
+          <input type="password" id="password2" autocomplete="new-password" required placeholder="Repeat password">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%" id="regBtn">Create account</button>
+      </form>
+      <div class="auth-switch">Already registered? <a href="/login">Sign in</a></div>
+    </div>
+  </div>
+</div>
+<script src="/static/js/utils.js?v=3"></script>
+<script>
+  if (App.token) { location.href = "/app"; }
+  const btn = document.getElementById("regBtn");
+  document.getElementById("regForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = document.getElementById("regError");
+    err.classList.remove("show");
+    const pw = document.getElementById("password").value;
+    const pw2 = document.getElementById("password2").value;
+    if (pw !== pw2) { err.textContent = "Passwords do not match."; err.classList.add("show"); return; }
+    btn.disabled = true; btn.textContent = "Creating account…";
+    try {
+      const res = await App.api("/auth/register", {
+        method: "POST",
+        body: JSON.stringify({
+          name: document.getElementById("name").value,
+          email: document.getElementById("email").value,
+          org: document.getElementById("org").value,
+          password: pw,
+        }),
+      });
+      App.token = res.token; localStorage.setItem("fea_token", res.token);
+      location.href = "/app";
+    } catch (ex) {
+      err.textContent = ex.message; err.classList.add("show");
+      btn.disabled = false; btn.textContent = "Create account";
+    }
+  });
+</script>
+</body>
+</html>

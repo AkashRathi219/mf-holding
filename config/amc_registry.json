@@ -1,0 +1,479 @@
+﻿[
+    {
+        "mf_id":  "62",
+        "mf_name":  "360 ONE Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.360.one/asset/mutual-funds/downloads/",
+        "amc_monthly_portfolio_disclosure":  "https://www.360.one/asset/mutual-funds/downloads/",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.360.one/asset/mutual-funds/downloads/",
+        "scheme_wise":  "https://www.360.one/asset/mutual-funds/downloads/"
+    },
+    {
+        "mf_id":  "85",
+        "mf_name":  "Abakkus Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.abakkusmf.com/factsheet.html#",
+        "amc_monthly_portfolio_disclosure":  "https://www.abakkusmf.com/statutory-disclosures.html#",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.abakkusmf.com/statutory-disclosures.html#",
+        "scheme_wise":  "https://www.abakkusmf.com/uploads/Abakkus_Mutual_Fund_Annual_Report_FY_25_26_e6b38432b2.pdf"
+    },
+    {
+        "mf_id":  "3",
+        "mf_name":  "Aditya Birla Sun Life Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://mutualfund.adityabirlacapital.com/forms-and-downloads/factsheets",
+        "amc_monthly_portfolio_disclosure":  "https://mutualfund.adityabirlacapital.com/forms-and-downloads/portfolio",
+        "amc_fortnightly_portfolio_disclosure":  "https://mutualfund.adityabirlacapital.com/forms-and-downloads/portfolio",
+        "scheme_wise":  "https://mutualfund.adityabirlacapital.com/financials"
+    },
+    {
+        "mf_id":  "86",
+        "mf_name":  "AlphaGrep Mutual Fund",
+        "amc_monthly_mf_factsheets":  "",
+        "amc_monthly_portfolio_disclosure":  "https://www.alphagrepmf.ai/disclosures",
+        "amc_fortnightly_portfolio_disclosure":  "",
+        "scheme_wise":  "",
+        "schemes":  [
+            "AlphaGrep Flexi Cap Fund",
+            "AlphaGrep Liquid Omni FOF",
+            "AlphaGrep Multi Asset Allocation Fund"
+        ]
+    },
+    {
+        "mf_id":  "80",
+        "mf_name":  "Angel One Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.angelonemf.com/downloads",
+        "amc_monthly_portfolio_disclosure":  "https://www.angelonemf.com/downloads",
+        "amc_fortnightly_portfolio_disclosure":  "",
+        "scheme_wise":  "https://www.angelonemf.com/downloads"
+    },
+    {
+        "mf_id":  "87",
+        "mf_name":  "ASK MUTUAL FUND",
+        "amc_monthly_mf_factsheets":  "https://www.askmutualfund.com/#/downloads",
+        "amc_monthly_portfolio_disclosure":  "https://www.askmutualfund.com/#/downloads",
+        "amc_fortnightly_portfolio_disclosure":  "",
+        "scheme_wise":  "",
+        "schemes":  [
+            "ASK Liquid Fund"
+        ]
+    },
+    {
+        "mf_id":  "53",
+        "mf_name":  "Axis Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.axismf.com/downloads",
+        "amc_monthly_portfolio_disclosure":  "https://www.axismf.com/statutory-disclosures",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.axismf.com/statutory-disclosures",
+        "scheme_wise":  "https://www.axismf.com/about-us#financials"
+    },
+    {
+        "mf_id":  "75",
+        "mf_name":  "Bajaj Finserv Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.bajajamc.com/downloads?statutory-disclosures=",
+        "amc_monthly_portfolio_disclosure":  "https://www.bajajamc.com/downloads?statutory-disclosures=",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.bajajamc.com/downloads?statutory-disclosures=",
+        "scheme_wise":  "https://www.bajajamc.com/downloads?financials"
+    },
+    {
+        "mf_id":  "48",
+        "mf_name":  "Bandhan Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://bandhanmutual.com/downloads/factsheets",
+        "amc_monthly_portfolio_disclosure":  "https://bandhanmutual.com/downloads/disclosures",
+        "amc_fortnightly_portfolio_disclosure":  "https://bandhanmutual.com/downloads/disclosures",
+        "scheme_wise":  "https://bandhanmutual.com/statutory-disclosures/scheme-financials/annual-financials"
+    },
+    {
+        "mf_id":  "46",
+        "mf_name":  "Bank of India Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.boimf.in/docs/default-source/investorcorner/factsheets/factsheet-may-2022.pdf?sfvrsn=3f2c8194_4",
+        "amc_monthly_portfolio_disclosure":  "https://www.boimf.in/investor-corner#t2",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.boimf.in/regulatory-reports",
+        "scheme_wise":  "https://www.boimf.in/regulatory-reports/financials"
+    },
+    {
+        "mf_id":  "4",
+        "mf_name":  "Baroda BNP Paribas Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.barodabnpparibasmf.in/downloads/monthly-factsheet",
+        "amc_monthly_portfolio_disclosure":  "https://www.barodabnpparibasmf.in/downloads/monthly-portfolio-scheme",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.barodabnpparibasmf.in/downloads/midmonth-portfolio-scheme",
+        "scheme_wise":  "https://www.barodabnpparibasmf.in/downloads/scheme-financials"
+    },
+    {
+        "mf_id":  "32",
+        "mf_name":  "Canara Robeco Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.canararobeco.com/documents/forms-downloads/forms-information-documents/information-documents/factsheets/",
+        "amc_monthly_portfolio_disclosure":  "https://www.canararobeco.com/documents/statutory-disclosures/scheme-dashboard/scheme-monthly-portfolio/",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.canararobeco.com/documents/statutory-disclosures/fortnightly-portfolio-disclosure-debt/",
+        "scheme_wise":  "https://www.canararobeco.com/documents/statutory-disclosures/annual-reports-returns/annual-report/?searchyear=2025-26"
+    },
+    {
+        "mf_id":  "81",
+        "mf_name":  "Capitalmind Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://capitalmindmf.com/factsheet.html#",
+        "amc_monthly_portfolio_disclosure":  "https://capitalmindmf.com/statutory-disclosures.html#",
+        "amc_fortnightly_portfolio_disclosure":  "https://capitalmindmf.com/statutory-disclosures.html#",
+        "scheme_wise":  "https://capitalmindmf.com/statutory-disclosures.html#"
+    },
+    {
+        "mf_id":  "91",
+        "mf_name":  "Carnelian Mutual Fund",
+        "amc_monthly_mf_factsheets":  "",
+        "amc_monthly_portfolio_disclosure":  "",
+        "amc_fortnightly_portfolio_disclosure":  "",
+        "scheme_wise":  ""
+    },
+    {
+        "mf_id":  "84",
+        "mf_name":  "Choice Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://choicemf.com/disclosures/factsheets",
+        "amc_monthly_portfolio_disclosure":  "https://choicemf.com/disclosures/monthly-portfolio",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.choicemf.com/disclosures/fortnight-portfolio",
+        "scheme_wise":  "https://choicemf.com/disclosures/annual-accounts"
+    },
+    {
+        "mf_id":  "6",
+        "mf_name":  "DSP Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.dspim.com/downloads?category=Information%20Documents\u0026sub_category=Factsheets",
+        "amc_monthly_portfolio_disclosure":  "https://www.dspim.com/about-us/mandatory-disclosure/portfolio-disclosures",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.dspim.com/mandatory-disclosures/portfolio-disclosures",
+        "scheme_wise":  "https://www.dspim.com/about-us/mandatory-disclosure/annual-reports"
+    },
+    {
+        "mf_id":  "47",
+        "mf_name":  "Edelweiss Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.edelweissmf.com/downloads/factsheets",
+        "amc_monthly_portfolio_disclosure":  "https://www.edelweissmf.com/statutory#Portfolio-of-Schemes",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.edelweissmf.com/statutory#Portfolio-of-Schemes",
+        "scheme_wise":  "https://www.edelweissmf.com/statutory #Financials-and-Portfolios"
+    },
+    {
+        "mf_id":  "27",
+        "mf_name":  "Franklin Templeton Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.franklintempletonindia.com/downloads/fund-literature",
+        "amc_monthly_portfolio_disclosure":  "https://www.franklintempletonindia.com/investor/reports?firstFilter-12",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.franklintempletonindia.com/investor/reports?firstFilter-10",
+        "scheme_wise":  "https://www.franklintempletonindia.com/investor/reports?firstFilter-6"
+    },
+    {
+        "mf_id":  "63",
+        "mf_name":  "Groww Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.growwmf.in/downloads/fact-sheet",
+        "amc_monthly_portfolio_disclosure":  "https://growwmf.in/statutory-disclosure/portfolio",
+        "amc_fortnightly_portfolio_disclosure":  "https://growwmf.in/statutory-disclosure/portfolio",
+        "scheme_wise":  "https://www.growwmf.in/financials/annual-report"
+    },
+    {
+        "mf_id":  "9",
+        "mf_name":  "HDFC Mutual Fund",
+        "amc_monthly_mf_factsheets":  "http://hdfcfund.com/downloads/monthly-fact-sheet",
+        "amc_monthly_portfolio_disclosure":  "https://www.hdfcfund.com/statutory-disclosure/portfolio/monthly-portfolio",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.hdfcfund.com/statutory-disclosure/portfolio/fortnightly-portfolio",
+        "scheme_wise":  "https://www.hdfcfund.com/statutory-disclosure/annual-reports"
+    },
+    {
+        "mf_id":  "76",
+        "mf_name":  "Helios Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.heliosmf.in/downloads/",
+        "amc_monthly_portfolio_disclosure":  "https://www.heliosmf.in/portfolio-disclosure/",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.heliosmf.in/portfolio-disclosure/",
+        "scheme_wise":  "https://www.heliosmf.in/wp-content/uploads/2026/07/helios-mutual-fund-annual-report-fy-2025-26.pdf"
+    },
+    {
+        "mf_id":  "37",
+        "mf_name":  "HSBC Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.assetmanagement.hsbc.co.in/en/mutual-funds/investor-resources?Date=\u0026Cap=\u0026Doc=fund-factsheets#\u0026module-17=1",
+        "amc_monthly_portfolio_disclosure":  "https://www.assetmanagement.hsbc.co.in/en/mutual-funds/investor-resources/information-library#\u0026accordion1446811090=2",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.assetmanagement.hsbc.co.in/en/mutual-funds/investor-resources/information-library#\u0026accordion1446811090=9",
+        "scheme_wise":  "https://www.assetmanagement.hsbc.co.in/en/mutual-funds/investor-resources?Date=\u0026Cap=\u0026Doc=scheme-annual-report"
+    },
+    {
+        "mf_id":  "20",
+        "mf_name":  "ICICI Prudential Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.icicipruamc.com/news-and-media/downloads?currentTabFilter=Historical Factsheets",
+        "amc_monthly_portfolio_disclosure":  "https://www.icicipruamc.com/news-and-media/downloads?currentTabFilter=Disclosures\u0026\u0026subCatTabFilter=MonthlyPortfolioDisclosures",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.icicipruamc.com/media-center/downloads?currentTabFilter=OtherSchemeDisclosures\u0026\u0026subCatTabFilter=FortnightlyPortfolioDisclosures",
+        "scheme_wise":  "https://www.icicipruamc.com/about-us/financials-\u0026-disclosures?currentTabFilter=SchemeFinancials\u0026\u0026subCatTabFilter=Audited Annual Financials"
+    },
+    {
+        "mf_id":  "65",
+        "mf_name":  "IL\u0026FS Mutual Fund (IDF)",
+        "amc_monthly_mf_factsheets":  "",
+        "amc_monthly_portfolio_disclosure":  "http://www.ilfsinfrafund.com/other.php",
+        "amc_fortnightly_portfolio_disclosure":  "http://www.ilfsinfrafund.com/other.php",
+        "scheme_wise":  "https://www.ilfsinfrafund.com/financials.php"
+    },
+    {
+        "mf_id":  "42",
+        "mf_name":  "Invesco Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://invescomutualfund.com/literature-and-form?tab=Factsheets",
+        "amc_monthly_portfolio_disclosure":  "https://invescomutualfund.com/literature-and-form?tab=Complete",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.invescomutualfund.com/literature-and-form?tab=Fortnightly",
+        "scheme_wise":  "https://www.invescomutualfund.com/financials"
+    },
+    {
+        "mf_id":  "70",
+        "mf_name":  "ITI Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.itiamc.com/downloads",
+        "amc_monthly_portfolio_disclosure":  "https://www.itiamc.com/statuory-disclosure",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.itiamc.com/statuory-disclosure",
+        "scheme_wise":  "https://www.itiamc.com/statuory-disclosure"
+    },
+    {
+        "mf_id":  "82",
+        "mf_name":  "Jio BlackRock Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.jioblackrockamc.com/statutory-disclosure/fund-documents/factsheet",
+        "amc_monthly_portfolio_disclosure":  "https://www.jioblackrockamc.com/statutory-disclosure/disclosures/monthly-portfolio-disclosure",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.jioblackrockamc.com/statutory-disclosure/disclosures/fortnightly-portfolio-disclosure",
+        "scheme_wise":  "https://www.jioblackrockamc.com/statutory-disclosure/disclosures/scheme-annual-report"
+    },
+    {
+        "mf_id":  "16",
+        "mf_name":  "JM Financial Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.jmfinancialmf.com/downloads/Factsheet/Factsheet",
+        "amc_monthly_portfolio_disclosure":  "https://www.jmfinancialmf.com/downloads/Portfolio-Disclosure",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.jmfinancialmf.com/downloads/Portfolio-Disclosure",
+        "scheme_wise":  "https://www.jmfinancialmf.com/downloads/Scheme-Financials/Scheme-Annual-Report"
+    },
+    {
+        "mf_id":  "17",
+        "mf_name":  "Kotak Mahindra Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.kotakmf.com/Information/forms-and-downloads/Information",
+        "amc_monthly_portfolio_disclosure":  "https://www.kotakmf.com/Information/forms-and-downloads",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.kotakmf.com/Information/forms-and-downloads",
+        "scheme_wise":  "https://www.kotakmf.com/Information/statutory-disclosure"
+    },
+    {
+        "mf_id":  "88",
+        "mf_name":  "Lakshya Mutual Fund",
+        "amc_monthly_mf_factsheets":  "",
+        "amc_monthly_portfolio_disclosure":  "",
+        "amc_fortnightly_portfolio_disclosure":  "",
+        "scheme_wise":  ""
+    },
+    {
+        "mf_id":  "18",
+        "mf_name":  "LIC Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.licmf.com/downloads/factsheet",
+        "amc_monthly_portfolio_disclosure":  "https://www.licmf.com/downloads/monthly-portfolio",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.licmf.com/downloads/monthly-portfolio",
+        "scheme_wise":  "https://www.licmf.com/statutory-disclosure"
+    },
+    {
+        "mf_id":  "69",
+        "mf_name":  "Mahindra Manulife Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.mahindramanulife.com/downloads#investor",
+        "amc_monthly_portfolio_disclosure":  "https://www.mahindramanulife.com/downloads#mandatory-disclosures",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.mahindramanulife.com/downloads#mandatory-disclosures",
+        "scheme_wise":  "https://www.mahindramanulife.com/downloads#financials"
+    },
+    {
+        "mf_id":  "45",
+        "mf_name":  "Mirae Asset Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.miraeassetmf.co.in/downloads/factsheet",
+        "amc_monthly_portfolio_disclosure":  "https://www.miraeassetmf.co.in/downloads/portfolio",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.miraeassetmf.co.in/downloads/portfolio",
+        "scheme_wise":  "https://www.miraeassetmf.co.in/downloads/statutory-disclosure/financials"
+    },
+    {
+        "mf_id":  "89",
+        "mf_name":  "Monarch Mutual Fund",
+        "amc_monthly_mf_factsheets":  "",
+        "amc_monthly_portfolio_disclosure":  "",
+        "amc_fortnightly_portfolio_disclosure":  "",
+        "scheme_wise":  ""
+    },
+    {
+        "mf_id":  "55",
+        "mf_name":  "Motilal Oswal Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.motilaloswalmf.com/downloads/factsheets",
+        "amc_monthly_portfolio_disclosure":  "https://www.motilaloswalmf.com/downloads/scheme-portfolio-details",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.motilaloswalmf.com/downloads/scheme-portfolio-details",
+        "scheme_wise":  "https://www.motilaloswalmf.com/downloads/financials"
+    },
+    {
+        "mf_id":  "54",
+        "mf_name":  "Navi Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://navi.com/mutual-fund/downloads/factsheet",
+        "amc_monthly_portfolio_disclosure":  "https://navi.com/mutual-fund/downloads/portfolio",
+        "amc_fortnightly_portfolio_disclosure":  "https://navi.com/mutual-fund/downloads/portfolio",
+        "scheme_wise":  "https://navi.com/mutual-fund/downloads/statutory-disclosure"
+    },
+    {
+        "mf_id":  "21",
+        "mf_name":  "Nippon India Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://mf.nipponindiaim.com/investor-service/downloads/factsheet-portfolio-and-other-disclosures",
+        "amc_monthly_portfolio_disclosure":  "https://mf.nipponindiaim.com/investor-service/downloads/factsheet-portfolio-and-other-disclosures",
+        "amc_fortnightly_portfolio_disclosure":  "https://mf.nipponindiaim.com/investor-service/downloads/factsheet-portfolio-and-other-disclosures",
+        "scheme_wise":  "https://mf.nipponindiaim.com/investor-service/downloads/annual-half-yearly-reports"
+    },
+    {
+        "mf_id":  "73",
+        "mf_name":  "NJ Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://downloads.njmutualfund.com/downloads.php",
+        "amc_monthly_portfolio_disclosure":  "https://downloads.njmutualfund.com/njmf_download.php?nme=127",
+        "amc_fortnightly_portfolio_disclosure":  "https://downloads.njmutualfund.com/njmf_download.php?nme=415",
+        "scheme_wise":  "https://www.njmutualfund.com/njmf-download?nme=414"
+    },
+    {
+        "mf_id":  "90",
+        "mf_name":  "Nuvama Mutual Fund",
+        "amc_monthly_mf_factsheets":  "",
+        "amc_monthly_portfolio_disclosure":  "",
+        "amc_fortnightly_portfolio_disclosure":  "",
+        "scheme_wise":  ""
+    },
+    {
+        "mf_id":  "78",
+        "mf_name":  "Old Bridge Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://oldbridgemf.com/uploads/OLD_BRIDGE_MF_Factsheet_11305a79bc.pdf",
+        "amc_monthly_portfolio_disclosure":  "https://oldbridgemf.com/statutory-disclosures.html#v-pills-tabContent2",
+        "amc_fortnightly_portfolio_disclosure":  "",
+        "scheme_wise":  "https://oldbridgemf.com/uploads/20260625005_Old_Bridge_2025_2026_ANNUAL_REPORT_65e3cab574.pdf"
+    },
+    {
+        "mf_id":  "58",
+        "mf_name":  "PGIM India Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.pgimindia.com/mutual-funds/forms-and-updates/Fund-Factsheet",
+        "amc_monthly_portfolio_disclosure":  "https://www.pgimindia.com/mutual-funds/disclosures/Portfolios/Monthly-Portfolio",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.pgimindia.com/mutual-funds/disclosures/Portfolios/Fortnightly-portfolio",
+        "scheme_wise":  "https://www.pgimindia.com/mutual-funds/disclosures/Financial-Statements/Scheme-Financials"
+    },
+    {
+        "mf_id":  "64",
+        "mf_name":  "PPFAS Mutual Fund",
+        "amc_monthly_mf_factsheets":  "http://amc.ppfas.com/schemes/factsheet/index.php#axzz4I2KR6um7",
+        "amc_monthly_portfolio_disclosure":  "https://amc.ppfas.com/downloads/portfolio-disclosure/",
+        "amc_fortnightly_portfolio_disclosure":  "https://amc.ppfas.com/downloads/portfolio-disclosure/fortnightly-debt-portfolio-disclosure/",
+        "scheme_wise":  "https://amc.ppfas.com/schemes/scheme-annual-report/"
+    },
+    {
+        "mf_id":  "13",
+        "mf_name":  "quant Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://quantmutual.com/downloads/factsheet",
+        "amc_monthly_portfolio_disclosure":  "https://quantmutual.com/statutory-disclosures",
+        "amc_fortnightly_portfolio_disclosure":  "https://quantmutual.com/statutory-disclosures",
+        "scheme_wise":  "https://quantmutual.com/Admin/disclouser/qmf_Annual_Report_Year-2025-26.pdf"
+    },
+    {
+        "mf_id":  "41",
+        "mf_name":  "Quantum Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.quantumamc.com/factsheets/combined/-1/0/0",
+        "amc_monthly_portfolio_disclosure":  "https://www.quantumamc.com/FileCDN/FactSheet/5f6c4b6e-5264-472c-b378-d54727d45369.xlsx",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.quantumamc.com/portfolio/combined/-1/1/0/0",
+        "scheme_wise":  "https://www.quantumamc.com/regulatory-document/Quantum-Mutual-Fund---Annual-Reports/2186"
+    },
+    {
+        "mf_id":  "74",
+        "mf_name":  "Samco Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.samcomf.com/downloads",
+        "amc_monthly_portfolio_disclosure":  "https://www.samcomf.com/StatutoryDisclosure",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.samcomf.com/StatutoryDisclosure",
+        "scheme_wise":  "https://www.samcomf.com/StatutoryDisclosure#scheme-financials"
+    },
+    {
+        "mf_id":  "22",
+        "mf_name":  "SBI Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.sbimf.com/en-us/factsheets",
+        "amc_monthly_portfolio_disclosure":  "https://www.sbimf.com/portfolios",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.sbimf.com/portfolios",
+        "scheme_wise":  "https://www.sbimf.com/en-us/about-us/financial-reports"
+    },
+    {
+        "mf_id":  "67",
+        "mf_name":  "Shriram Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.shriramamc.in/factsheet",
+        "amc_monthly_portfolio_disclosure":  "https://www.shriramamc.in/investor-statutory-disclosures",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.shriramamc.in/investor-statutory-disclosures",
+        "scheme_wise":  "https://www.shriramamc.in/investor-statutory-disclosures#annual-accounts"
+    },
+    {
+        "mf_id":  "33",
+        "mf_name":  "Sundaram Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.sundarammutual.com/Fundwise-Factsheet",
+        "amc_monthly_portfolio_disclosure":  "https://www.sundarammutual.com/Monthly-Fortnightly-Adhoc-Portfolios",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.sundarammutual.com/Monthly-Fortnightly-Adhoc-Portfolios",
+        "scheme_wise":  "https://www.sundarammutual.com/Scheme-Wise-Annual-Report"
+    },
+    {
+        "mf_id":  "25",
+        "mf_name":  "Tata Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.tatamutualfund.com/information-documents",
+        "amc_monthly_portfolio_disclosure":  "https://www.tatamutualfund.com/schemes-related",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.tatamutualfund.com/schemes-related",
+        "scheme_wise":  "https://www.tatamutualfund.com/about-us"
+    },
+    {
+        "mf_id":  "26",
+        "mf_name":  "Taurus Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.taurusmutualfund.com/factsheet",
+        "amc_monthly_portfolio_disclosure":  "https://taurusmutualfund.com/monthly-portfolio",
+        "amc_fortnightly_portfolio_disclosure":  "",
+        "scheme_wise":  "https://taurusmutualfund.com/financials/scheme-wise-balance-sheet"
+    },
+    {
+        "mf_id":  "72",
+        "mf_name":  "Trust Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.trustmf.com/downloads?activeTab=factsheets",
+        "amc_monthly_portfolio_disclosure":  "https://www.trustmf.com/disclosures?activeTab=portfolio-disclosures",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.trustmf.com/disclosures?activeTab=portfolio-disclosures",
+        "scheme_wise":  "https://www.trustmf.com/disclosures?activeTab=financials"
+    },
+    {
+        "mf_id":  "79",
+        "mf_name":  "Unifi Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://unifimf.com/factsheet/",
+        "amc_monthly_portfolio_disclosure":  "https://unifimf.com/statutorydocuments/#monthly-portfolio-disclosure",
+        "amc_fortnightly_portfolio_disclosure":  "https://unifimf.com/statutorydocuments/#fortnightly-portfolio-disclosure",
+        "scheme_wise":  "https://unifimf.com/statutorydocuments/#scheme-annual-report"
+    },
+    {
+        "mf_id":  "61",
+        "mf_name":  "Union Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://unionmf.com/about-us/downloads/factsheets",
+        "amc_monthly_portfolio_disclosure":  "https://unionmf.com/about-us/downloads/monthly-portfolio",
+        "amc_fortnightly_portfolio_disclosure":  "https://unionmf.com/about-us/downloads/fortnightly-portfolio",
+        "scheme_wise":  "https://www.unionmf.com/about-us/downloads/annual-reports"
+    },
+    {
+        "mf_id":  "28",
+        "mf_name":  "UTI Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.utimf.com/downloads/fact-sheet",
+        "amc_monthly_portfolio_disclosure":  "https://www.utimf.com/downloads/consolidate-all-portfolio-disclosure",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.utimf.com/downloads/consolidate-debt-portfolio-disclosure",
+        "scheme_wise":  "https://www.utimf.com/downloads/scheme-financial"
+    },
+    {
+        "mf_id":  "83",
+        "mf_name":  "The Wealth Company Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.wealthcompanyamc.in/literature-forms/scheme-documents/factsheets/",
+        "amc_monthly_portfolio_disclosure":  "https://www.wealthcompanyamc.in/literature-forms/portfolio-documents/monthly/",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.wealthcompanyamc.in/literature-forms/portfolio-documents/fortnightly/",
+        "scheme_wise":  "https://www.wealthcompanyamc.in/literature-forms/?tab=statutory-disclosures",
+        "schemes":  [
+            "The Wealth Company Arbitrage Fund",
+            "The Wealth Company Balanced Advantage Fund",
+            "The Wealth Company Ethical Fund",
+            "The Wealth Company Flexi Cap Fund",
+            "The Wealth Company Gold ETF",
+            "The Wealth Company Gold ETF FOF",
+            "The Wealth Company Large & Mid Cap Fund",
+            "The Wealth Company Liquid Fund",
+            "The Wealth Company Mid Cap Fund",
+            "The Wealth Company Multi Asset Allocation Fund",
+            "The Wealth Company Small Cap Fund"
+        ]
+    },
+    {
+        "mf_id":  "71",
+        "mf_name":  "WhiteOak Capital Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://mf.whiteoakamc.com/download#Factsheet",
+        "amc_monthly_portfolio_disclosure":  "https://mf.whiteoakamc.com/regulatory-disclosures/scheme-portfolios",
+        "amc_fortnightly_portfolio_disclosure":  "https://mf.whiteoakamc.com/regulatory-disclosures/scheme-portfolios",
+        "scheme_wise":  "https://mf.whiteoakamc.com/regulatory-disclosures?query=mutual_fund_financials"
+    },
+    {
+        "mf_id":  "77",
+        "mf_name":  "Zerodha Mutual Fund",
+        "amc_monthly_mf_factsheets":  "https://www.zerodhafundhouse.com/resources/fund-documents",
+        "amc_monthly_portfolio_disclosure":  "https://www.zerodhafundhouse.com/resources/disclosures?source=footer",
+        "amc_fortnightly_portfolio_disclosure":  "https://www.zerodhafundhouse.com/resources/disclosures?source=footer",
+        "scheme_wise":  "https://assets.zerodhafundhouse.com/statutory-reports/other-disclosures/Annual%20Report%20of%20Schemes%202025-26.pdf"
+    }
+]

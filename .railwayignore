@@ -1,0 +1,11 @@
+.git
+.gitignore
+data/
+logs/
+__pycache__/
+*.pyc
+deploy/.env
+deploy/data/
+webapp/.secret_key
+*.log
+archive/

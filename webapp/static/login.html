@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factsheet Engine AI</title>
+<link rel="stylesheet" href="/static/css/style.css?v=3">
+</head>
+<body>
+<div class="auth-wrap">
+  <div class="auth-side">
+    <div>
+      <div class="brand"><span class="logo">📊</span> Factsheet Engine AI</div>
+      <h1>Portfolio diagnostics &amp; client proposals for Indian wealthtech.</h1>
+      <p>Query 2,50,000+ mutual-fund holdings across 50+ AMCs. Detect portfolio overlap,
+         concentration risk, and generate white-label client proposals in seconds.</p>
+      <div class="stats">
+        <div><strong id="statSchemes">—</strong><span>schemes covered</span></div>
+        <div><strong id="statHoldings">—</strong><span>holding rows</span></div>
+        <div><strong id="statAMCs">—</strong><span>AMCs</span></div>
+      </div>
+    </div>
+    <footer>Diagnostic tool for factual analysis only. Not investment advice. · B2B · RIAs · MFDs</footer>
+  </div>
+  <div class="auth-form-wrap">
+    <div class="auth-card">
+      <h2>Welcome back</h2>
+      <p class="sub">Sign in to access the analytics engine.</p>
+      <div class="auth-error" id="loginError"></div>
+      <form id="loginForm">
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" autocomplete="email" required placeholder="you@firm.com">
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" autocomplete="current-password" required placeholder="••••••••">
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%" id="loginBtn">Sign in</button>
+      </form>
+      <div class="auth-switch">New here? <a href="/register">Create an account</a></div>
+    </div>
+  </div>
+</div>
+<script src="/static/js/utils.js?v=3"></script>
+<script>
+  if (App.token) { location.href = "/app"; }
+  const btn = document.getElementById("loginBtn");
+  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = document.getElementById("loginError");
+    err.classList.remove("show"); btn.disabled = true; btn.textContent = "Signing in…";
+    try {
+      const res = await App.api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          email: document.getElementById("email").value,
+          password: document.getElementById("password").value,
+        }),
+      });
+      App.token = res.token; localStorage.setItem("fea_token", res.token);
+      location.href = "/app";
+    } catch (ex) {
+      err.textContent = ex.message; err.classList.add("show");
+      btn.disabled = false; btn.textContent = "Sign in";
+    }
+  });
+  // live hero stats (public meta preview)
+  fetch("/api/health").catch(() => {});
+  fetch("/api/meta").then(r => r.ok ? r.json() : null).then(m => {
+    if (!m) return;
+    document.getElementById("statSchemes").textContent = App.formatNum(m.schemes);
+    document.getElementById("statHoldings").textContent = App.formatNum(m.holdings);
+    document.getElementById("statAMCs").textContent = App.formatNum(m.amcs);
+  }).catch(() => {});
+</script>
+</body>
+</html>

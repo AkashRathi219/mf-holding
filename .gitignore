@@ -1,0 +1,16 @@
+# --- secrets ---
+deploy/.env
+webapp/.secret_key
+
+# --- heavy / pipeline-only ---
+data/
+logs/
+*.log
+archive/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# --- os noise ---
+.DS_Store
+Thumbs.db

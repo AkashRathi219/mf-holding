@@ -1,0 +1,138 @@
+{
+ "statement_file": "CAS_KK.pdf",
+ "upload_id": 18,
+ "file_type": "CAMS_PDF",
+ "status": "PARSED",
+ "extracted_at": "2026-08-21T20:18:07.885079+00:00",
+ "total_transactions": 907,
+ "portfolio_summary": {
+  "total_net_units": 2863099.887,
+  "total_cost_inr": 75626851.04,
+  "number_of_holdings": 11,
+  "allocations": [
+   {
+    "scheme_name": "ICICI Prudential Banking and PSU Debt Fund - Growth",
+    "isin": "INF109K01RT3",
+    "net_units": 1205078.568,
+    "net_amount_cost_inr": 28999500.02,
+    "allocation_pct": 38.35,
+    "current_market_value_inr": 43930175.13,
+    "latest_nav": 36.4542,
+    "allocation_pct_market_value": 39.8004,
+    "latest_nav_date": "2026-08-21"
+   },
+   {
+    "scheme_name": "Kotak Arbitrage Fund - Direct Plan - Growth",
+    "isin": "INF174K01LC6",
+    "net_units": 396942.118,
+    "net_amount_cost_inr": 16814159.29,
+    "allocation_pct": 22.23,
+    "current_market_value_inr": 17118883.03,
+    "latest_nav": 43.1269,
+    "allocation_pct_market_value": 15.5096,
+    "latest_nav_date": "2026-08-21"
+   },
+   {
+    "scheme_name": "HDFC ARBITRAGE FUND -Direct Plan - Growth Option",
+    "isin": "INF179KA1KT6",
+    "net_units": 486348.406,
+    "net_amount_cost_inr": 10098929.65,
+    "allocation_pct": 13.35,
+    "current_market_value_inr": 10553274.06,
+    "latest_nav": 21.699,
+    "allocation_pct_market_value": 9.5612,
+    "latest_nav_date": "2026-08-21"
+   },
+   {
+    "scheme_name": "ICICI Prudential Arbitrage Fund - Direct Plan - Growth",
+    "isin": "INF109K016O4",
+    "net_units": 195613.063,
+    "net_amount_cost_inr": 6699250.04,
+    "allocation_pct": 8.86,
+    "current_market_value_inr": 7178510.38,
+    "latest_nav": 36.6975,
+    "allocation_pct_market_value": 6.5037,
+    "latest_nav_date": "2026-08-21"
+   },
+   {
+    "scheme_name": "CANARA ROBECO FLEXICAP FUND - DIRECT PLAN - GROWTH OPTION",
+    "isin": "INF760K01EF0",
+    "net_units": 11136.954,
+    "net_amount_cost_inr": 3749812.51,
+    "allocation_pct": 4.96,
+    "current_market_value_inr": 4404331.2,
+    "latest_nav": 395.47,
+    "allocation_pct_market_value": 3.9903,
+    "latest_nav_date": "2026-08-21"
+   },
+   {
+    "scheme_name": "Parag Parikh Flexi Cap Fund - Direct Plan - Growth",
+    "isin": "INF879O01027",
+    "net_units": 47506.331,
+    "net_amount_cost_inr": 3749812.51,
+    "allocation_pct": 4.96,
+    "current_market_value_inr": 4310852.74,
+    "latest_nav": 90.7427,
+    "allocation_pct_market_value": 3.9056,
+    "latest_nav_date": "2026-08-20"
+   },
+   {
+    "scheme_name": "HDFC Flexi Cap Fund - Growth Option - Direct Plan",
+    "isin": "INF179K01UT0",
+    "net_units": 2013.945,
+    "net_amount_cost_inr": 3725462.11,
+    "allocation_pct": 4.93,
+    "current_market_value_inr": 4194255.95,
+    "latest_nav": 2082.607,
+    "allocation_pct_market_value": 3.8,
+    "latest_nav_date": "2026-08-21"
+   },
+   {
+    "scheme_name": "Bandhan Banking and PSU Fund - Regular Growth",
+    "isin": "INF194K01SN6",
+    "net_units": 383203.19,
+    "net_amount_cost_inr": 1021125.34,
+    "allocation_pct": 1.35,
+    "current_market_value_inr": 10042491.04,
+    "latest_nav": 26.2067,
+    "allocation_pct_market_value": 9.0984,
+    "latest_nav_date": "2026-08-21"
+   },
+   {
+    "scheme_name": "Kotak Banking and PSU Debt - Growth",
+    "isin": "INF174K01FO3",
+    "net_units": 121103.761,
+    "net_amount_cost_inr": 549952.08,
+    "allocation_pct": 0.73,
+    "current_market_value_inr": 8412581.75,
+    "latest_nav": 69.4659,
+    "allocation_pct_market_value": 7.6217,
+    "latest_nav_date": "2026-08-21"
+   },
+   {
+    "scheme_name": "BANDHAN ULTRA SHORT DURATION FUND - REGULAR PLAN WEEKLY IDCW",
+    "isin": "INF194KA14R8",
+    "net_units": 14153.551,
+    "net_amount_cost_inr": 117066.3,
+    "allocation_pct": 0.15,
+    "current_market_value_inr": 230940.66,
+    "latest_nav": 16.3168,
+    "allocation_pct_market_value": 0.2092,
+    "latest_nav_date": "2026-08-21"
+   },
+   {
+    "scheme_name": "Kotak Banking and PSU Debt - Monthly Payout of Income Distribution cum capital withdrawal option",
+    "isin": "INF174K01FP0",
+    "net_units": 0.0,
+    "net_amount_cost_inr": 101781.19,
+    "allocation_pct": 0.13,
+    "current_market_value_inr": null,
+    "latest_nav": null,
+    "allocation_pct_market_value": null,
+    "latest_nav_date": null
+   }
+  ],
+  "total_market_value_inr": 110376295.94,
+  "valuation_basis": "units x latest NAV/price (market value)"
+ }
+}

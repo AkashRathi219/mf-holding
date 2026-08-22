@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factsheet Engine AI</title>
+<link rel="stylesheet" href="/static/css/style.css?v=3">
+</head>
+<body>
+<script>
+  // Landing page: route based on session state
+  const token = localStorage.getItem("fea_token");
+  if (token) { location.replace("/app"); }
+  else { location.replace("/login"); }
+</script>
+</body>
+</html>

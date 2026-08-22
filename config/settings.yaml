@@ -1,0 +1,65 @@
+fetch:
+  delay_between_requests: 2.0
+  max_retries: 3
+  timeout: 60
+  verify_ssl: false
+
+parser:
+  primary_engine: pdfplumber
+  fallback_engine: pymupdf
+  # Some AMCs (ICICI digital factsheets) render text as vector outlines with no
+  # text layer; enable OCR so those PDFs still yield holdings data.
+  ocr_enabled: true
+  ocr_dpi: 200
+  tesseract_cmd: "C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
+  # Agent-network parsing: split PDFs with PyMuPDF and read sections with
+  # pdfplumber in a process pool (0 = auto = min(cpu_count, 8)).
+  workers: 0
+  chunk_pages: 6
+
+scheduler:
+  enabled: true
+  day_of_month: 1
+  hour: 6
+  minute: 0
+  timezone: Asia/Kolkata
+  retry_days: 5
+  # Daily NAV refresh: append the latest AMFI NAV points to data/nav_history/*
+  # once a day so the webapp's NAV charts stay current.
+  nav_refresh:
+    enabled: true
+    hour: 20
+    minute: 30
+    days: 10
+  # Daily stock refresh: update closing prices + corporate actions + NSE
+  # financial-report announcements for resolved equity stocks.
+  stock_refresh:
+    enabled: true
+    hour: 21
+    minute: 0
+  # Daily bond/debt-market refresh: NSE bulk files (corporate-bond master, WDM
+  # securities list, CBM trades) + rebuilt bond catalog with computed YTM.
+  bond_refresh:
+    enabled: true
+    hour: 21
+    minute: 30
+
+paths:
+  pdfs_dir: data/raw/pdfs
+  parsed_dir: data/parsed/amc_websites
+  logs_dir: archive/logs
+  config_dir: config
+  universe_dir: data/universe
+  nifty_dir: data/nifty
+  reference_dir: data/reference
+
+logging:
+  level: INFO
+
+# Third-party captcha solving (used by adapters for captcha-protected sites
+# like Kotak). Leave api_key empty to disable and rely on manual ingest.
+# Get a key from https://dashboard.capsolver.com or https://2captcha.com
+captcha:
+  service: capsolver
+  api_key: "CAP-1A181F2E9903A37E63293EFB1502F8EF17A2EC787E24259330A146FF9A28A096"
+  timeout: 180
