@@ -68,8 +68,9 @@ def _nav_job() -> dict:
             meta["universe_pulled"] = ensure_prefix("universe")
         except Exception:
             pass
-        from src.nav_daily import fill_gaps_from_last_known, update_latest_navs
-        s1 = update_latest_navs(days=7)
+        from src.nav_daily import (_update_latest_navs_impl,
+                                   fill_gaps_from_last_known)
+        s1 = _update_latest_navs_impl(days=7)  # impl: no nested telemetry event
         meta.update(s1)
         gaps = fill_gaps_from_last_known()
         meta.update({f"gap_{k}": v for k, v in gaps.items()})
