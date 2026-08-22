@@ -1115,12 +1115,23 @@ def _seed_schemes_and_holdings(cur: sqlite3.Cursor) -> None:
         # the primary outcome is the %NAV breakup (overlap depends on it):
         #  1) highest fraction of rows carrying percent_nav
         #  2) most rows with percent_nav, 3) most ISIN coverage, 4) most rows.
+        # A snapshot whose weights FAIL validation (see guard below) is demoted
+        # by +2 priority so e.g. noisy OCR parses never displace clean
+        # advisorkhoj data purely on source rank.
+        def _weight_valid(kv):
+            rws = list(kv[1].values())
+            pcts = [a["percent_nav"] for a in rws if a["percent_nav"] is not None]
+            if not pcts:
+                return True  # nothing to invalidate
+            return max(pcts) <= 100 and sum(pcts) <= 120
+
         def _src_score(kv):
             rows = list(kv[1].values())
             n = max(len(rows), 1)
             with_pct = sum(1 for a in rows if a["percent_nav"] is not None)
             isin = sum(1 for a in rows if a["isin"])
-            return (-_SOURCE_PRIORITY.get(kv[0], 9), with_pct / n, with_pct, isin, len(rows))
+            prio = _SOURCE_PRIORITY.get(kv[0], 9) + (0 if _weight_valid(kv) else 2)
+            return (-prio, with_pct / n, with_pct, isin, len(rows))
         best_src = max(src_map.items(), key=_src_score)
         agg = list(best_src[1].values())
         srow["source"] = best_src[0]

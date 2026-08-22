@@ -114,12 +114,44 @@ def parse_document(doc_path: Path) -> dict:
         return parse_pdf(doc_path)
 
 
+def _sha256_file(p: Path) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with open(p, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _parsed_json_path(doc: Path, amc_name: str, year: int, month: int,
+                      parsed_dir: Path) -> Path:
+    safe_amc = amc_name.replace(" ", "_").replace("/", "-")
+    return parsed_dir / safe_amc / str(year) / f"{month:02d}" / f"{doc.stem}.json"
+
+
+def _parse_cache_fresh(doc: Path, out_json: Path) -> bool:
+    """True when the existing output was produced from this exact source file.
+
+    Legacy outputs (no source_sha256 stamp) count as fresh so old parses are
+    not mass-invalidated; a hash MISMATCH always re-parses."""
+    if not out_json.exists():
+        return False
+    try:
+        meta = (json.loads(out_json.read_text(encoding="utf-8"))
+                .get("metadata") or {})
+        stamped = meta.get("source_sha256")
+        if not stamped:
+            return True
+        return stamped == _sha256_file(doc)
+    except Exception:
+        return False
+
+
 def save_parsed(doc_path: Path, parsed: dict, amc_name: str, year: int, month: int, parsed_dir: Path):
     """Save parsed data to the appropriate output directory."""
     safe_amc = amc_name.replace(" ", "_").replace("/", "-")
     out_dir = parsed_dir / safe_amc / str(year) / f"{month:02d}"
     stem = doc_path.stem
-
     suffix = doc_path.suffix.lower()
     if suffix in (".xlsx", ".xls"):
         save_excel_parsed_data(parsed, out_dir, stem)
@@ -299,6 +331,8 @@ async def run_pipeline(
     month: int,
     amc_filter: str | None = None,
     start_from: str | None = None,
+    workers: int | None = None,
+    force_parse: bool = False,
 ):
     """Run the full fetch + parse pipeline."""
     config = load_config()
@@ -331,7 +365,7 @@ async def run_pipeline(
         verify_ssl=fetch_cfg.get("verify_ssl", False),
     )
 
-    results = {"success": [], "failed": [], "skipped": []}
+    results = {"success": [], "failed": [], "skipped": [], "cached": []}
     report = []
 
     for amc in amcs:
@@ -418,15 +452,42 @@ async def run_pipeline(
                 month=actual_month,
             )
 
+            jobs = []
             for doc_path in downloaded:
-                logger.info(f"  Parsing: {doc_path.name}")
-                parsed = parse_document(doc_path)
-                parsed["amc_name"] = amc_name
-                parsed["fetch_month"] = actual_month
-                parsed["fetch_year"] = actual_year
-                save_parsed(doc_path, parsed, amc_name, actual_year, actual_month, parsed_dir)
-                report_entry["documents"].append(doc_path.name)
-                report_entry["schemes"].extend(_extract_scheme_names(parsed))
+                out_json = _parsed_json_path(doc_path, amc_name, actual_year,
+                                             actual_month, parsed_dir)
+                if not force_parse and _parse_cache_fresh(doc_path, out_json):
+                    results_cached.append(doc_path.name)
+                    report_entry["documents"].append(doc_path.name)
+                    try:
+                        cached = json.loads(out_json.read_text(encoding="utf-8"))
+                        report_entry["schemes"].extend(_extract_scheme_names(cached))
+                    except Exception:
+                        pass
+                    continue
+                jobs.append({
+                    "doc": str(doc_path),
+                    "amc_name": amc_name,
+                    "year": actual_year,
+                    "month": actual_month,
+                    "parsed_dir": str(parsed_dir),
+                    "sha256": _sha256_file(doc_path),
+                })
+
+            if jobs:
+                from src.batch_parser import batch_parse
+                batch = batch_parse(jobs, workers=workers)
+                for doc_path, res in zip(
+                        [Path(j["doc"]) for j in jobs], batch["items"]):
+                    logger.info(f"  Parsing: {doc_path.name} -> {res['status']}"
+                                f" ({res.get('seconds', 0):.1f}s)")
+                    if res["status"] == "failed":
+                        continue
+                    report_entry["documents"].append(doc_path.name)
+                    if res.get("schemes"):
+                        report_entry["schemes"].extend(res["schemes"])
+                    if res["status"] == "error":
+                        results["failed"].append(f"{amc_name}:{doc_path.name}")
 
             report_entry["as_of_month"] = actual_month
             report_entry["as_of_year"] = actual_year
@@ -434,6 +495,8 @@ async def run_pipeline(
             report_entry["status"] = "success"
             report_entry["schemes"] = sorted(set(report_entry["schemes"]))
             results["success"].append(amc_name)
+            if results_cached:
+                results["cached"].append(f"{amc_name} ({len(results_cached)} docs)")
 
         except Exception as e:
             logger.error(f"  Error processing {amc_name}: {e}")
@@ -456,6 +519,9 @@ async def run_pipeline(
     logger.info(f"  Success: {len(results['success'])}")
     logger.info(f"  Failed:  {len(results['failed'])}")
     logger.info(f"  Skipped: {len(results['skipped'])}")
+    if results["cached"]:
+        total_cached = sum(int(s.split("(")[1].rstrip(" docs)")) for s in results["cached"])
+        logger.info(f"  Cached (sha256 match, skipped OCR/parse): {total_cached}")
     if results["failed"]:
         logger.info(f"  Failed AMCs: {', '.join(results['failed'])}")
     if results["skipped"]:
@@ -537,16 +603,20 @@ def rebuild_report(year: int, month: int) -> None:
     logger.info(f"Report rebuilt: {dict(counts)}")
 
 
-def _parse_single_doc(doc: Path, amc_name: str, year: int, month: int, parsed_dir: Path) -> bool:
-    """Parse a single document into parsed_data/. Returns True on success."""
-    parsed_json = parsed_dir / _amc_folder_name(amc_name) / str(year) / f"{month:02d}" / f"{doc.stem}.json"
-    if parsed_json.exists():
+def _parse_single_doc(doc: Path, amc_name: str, year: int, month: int,
+                      parsed_dir: Path, force: bool = False) -> bool:
+    """Parse a single document into parsed_data/. Returns True on success.
+
+    Skipped (sha256-fresh) documents return False without touching the disk."""
+    out_json = _parsed_json_path(doc, amc_name, year, month, parsed_dir)
+    if not force and _parse_cache_fresh(doc, out_json):
         return False
     try:
         parsed = parse_document(doc)
         parsed["amc_name"] = amc_name
         parsed["fetch_month"] = month
         parsed["fetch_year"] = year
+        parsed.setdefault("metadata", {})["source_sha256"] = _sha256_file(doc)
         save_parsed(doc, parsed, amc_name, year, month, parsed_dir)
         return True
     except Exception as e:
@@ -694,10 +764,85 @@ def cli():
 @click.option("--amc", "-a", type=str, default=None, help="Filter by AMC name (partial match)")
 @click.option("--start", "-s", "start_from", type=str, default=None,
               help="Resume from the AMC matching this name (inclusive)")
-def run(year, month, amc, start_from):
+@click.option("--workers", "-w", type=int, default=None,
+              help="Parallel parse workers (default: settings parser.workers, 0=auto)")
+@click.option("--force", is_flag=True,
+              help="Re-parse even when the sha256 parse cache says fresh")
+def run(year, month, amc, start_from, workers, force):
     """Fetch and parse portfolio holdings for a given month."""
     _setup_from_config()
-    asyncio.run(run_pipeline(year=year, month=month, amc_filter=amc, start_from=start_from))
+    asyncio.run(run_pipeline(year=year, month=month, amc_filter=amc,
+                             start_from=start_from, workers=workers,
+                             force_parse=force))
+
+
+@cli.command("parse-batch")
+@click.option("--amc", "-a", type=str, default=None, help="AMC name filter (partial)")
+@click.option("--year", "-y", type=int, default=None)
+@click.option("--month", "-m", type=int, default=None)
+@click.option("--workers", "-w", type=int, default=None)
+@click.option("--force", is_flag=True, help="Re-parse cached documents")
+def parse_batch(amc, year, month, workers, force):
+    """Batch-parse already-downloaded PDFs with a process pool.
+
+    Walks data/raw/pdfs/{AMC}/{YYYY}/{MM}/ (latest month per AMC by default)
+    and parses every document through the sha256-cached batch pipeline."""
+    _setup_from_config()
+    config = load_config()
+    parsed_dir = BASE_DIR / config["paths"]["parsed_dir"]
+    pdfs_dir = BASE_DIR / config["paths"]["pdfs_dir"]
+
+    now = datetime.now()
+    targets: list[tuple[str, Path, int, int]] = []
+    for amc_dir in sorted(pdfs_dir.iterdir()):
+        if not amc_dir.is_dir():
+            continue
+        if amc and amc.lower() not in amc_dir.name.lower():
+            continue
+        months = []
+        for y_dir in amc_dir.iterdir():
+            if not y_dir.is_dir() or not y_dir.name.isdigit():
+                continue
+            for m_dir in y_dir.iterdir():
+                if m_dir.is_dir() and m_dir.name.isdigit():
+                    months.append((int(y_dir.name), int(m_dir.name)))
+        if not months:
+            continue
+        yy, mm = max(months)
+        if year:
+            months = [t for t in months if t[0] == year]
+        if month:
+            months = [t for t in months if t[1] == month]
+        if not months:
+            continue
+        yy, mm = max(months) if not (year or month) else months[0]
+        docs = sorted((pdfs_dir / amc_dir.name / str(yy) / f"{mm:02d}").glob("*.pdf"))
+        for d in docs:
+            targets.append((amc_dir.name.replace("_", " "), d, yy, mm))
+
+    if not targets:
+        click.echo("No matching PDFs found under data/raw/pdfs.")
+        return
+
+    jobs = [{
+        "doc": str(d), "amc_name": name, "year": yy, "month": mm,
+        "parsed_dir": str(parsed_dir),
+        "sha256": "",  # computed below
+        "force": bool(force),
+    } for name, d, yy, mm in targets]
+
+    import hashlib
+    for j in jobs:
+        h = hashlib.sha256()
+        with open(j["doc"], "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        j["sha256"] = h.hexdigest()
+
+    from src.batch_parser import batch_parse
+    res = batch_parse(jobs, workers=workers)
+    click.echo(json.dumps(res["counts"], indent=2))
+    click.echo(f"wall: {res['wall_s']}s over {len(jobs)} doc(s)")
 
 
 @cli.command()
@@ -1034,6 +1179,36 @@ def run_amfi_monthly() -> dict:
     data = fetch_mfdata()
     paths = save(data, "latest") if data else []
     return {"amcs": len(data), "files": len(paths)}
+
+
+@cli.command()
+@click.option("--dry-run", is_flag=True, help="Report only; do not touch the registry")
+@click.option("--timeout", type=int, default=60)
+def amfi_directory(dry_run, timeout):
+    """Refresh AMC registry disclosure URLs from AMFI's official directory.
+
+    Scrapes https://www.amfiindia.com/online-center/portfolio-disclosure
+    (members RSC payload) and verifies config/amc_registry.json:
+    fills EMPTY entries, reports differences (curated URLs stay authoritative),
+    and caches the raw members to data/reference/amfi_disclosure_members.json.
+    """
+    from webapp.amfi_portal import refresh_registry, scrape_members
+    members = scrape_members(timeout=timeout)
+    if not members:
+        click.echo("ERROR: no members found in portal payload (page layout changed?)", err=True)
+        raise SystemExit(1)
+    rep = refresh_registry(members, dry_run=dry_run)
+    click.echo(json.dumps(rep, indent=2, ensure_ascii=False))
+
+
+@cli.command()
+@click.option("--timeout", type=int, default=90)
+def sif_nav(timeout):
+    """Fetch SIF latest NAVs from AMFI -> data/parsed/sif/sif_latest_nav.json."""
+    from webapp.amfi_portal import save_sif_nav
+    doc = save_sif_nav(timeout=timeout)
+    click.echo(json.dumps({"count": doc["count"], "fetched_on": doc["fetched_on"],
+                           "file": "data/parsed/sif/sif_latest_nav.json"}, indent=2))
 
 
 def catalog_path():

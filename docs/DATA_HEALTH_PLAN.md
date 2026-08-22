@@ -94,3 +94,31 @@ MF-A3 backlog).
   pipelines 50 (only nav_daily has local run history).
 - API smoke (TestClient): `/api/admin/data-health` 200 · `-history` 200 ·
   `refresh-summary` exposes `state_file` · non-superadmin → 403.
+
+## Parsing optimization + AI tier (22-Aug, evening)
+
+**Diagnosis first:** the proposed "false-negative text-layer detector" premise
+was measured and rejected — ICICI digital factsheets have **0 fonts / 0 chars /
+~1,859 vector drawings per page** (text drawn as glyph outlines). No detector
+can recover text; OCR-on-render is genuinely required. The existing
+`pdf_agents.py:901` check is correct.
+
+Shipped instead:
+
+| Phase | What | Verified result |
+|---|---|---|
+| 1. `src/batch_parser.py` | File-level `ProcessPoolExecutor` across PDFs; wired into `run --workers` + new `parse-batch` CLI | **141 ICICI docs in 543s @ 6 workers, 0 failed** (~4× vs sequential) |
+| 2. sha256 parse cache (`metadata.source_sha256`) | Skip re-parse when source hash unchanged; legacy unstamped outputs stay valid; `--force` overrides | Re-run of the same batch: **543s → 1.4s** (141 cached) |
+| 3. Geometry-aware OCR rows (`_ocr_pdf_tables`) | TSV word boxes → y-cluster lines → x-gap clusters → rightmost-% token; tolerates OCR-eaten decimals ("136%"→1.36); section/metric/sector/noise filters from pdf_agents | Row sums 300–2600% → **7–208%**; junk-name rows filtered |
+| Validity gate (webapp/db.py `_src_score`) | Weight-invalid snapshots (>100 max / >120 sum) demoted by +2 source priority | Noisy OCR can no longer displace clean advisorkhoj weights on rank alone |
+| AI tier (`src/ai_extract.py`) | OpenRouter vision extraction for outline/scanned PDFs; strict-JSON schema prompt; off unless `ai.enabled` + key env (`OPENROUTER_API_KEY`, or `AI_EXTRACT=1`); triggers only when heuristic rows <12 or weight-invalid; results ride the sha256 cache so each doc bills once | Offline paths tested (config-off, response parser); live call pending API key |
+
+Ops notes:
+- `parse-batch --amc X [--workers N] [--force]` re-parses downloaded PDFs in place.
+- Enable AI: set `OPENROUTER_API_KEY` in env (+ optionally `AI_EXTRACT=1`);
+  model/mode/dpi/trigger_rows configurable under `ai:` in settings.yaml.
+- ICICI remains advisorkhoj-sourced by design until a *weight-valid* snapshot
+  exists (AI tier is the intended path). Overall reliance after rebuild:
+  green 999 · amber 1279 · red 35 · grey 200 — the green→amber shift vs the
+  earlier run reflects invalid-weight amc_website snapshots being demoted to
+  valid-weighted AK data (quality-first), not data loss.

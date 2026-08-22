@@ -44,6 +44,15 @@ def _amfi_job() -> dict:
         data = fetch_mfdata()
         paths = save(data, "latest") if data else []
         _meta.update(amcs=len(data), files=len(paths))
+        # Piggyback: verify the AMC registry against AMFI's official
+        # portfolio-disclosure directory (monthly cadence is right for this).
+        try:
+            from webapp.amfi_portal import refresh_registry, scrape_members
+            rep = refresh_registry(scrape_members())
+            _meta.update(directory_verified=rep["portal_members"],
+                         directory_filled=rep["filled_empty"])
+        except Exception as e:  # never break the holdings fetch
+            _meta["directory_error"] = str(e)[:120]
         return {"amcs": len(data), "files": len(paths)}
 
 
@@ -87,6 +96,14 @@ def _nav_job() -> dict:
         meta.update(s1)
         gaps = fill_gaps_from_last_known()
         meta.update({f"gap_{k}": v for k, v in gaps.items()})
+        # Piggyback: AMFI SIF latest-NAV snapshot (daily data, tiny JSON).
+        try:
+            from webapp.amfi_portal import save_sif_nav
+            doc = save_sif_nav()
+            meta["sif_rows"] = doc["count"]
+            s1["sif_rows"] = doc["count"]
+        except Exception as e:  # never break the NAV refresh
+            meta["sif_error"] = str(e)[:120]
         return {**s1, "gapfill": gaps}
 
 

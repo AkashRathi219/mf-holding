@@ -17,6 +17,19 @@ parser:
   workers: 0
   chunk_pages: 6
 
+# AI-assisted extraction for outline-rendered / scanned factsheets (optional).
+# Requires the API key in an env var (never stored here). Results are cached
+# downstream via the sha256 parse cache, so each source revision is billed once.
+ai:
+  enabled: false                       # or set AI_EXTRACT=1 in the environment
+  api_key_env: OPENROUTER_API_KEY
+  base_url: https://openrouter.ai/api/v1
+  model: google/gemini-2.0-flash-001   # any vision-capable OpenRouter model
+  mode: image                          # image (page renders) | text (OCR text)
+  max_pages: 4                         # per-document page cap
+  dpi: 150                             # render DPI sent to the model
+  trigger_rows: 12                     # heuristic OCR below this -> try AI
+
 scheduler:
   enabled: true
   day_of_month: 1

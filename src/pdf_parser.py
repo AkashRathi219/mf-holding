@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from pathlib import Path
 
 import pdfplumber
@@ -77,18 +78,73 @@ def _parse_pdf_legacy(pdf_path: Path) -> dict:
     # Vector-rendered PDFs (text drawn as outlines, e.g. ICICI digital
     # factsheets) have no text layer -> fall back to OCR so holdings are kept.
     if not result["raw_text"].strip() and not result["raw_tables"]:
-        ocr_text = _ocr_pdf(pdf_path, dpi=_load_ocr_dpi())
-        if ocr_text.strip():
+        ocr_text, tables, ocr_secs = "", [], None
+
+        # Optional AI tier: spend tokens only when the cheap geometry path is
+        # missing or looks unreliable (too few rows / invalid weights).
+        ai_used = False
+        try:
+            from src import ai_extract as _ai
+            if _ai.is_configured():
+                heuristic = None
+                try:
+                    heuristic = _ocr_pdf_tables(pdf_path, dpi=_load_ocr_dpi())
+                except Exception:
+                    heuristic = None
+                h_rows = (heuristic[1][0].get("rows", [])
+                          if heuristic and heuristic[1] else [])
+                weak = (len(h_rows) < int(_ai.load_cfg().get("trigger_rows", 12))
+                        or not _ai.weights_valid(h_rows))
+                if weak:
+                    try:
+                        ai_rows, ai_meta = _ai.extract_pdf(pdf_path, ocr_text="")
+                        if ai_rows and (_ai.weights_valid(ai_rows)
+                                        or len(ai_rows) >= 5):
+                            headers = ["company", "percent_nav", "isin"]
+                            tables = [{
+                                "headers": headers,
+                                "rows": [dict(zip(headers, [r["company"],
+                                                            r["percent_nav"],
+                                                            r["isin"]]))
+                                         for r in ai_rows]}]
+                            result["metadata"]["extraction"] = "ai"
+                            result["metadata"]["ai_model"] = ai_meta.get("model")
+                            result["metadata"]["ai_seconds"] = ai_meta.get("seconds")
+                            ai_used = True
+                    except Exception as e:
+                        logger.info(f"AI extract unavailable for {pdf_path.name}: {e}")
+                else:
+                    ocr_text, tables, ocr_secs = heuristic
+        except ImportError:
+            pass
+
+        if not ai_used and not tables:
+            try:
+                ocr_text, tables, ocr_secs = _ocr_pdf_tables(pdf_path, dpi=_load_ocr_dpi())
+            except Exception as e:
+                logger.warning(f"geometry OCR failed on {pdf_path} ({e}); plain OCR")
+                ocr_text = _ocr_pdf(pdf_path, dpi=_load_ocr_dpi())
+                tables = _tables_from_text(ocr_text)
+                ocr_secs = None
+
+        if not ai_used and ocr_text.strip():
             result["raw_text"] = ocr_text
-            result["metadata"] = _extract_metadata(ocr_text)
-            result["raw_tables"] = _tables_from_text(ocr_text)
-            parsed_tables = _classify_tables(result["raw_tables"])
+            for k, v in _extract_metadata(ocr_text).items():
+                result["metadata"].setdefault(k, v)
+
+        if tables:
+            result["raw_tables"] = tables
+            parsed_tables = _classify_tables(tables)
             result["equity_holdings"] = parsed_tables.get("equity", [])
             result["debt_holdings"] = parsed_tables.get("debt", [])
             result["sector_allocation"] = parsed_tables.get("sector", [])
             result["top_holdings"] = parsed_tables.get("top_holdings", [])
             result["cash_allocation"] = parsed_tables.get("cash")
             result["metadata"]["ocr"] = True
+            if not ai_used:
+                result["metadata"]["extraction"] = "ocr"
+                if ocr_secs is not None:
+                    result["metadata"]["ocr_seconds"] = round(ocr_secs, 2)
 
     return result
 
@@ -123,6 +179,198 @@ def _ocr_pdf(pdf_path: Path, dpi: int = 200) -> str:
         logger.warning(f"OCR failed on {pdf_path}: {e}")
         return ""
     return "\n\n".join(pages_text)
+
+
+def _ocr_pdf_words(pdf_path: Path, dpi: int = 200) -> tuple[str, list[dict], float]:
+    """OCR with word boxes: returns (raw_text, word_boxes, ocr_seconds).
+
+    Each word box is ``{"text","left","top","width","height","conf","page"}``.
+    Falls back to plain text-only OCR when image_to_data is unavailable."""
+    import fitz
+    import pytesseract
+    from PIL import Image
+
+    tesseract_cmd = _load_tesseract_cmd()
+    if tesseract_cmd:
+        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+
+    all_text: list[str] = []
+    words: list[dict] = []
+    t0 = time.perf_counter()
+    doc = fitz.open(pdf_path)
+    try:
+        for pno, page in enumerate(doc):
+            pix = page.get_pixmap(dpi=dpi)
+            img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+            try:
+                data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+                n = len(data.get("text") or [])
+                for i in range(n):
+                    txt = (data["text"][i] or "").strip()
+                    if not txt:
+                        continue
+                    words.append({
+                        "text": txt,
+                        "left": int(data["left"][i]),
+                        "top": int(data["top"][i]),
+                        "width": int(data["width"][i]),
+                        "height": int(data["height"][i]),
+                        "conf": float(data["conf"][i]),
+                        "page": pno,
+                    })
+                page_txt = pytesseract.image_to_string(img)
+            except Exception:
+                page_txt = pytesseract.image_to_string(img)
+            if page_txt.strip():
+                all_text.append(page_txt)
+    finally:
+        doc.close()
+    return "\n\n".join(all_text), words, time.perf_counter() - t0
+
+
+def _rows_from_word_boxes(words: list[dict]) -> list[dict]:
+    """Reconstruct holdings rows from OCR word boxes via line/column geometry.
+
+    Words are clustered into visual lines by vertical center, then split into
+    x-gap clusters (two-column layouts must not merge). A cluster is a holding
+    row when its trailing token is a 0-100 number; everything before it (minus
+    rating tokens) is the company name. Section/metric/sector labels are
+    filtered with the same sets the agent network uses."""
+    from src.pdf_agents import (
+        _METRIC_RE, _SECTION_NAME, _SECTION_RE, _SECTOR_RE,
+    )
+
+    usable = [w for w in words if w.get("text") and float(w.get("conf") or 0) >= 25]
+    if not usable:
+        return []
+    heights = sorted(w["height"] for w in usable)
+    med_h = heights[len(heights) // 2] or 12
+    widths = sorted(w["width"] for w in usable)
+    med_w = widths[len(widths) // 2] or 40
+    y_tol = max(4.0, med_h * 0.6)
+    x_split = max(28.0, med_w * 1.6)
+
+    usable.sort(key=lambda w: (w["page"], w["top"], w["left"]))
+    lines: list[list[dict]] = []
+    for w in usable:
+        placed = False
+        if lines and lines[-1][-1]["page"] == w["page"]:
+            last = lines[-1]
+            ref_mid = sum(x["top"] + x["height"] / 2 for x in last) / len(last)
+            cur_mid = w["top"] + w["height"] / 2
+            if abs(cur_mid - ref_mid) <= y_tol:
+                last.append(w)
+                placed = True
+        if not placed:
+            lines.append([w])
+
+    pct_re = re.compile(r"^([0-9]{1,3})(?:[.,]([0-9]{1,3}))?%?$")
+    rating_re = re.compile(
+        r"^(?:SOV|AAA(?:\+|-)?|AA(?:\+|-)?|A(?:\+|-)?|BBB(?:\+|-)?|BB|B|UNRATED|"
+        r"(?:CRISIL|ICRA|CARE|FITCH|BWR|IND)[A-Za-z0-9+\-/]*)$", re.I)
+
+    def _pct_value(tok: str) -> float | None:
+        """Parse a percentage token; tolerate OCR-eaten decimal points.
+
+        ``9.14%`` -> 9.14 ; ``136%`` -> 1.36 (dot lost, two decimals assumed)
+        ; ``0.99`` -> 0.99. Returns None for anything not plausibly a %NAV."""
+        t = tok.strip().rstrip(":;|").strip()
+        if t.endswith("%"):
+            t = t[:-1].strip()
+        m = re.match(r"^([0-9]{1,4})(?:[.,]([0-9]{1,3}))?$", t)
+        if not m:
+            return None
+        whole, frac = m.group(1), m.group(2)
+        try:
+            if frac is not None:
+                v = float(f"{whole}.{frac}")
+            elif len(whole) >= 3:
+                v = int(whole) / 100.0  # OCR ate the decimal point
+            else:
+                v = float(whole)
+        except ValueError:
+            return None
+        return v if 0 < v <= 100 else None
+
+    rows: list[dict] = []
+    seen: set[tuple] = set()
+
+    def handle_cluster(cluster: list[dict]) -> None:
+        toks = [w["text"].strip() for w in sorted(cluster, key=lambda x: x["left"])]
+        if len(toks) < 2:
+            return
+        # attach a standalone '%' to its number ("9.14" "%")
+        merged: list[str] = []
+        for t in toks:
+            if t == "%" and merged:
+                merged[-1] += "%"
+            else:
+                merged.append(t)
+        # rightmost percentage-looking token wins; trailing words are junk
+        idx = None
+        val = None
+        for i in range(len(merged) - 1, 0, -1):
+            v = _pct_value(merged[i])
+            if v is not None:
+                idx, val = i, v
+                break
+        if idx is None:
+            return
+        name_parts = [t for t in merged[:idx] if not rating_re.match(t)]
+        # drop trailing tokens that are themselves percentages ("Retailing 2.72%")
+        while name_parts and _pct_value(name_parts[-1]) is not None:
+            name_parts.pop()
+        name = re.sub(r"\s+", " ", " ".join(name_parts)).strip(" .,-")
+        low = name.lower()
+        if len(low) < 4:
+            return
+        if "%" in name or name[-1].isdigit():
+            return
+        if low in _SECTION_NAME or _METRIC_RE.match(name) \
+                or _SECTION_RE.match(name) or _SECTOR_RE.match(name):
+            return
+        noise = ("annexure", "benchmark", "managing this fund", "as on",
+                 "investment horizon", "option", "overall", "refer")
+        if any(nz in low for nz in noise):
+            return
+        key = (low, str(val))
+        if key in seen:
+            return
+        seen.add(key)
+        rows.append({"company": name, "percent_nav": f"{val:g}", "isin": ""})
+
+    for line in lines:
+        cluster: list[dict] = []
+        prev_right = None
+        for w in sorted(line, key=lambda x: x["left"]):
+            if prev_right is not None and w["left"] - prev_right > x_split:
+                handle_cluster(cluster)
+                cluster = []
+            cluster.append(w)
+            prev_right = w["left"] + w["width"]
+        handle_cluster(cluster)
+    return rows
+
+
+def _ocr_pdf_tables(pdf_path: Path, dpi: int = 200) -> tuple[str, list[dict], float]:
+    """OCR + geometry row reconstruction -> (raw_text, synthetic_tables, ocr_s).
+
+    The synthetic table carries an ``isin`` header so ``_classify_tables``
+    routes it to the equity bucket exactly like the other parsers do."""
+    raw_text, words, secs = _ocr_pdf_words(pdf_path, dpi=dpi)
+    rows = _rows_from_word_boxes(words)
+    if not rows:
+        # fall back to the legacy regex-on-text scraper
+        legacy_rows = _tables_from_text(raw_text)
+        if legacy_rows and legacy_rows[0].get("rows"):
+            rows = [{"company": r.get("company"), "percent_nav": r.get("percent_nav"),
+                     "isin": ""} for r in legacy_rows[0]["rows"]]
+    if not rows:
+        return raw_text, [], secs
+    headers = ["company", "percent_nav", "isin"]
+    dict_rows = [dict(zip(headers, [r["company"], r["percent_nav"], r["isin"]]))
+                 for r in rows]
+    return raw_text, [{"headers": headers, "rows": dict_rows}], secs
 
 
 def _load_tesseract_cmd() -> str:
