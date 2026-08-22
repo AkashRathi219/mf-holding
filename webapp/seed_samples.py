@@ -6,10 +6,29 @@ so it is safe to call repeatedly (and from ``POST /api/seed-samples``).
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from . import userdata
 from .strategy_rules import parse_rules
 
+ROOT = Path(__file__).resolve().parent.parent
+CAS_SAMPLE_JSON = ROOT / "CAS_sample_portfolio_holdings.json"
+
+# One strategy that exercises EVERY analyser dimension (single-holding,
+# sector, asset-class min/max incl. debt/equity/cash/gold, cap segments,
+# concentration, scheme overlap and scheme count). Pairs with the CAS Sample
+# Portfolio below so compliance shows a realistic pass/breach mix.
 SAMPLE_STRATEGIES = [
+    {"name": "Full Coverage Playbook",
+     "description": ("Demonstration mandate exercising all 12 rule dimensions: "
+                     "single-holding, sector, debt/equity/cash/gold bands, "
+                     "large/mid/small-cap bands, top-5 concentration, scheme "
+                     "overlap and scheme count."),
+     "rules_text": ("Max 15% single stock. Max 25% sector. "
+                    "Min 25% debt. Max 60% equity. Max 8% cash. Max 5% gold. "
+                    "Min 30% large cap. Max 30% mid cap. Max 12% small cap. "
+                    "Max top-5 60%. Max overlap 50%. Max 12 schemes.")},
     {"name": "Conservative Core",
      "description": "Capital preservation; low single-name, sector and concentration risk.",
      "rules_text": ("Max 10% single stock. Max 20% sector. Min 30% debt. "
@@ -108,6 +127,33 @@ SAMPLE_DEPLOYMENTS = [
 ]
 
 
+def cas_sample_items() -> list[dict]:
+    """Portfolio items from the CAS sample statement (market-value weights).
+
+    Items carry isin + name so they resolve against the schemes table for BOTH
+    compliance analysis and scheme overlap. Zero-unit / unpriced lines are
+    dropped; weights renormalise to 100."""
+    try:
+        doc = json.loads(CAS_SAMPLE_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    items: list[dict] = []
+    for a in (doc.get("portfolio_summary") or {}).get("allocations") or []:
+        name = (a.get("scheme_name") or "").strip()
+        isin = (a.get("isin") or "").strip().upper()
+        weight = a.get("allocation_pct_market_value")
+        units = a.get("net_units")
+        if not name or not isin or not weight or not units:
+            continue
+        items.append({"type": "scheme", "isin": isin, "name": name,
+                      "units": float(units), "weight": round(float(weight), 2)})
+    total = sum(i["weight"] for i in items)
+    if total > 0:
+        for i in items:
+            i["weight"] = round(i["weight"] / total * 100, 2)
+    return items
+
+
 def seed_for_user(uid: int) -> dict:
     created = {"strategies": [], "models": [], "clients": [], "deployments": []}
 
@@ -163,5 +209,25 @@ def seed_for_user(uid: int) -> dict:
         userdata.create_client_portfolio(uid, rajesh_id, "Rajesh Actual", "actual",
                                          RAJESH_ACTUAL_ITEMS, strategy_id=strat_id)
         created["deployments"].append("Rajesh Actual")
+
+    # CAS Sample Portfolio — built from the real CAS statement holdings, linked
+    # to the Full Coverage Playbook strategy so Analyse (compliance + debt
+    # analysis) and Overlap both work out of the box.
+    cas_items = cas_sample_items()
+    if cas_items and "CAS Sample Portfolio" not in existing_cp:
+        rajesh_id = clients.get("Rajesh")
+        if rajesh_id is not None:
+            userdata.create_client_portfolio(
+                uid, rajesh_id, "CAS Sample Portfolio", "actual", cas_items,
+                strategy_id=strategies.get("Full Coverage Playbook"))
+            created["deployments"].append("CAS Sample Portfolio")
+        models = {m["name"]: m["id"] for m in userdata.list_models(uid)}
+        if "CAS Sample Portfolio" not in models:
+            userdata.create_model(uid, "CAS Sample Portfolio",
+                                  "Holdings-level model built from the CAS sample "
+                                  "statement (market-value weights).",
+                                  strategies.get("Full Coverage Playbook"),
+                                  cas_items)
+            created["models"].append("CAS Sample Portfolio")
 
     return created
