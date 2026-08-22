@@ -42,6 +42,8 @@ BOOT_CRITICAL = [
     "reference/bonds_catalog.json",
     "CAS_sample_portfolio_holdings.json",
     "stocks/identity.json",
+    "userdata.db",       # strategies / models / clients / portfolios
+    "webapp_auth.db",    # registered accounts (demo + real)
 ]
 
 

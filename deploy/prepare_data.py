@@ -98,7 +98,14 @@ def main() -> None:
     if not db.exists():
         print(f"  !! {db} missing -- build it first, then re-run")
         sys.exit(1)
-    shutil.copy2(db, STAGE / "webapp.db")
+    # All three databases ship: holdings cache + user accounts + user content
+    # (strategies/models/clients/portfolios), so registrations survive redeploys.
+    for db_rel in DBS:
+        p = ROOT / db_rel
+        if p.exists():
+            shutil.copy2(p, STAGE / Path(db_rel).name)
+        else:
+            print(f"  !! {p} missing (skipped)")
 
     entries = []
     total = 0
