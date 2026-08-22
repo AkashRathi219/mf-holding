@@ -1,7 +1,6 @@
 "use strict";
 
 const screens = {
-  dashboard: { key: "dashboard", title: "Dashboard", sub: "Dataset as of 14-Aug-2026 · Updated monthly", init: initDashboard },
   schemes: { key: "schemes", title: "Scheme Explorer", sub: "Filter 6,400+ schemes across 50+ AMCs", init: initSchemes },
   securities: { key: "securities", title: "Security Directory", sub: "3,941 unique ISINs · 846 pure listed stocks", init: initSecurities },
   bonds: { key: "bonds", title: "Bonds", sub: "NSE debt market: G-Sec, SDL, T-Bills & corporate bonds with YTM", init: initBonds },
@@ -30,7 +29,7 @@ async function boot() {
     if (e.target.id === "drawerBackdrop") closeDrawer();
   });
   window.addEventListener("hashchange", route);
-  if (!location.hash) location.hash = "#dashboard";
+  if (!location.hash || location.hash === "#dashboard") location.hash = "#schemes";
   route();
   loadFilters();
 }
@@ -61,7 +60,7 @@ function route() {
     window.scrollTo(0, 0);
     return;
   }
-  const screen = screens[hash] || screens.dashboard;
+  const screen = screens[hash] || screens.schemes;
   const key = screen.key;
   document.querySelectorAll(".screen").forEach(s => s.style.display = "none");
   document.getElementById("screen-" + key).style.display = "";

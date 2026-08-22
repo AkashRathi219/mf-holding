@@ -562,6 +562,33 @@ def api_version():
     }
 
 
+@app.get("/api/scope-stats")
+def api_scope_stats():
+    """PUBLIC data-scope snapshot for the sign-in page: how much data the
+    engine holds, each with its non-N/A coverage percentage."""
+    wdb = get_db()
+    m = wdb.meta_stats()
+    cat = wdb._bond_catalog()
+    bonds = cat.get("bonds") or []
+    n_bonds = len(bonds)
+    n_ytm = sum(1 for b in bonds if b.get("ytm") is not None)
+    n_price = sum(1 for b in bonds if b.get("price"))
+    pct = lambda part, whole: round(part / whole * 100, 1) if whole else None  # noqa: E731
+    return {
+        "as_of": m.get("as_of"),
+        "amcs": m.get("amcs"),
+        "schemes": m.get("schemes"),
+        "schemes_covered_pct": pct(m.get("schemes_with_holdings"), m.get("schemes")),
+        "holdings": m.get("holdings"),
+        "isin_pct": m.get("isin_completeness"),
+        "stocks": m.get("pure_stocks"),
+        "bonds": n_bonds,
+        "bonds_ytm_pct": pct(n_ytm, n_bonds),
+        "bonds_traded": n_price,
+        "bond_as_of": cat.get("as_of"),
+    }
+
+
 @app.get("/api/stocks/status")
 def api_stocks_status(request: Request):
     """Stock backfill completion status (price / actions / reports)."""
