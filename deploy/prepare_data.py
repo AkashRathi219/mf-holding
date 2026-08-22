@@ -41,6 +41,7 @@ RUNTIME_DIRS = [
 # Files under data/ that are needed but live outside the dirs above.
 RUNTIME_FILES = [
     "data/feedback.json",
+    "data/logs/refresh_state.json",  # superadmin last-fetched rollup (tiny)
 ]
 
 # Extra root-level files (repo root, not under data/).

@@ -2312,6 +2312,11 @@ let adminTimer = null;
 function initAdmin() {
   const body = document.getElementById("adminBody");
   body.innerHTML = `
+    <div id="healthCard" class="card" style="margin-bottom:16px">
+      <h3 style="margin-bottom:4px">Data health <span id="dhOverall" class="badge grey">…</span></h3>
+      <div class="page-sub">Composite of coverage, completeness, freshness and pipeline telemetry · <span id="dhAt"></span></div>
+      <div id="dhBars" style="margin-top:10px"><span class="spin"></span> Loading…</div>
+    </div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <h3 style="margin:0">Refresh pipelines <span id="admSched" class="badge grey"></span></h3>
       <button class="btn btn-outline btn-sm" onclick="initAdmin()">Reload</button>
@@ -2333,6 +2338,44 @@ function initAdmin() {
   }, 30000);
 }
 
+const DH_LABELS = {
+  coverage: "Holdings coverage", completeness: "ISIN completeness",
+  nav: "NAV freshness", holdings: "Disclosure freshness",
+  stocks_bonds: "Stocks & bonds", pipelines: "Refresh pipelines"};
+
+function dhBandColor(band) {
+  return {green: "#3f9d63", amber: "#d09a2f", red: "#c94f4f", grey: "#9aa0a6"}[band] || "#9aa0a6";
+}
+
+async function refreshHealthData() {
+  const wrap = document.getElementById("dhBars");
+  if (!wrap) return;
+  try {
+    const h = await App.api("/admin/data-health");
+    const el = document.getElementById("dhOverall");
+    if (!el) return;
+    el.className = "badge " + h.band;
+    el.textContent = h.overall + " / 100";
+    document.getElementById("dhAt").textContent = "computed " +
+      String(h.computed_at || "").replace("T", " ");
+    wrap.innerHTML = Object.entries(h.components || {}).map(([k, c]) => `
+      <div style="display:flex;align-items:center;gap:10px;margin:6px 0">
+        <div style="width:170px;font-size:.8rem">${DH_LABELS[k] || k}</div>
+        <div style="flex:1;background:#e8eaed;border-radius:4px;height:8px;overflow:hidden">
+          <div style="width:${Math.max(0, Math.min(100, c.score || 0))}%;height:100%;background:${dhBandColor(h.band)}"></div>
+        </div>
+        <div class="mono" style="width:52px;text-align:right;font-size:.78rem">${c.score != null ? c.score : "—"}</div>
+        <details style="font-size:.72rem;color:#666"><summary style="cursor:pointer">info</summary>
+          <pre class="mono" style="white-space:pre-wrap;margin:4px 0 0;font-size:.7rem">${App.esc(JSON.stringify(c.detail || {}, null, 1))}</pre>
+        </details>
+      </div>`).join("") || `<div class="empty">No components.</div>`;
+  } catch (e) {
+    const o = document.getElementById("dhOverall");
+    if (o) { o.className = "badge grey"; o.textContent = "N/A"; }
+    wrap.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
+  }
+}
+
 function admBadge(status) {
   if (status === "success") return '<span class="badge green">success</span>';
   if (status === "error") return '<span class="badge red">error</span>';
@@ -2350,6 +2393,7 @@ function admDetail(d, err) {
 
 async function refreshAdminData() {
   try {
+    refreshHealthData();
     const [sum, logs] = await Promise.all([
       App.api("/admin/refresh-summary"),
       App.api("/admin/refresh-logs?limit=200"),

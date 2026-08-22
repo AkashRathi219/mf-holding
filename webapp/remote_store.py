@@ -91,6 +91,23 @@ def ensure(relpath: str, dest: Path | None = None) -> Path | None:
         return target if target.exists() else None
 
 
+def upload_object(relpath: str, src: Path) -> bool:
+    """Best-effort upload of a small runtime artifact (state files, logs).
+
+    Returns True on success; False when unconfigured/offline — callers must
+    tolerate failure (local copy remains the source of truth).
+    """
+    if not is_configured():
+        return False
+    try:
+        _get_client().put_object(Bucket=_bucket(), Key=_key(relpath),
+                                 Body=src.read_bytes(),
+                                 ContentType="application/json")
+        return True
+    except Exception:
+        return False
+
+
 def download_to(relpath: str, dest: Path) -> Path | None:
     """Fetch an object unconditionally to an explicit destination."""
     if not is_configured():

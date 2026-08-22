@@ -706,13 +706,29 @@ def _admin_jobs() -> dict:
 @app.get("/api/admin/refresh-summary")
 def admin_refresh_summary(request: Request):
     _require_superadmin(request)
-    from src.refresh_log import LOG_PATH, summary
+    from src.refresh_log import summary
     s = summary()
     return {"pipelines": s["pipelines"],
             "generated_at": s["generated_at"],
             "scheduler_enabled": os.environ.get("ENABLE_SCHEDULER") == "1",
             "running": sorted(_admin_running),
-            "log_file": str(LOG_PATH)}
+            "log_file": s["log_file"],
+            "state_file": s["state_file"]}
+
+
+@app.get("/api/admin/data-health")
+def admin_data_health(request: Request, force: int = 0):
+    """Composite data-health score (0-100) with per-component breakdown."""
+    _require_superadmin(request)
+    from webapp import data_health
+    return data_health.compute(force=bool(force))
+
+
+@app.get("/api/admin/data-health-history")
+def admin_data_health_history(request: Request, limit: int = 100):
+    _require_superadmin(request)
+    from webapp import data_health
+    return {"items": data_health.read_history(max(1, min(limit, 500)))}
 
 
 @app.get("/api/admin/refresh-logs")
@@ -738,6 +754,12 @@ def admin_run_job(pipeline: str, request: Request):
             jobs[pipeline]()
         except Exception:  # errors are recorded by refresh_log.track
             pass
+        else:
+            try:
+                from webapp import data_health
+                data_health.invalidate()
+            except Exception:
+                pass
         finally:
             _admin_running.discard(pipeline)
 
