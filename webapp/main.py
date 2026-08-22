@@ -668,14 +668,14 @@ def api_health():
 @app.get("/api/version")
 def api_version():
     """Which exact build is serving this request (Railway injects the git SHA)."""
-    import os
-    from datetime import datetime
+    from datetime import timedelta, timezone
+    ist = timezone(timedelta(hours=5, minutes=30))
     return {
         "commit": os.environ.get("RAILWAY_GIT_COMMIT_SHA", ""),
         "service": os.environ.get("RAILWAY_SERVICE_NAME", ""),
         "environment": os.environ.get("RAILWAY_ENVIRONMENT_NAME", ""),
         "scheduler_enabled": os.environ.get("ENABLE_SCHEDULER") == "1",
-        "server_time": datetime.now().isoformat(timespec="seconds"),
+        "server_time_ist": datetime.now(ist).isoformat(timespec="seconds"),
     }
 
 

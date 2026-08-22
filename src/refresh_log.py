@@ -1,4 +1,4 @@
-"""Refresh-pipeline telemetry: append-only JSONL event log.
+﻿"""Refresh-pipeline telemetry: append-only JSONL event log.
 
 Every data-refresh entry point (NAV daily, AMFI tier-1 fetch, bond catalog,
 stock chain) records started/success/error events here so the superadmin
@@ -14,11 +14,17 @@ import threading
 import time
 import traceback
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 LOG_PATH = BASE_DIR / "data" / "logs" / "refresh_log.jsonl"
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _now_ist() -> str:
+    return datetime.now(IST).isoformat(timespec="seconds")
 
 _lock = threading.Lock()
 
@@ -35,7 +41,7 @@ def _write(entry: dict) -> None:
 
 
 def record(pipeline: str, status: str, **fields) -> None:
-    entry = {"ts": datetime.now().isoformat(timespec="seconds"),
+    entry = {"ts": _now_ist(),
              "pipeline": pipeline, "status": status}
     entry.update({k: v for k, v in fields.items() if v is not None})
     _write(entry)
@@ -45,7 +51,7 @@ def record(pipeline: str, status: str, **fields) -> None:
 def track(pipeline: str, **meta):
     """Context manager: records started/success/error around a pipeline run.
 
-    Yields a mutable dict — callers may update it with result counters which
+    Yields a mutable dict â€” callers may update it with result counters which
     are merged into the final success event."""
     t0 = time.time()
     state = dict(meta)
@@ -78,7 +84,7 @@ def read(limit: int = 300) -> list[dict]:
 
 
 def summary() -> dict:
-    """Per-pipeline rollup for the admin screen."""
+    """Per-pipeline rollup for the admin screen (timestamps IST)."""
     events = read(1000)
     pipes: dict[str, dict] = {}
     cutoff = datetime.now().timestamp() - 24 * 3600
@@ -92,6 +98,13 @@ def summary() -> dict:
             recent = datetime.fromisoformat(e["ts"]).timestamp() >= cutoff
         except Exception:
             recent = False
+        # entries may carry a +05:30 offset (IST) or be naive legacy UTC
+        if recent and "+" not in e["ts"]:
+            try:
+                recent = datetime.fromisoformat(e["ts"]).replace(
+                    tzinfo=timezone.utc).timestamp() >= cutoff
+            except Exception:
+                pass
         if e["status"] == "success":
             p["last_status"], p["last_ts"] = "success", e["ts"]
             p["last_duration_s"] = e.get("duration_s")
@@ -106,5 +119,5 @@ def summary() -> dict:
                 p["last_error"] = e.get("error")
             if recent:
                 p["err_24h"] += 1
-    return {"pipelines": pipes, "generated_at":
-            datetime.now().isoformat(timespec="seconds")}
+    return {"pipelines": pipes, "generated_at": _now_ist()}
+
