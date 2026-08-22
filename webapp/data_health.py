@@ -280,6 +280,12 @@ def scheme_confidence(scheme: dict, stats: dict | None = None) -> dict:
     source base - disclosure-age penalty, blended 70/30 with holdings quality
     (ISIN% / %NAV coverage) when stats are provided. Tiers: high >= 80,
     medium >= 55, low < 55; grey for schemes without any holdings record.
+
+    Validation bonus: a FRESH (<=45d) snapshot that passes the merge-time
+    weight checks (max <=100, sum <=120) with >=90% coverage on ISIN and %NAV
+    earns +10 — provenance matters less than proven quality, so e.g. fully
+    validated advisorkhoj data can reach High instead of being capped at
+    Medium. Stale or unvalidated snapshots keep pure source-based scoring.
     """
     cov = scheme.get("coverage") or "has_holdings"
     src = scheme.get("source") or ""
@@ -314,6 +320,18 @@ def scheme_confidence(scheme: dict, stats: dict | None = None) -> dict:
         quality = round((isin_pct + pct_nav) / 2, 1)
         detail.update({"holdings": n, "isin_pct": round(isin_pct, 1),
                        "pct_nav_coverage": round(pct_nav, 1)})
+        validated = False
+        max_pct = stats.get("max_pct")
+        sum_pct = stats.get("sum_pct")
+        if max_pct is not None or sum_pct is not None:
+            validated = ((max_pct is None or max_pct <= 100)
+                         and (sum_pct is None or sum_pct <= 120))
+        elif pct_nav > 0:
+            validated = True  # weights present; no evidence of corruption
+        if validated and isin_pct >= 90 and pct_nav >= 90 \
+                and age is not None and age <= HOLDINGS_STALE_DAYS:
+            score += 10.0     # validation bonus: fresh + proven usable data
+            detail["validated"] = True
         score = round(score * 0.7 + quality * 0.3, 1)
     else:
         score = round(score, 1)
@@ -328,7 +346,9 @@ def reliance_metrics(wdb, worst_limit: int = 15) -> dict:
         """SELECT s.id, s.fund_name, s.amc, s.source, s.coverage, s.as_of,
                   COUNT(h.id) AS n,
                   SUM(CASE WHEN h.isin!='' THEN 1 ELSE 0 END) AS wi,
-                  SUM(CASE WHEN h.percent_nav IS NOT NULL THEN 1 ELSE 0 END) AS wp
+                  SUM(CASE WHEN h.percent_nav IS NOT NULL THEN 1 ELSE 0 END) AS wp,
+                  MAX(h.percent_nav) AS max_pct,
+                  SUM(h.percent_nav) AS sum_pct
            FROM schemes s LEFT JOIN holdings h ON h.scheme_id = s.id
            GROUP BY s.id""").fetchall()
 
@@ -338,7 +358,8 @@ def reliance_metrics(wdb, worst_limit: int = 15) -> dict:
     total_score = 0.0
     scored_n = 0
     for r in rows:
-        st = {"n": r["n"] or 0, "with_isin": r["wi"] or 0, "with_pct": r["wp"] or 0}
+        st = {"n": r["n"] or 0, "with_isin": r["wi"] or 0, "with_pct": r["wp"] or 0,
+              "max_pct": r["max_pct"], "sum_pct": r["sum_pct"]}
         cf = scheme_confidence(dict(r), st)
         tiers[cf["tier"]] += 1
         src = r["source"] or "none"

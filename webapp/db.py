@@ -2071,8 +2071,8 @@ class WebDB:
         return d
 
     def holdings_stats(self, scheme_ids) -> dict[int, dict]:
-        """scheme_id -> {n, with_isin, with_pct} over the holdings table
-        (batch helper for confidence scoring)."""
+        """scheme_id -> {n, with_isin, with_pct, max_pct, sum_pct} over the
+        holdings table (batch helper for confidence scoring)."""
         ids = [int(i) for i in (scheme_ids or [])]
         if not ids:
             return {}
@@ -2080,11 +2080,14 @@ class WebDB:
         rows = self.con.execute(
             f"SELECT scheme_id, COUNT(*) AS n, "
             f"SUM(CASE WHEN isin!='' THEN 1 ELSE 0 END) AS wi, "
-            f"SUM(CASE WHEN percent_nav IS NOT NULL THEN 1 ELSE 0 END) AS wp "
+            f"SUM(CASE WHEN percent_nav IS NOT NULL THEN 1 ELSE 0 END) AS wp, "
+            f"MAX(percent_nav) AS max_pct, SUM(percent_nav) AS sum_pct "
             f"FROM holdings WHERE scheme_id IN ({q}) GROUP BY scheme_id",
             ids).fetchall()
         return {r["scheme_id"]: {"n": r["n"], "with_isin": r["wi"] or 0,
-                                 "with_pct": r["wp"] or 0} for r in rows}
+                                 "with_pct": r["wp"] or 0,
+                                 "max_pct": r["max_pct"],
+                                 "sum_pct": r["sum_pct"]} for r in rows}
 
     # ---- stocks (price / actions / reports) ----
     def stock_price(self, isin: str, start: str | None = None,

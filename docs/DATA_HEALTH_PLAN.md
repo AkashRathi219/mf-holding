@@ -122,3 +122,21 @@ Ops notes:
   green 999 · amber 1279 · red 35 · grey 200 — the green→amber shift vs the
   earlier run reflects invalid-weight amc_website snapshots being demoted to
   valid-weighted AK data (quality-first), not data loss.
+
+### Confidence v2 — validation bonus (22-Aug, late)
+
+The gate above exposed that ~1,000 advisorkhoj schemes carry *fully valid,
+well-covered* holdings yet were amber-capped by source base alone, while some
+old greens were weightless amc_website snapshots. Scoring updated in
+`webapp/data_health.scheme_confidence`:
+
+- **+10 validation bonus** when a snapshot is FRESH (≤45d), passes merge-time
+  weight checks (max ≤100, sum ≤120) and has ≥90% coverage on both ISIN and
+  %NAV — provenance matters less than proven usable data;
+- stale or unvalidated snapshots keep pure source-based scoring; the DB-side
+  demotion stays as the hard backstop.
+
+Result: **High 1,879 (75%) · Medium 399 (16%) · Low 35 · No data 200 · avg 86.3**
+— every High scheme has fresh, validated, weighted holdings regardless of
+source label (`holdings_stats` now also returns `max_pct`/`sum_pct` so API
+badges and the superadmin rollup score identically).
