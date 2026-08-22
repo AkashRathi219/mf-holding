@@ -257,3 +257,123 @@ def read_history(limit: int = 200) -> list[dict]:
         except Exception:
             continue
     return out[::-1]
+
+
+# ---- per-scheme confidence badge + superadmin reliance metrics --------------
+
+# Base trust by holdings source (mirrors _SOURCE_PRIORITY in webapp/db.py).
+SOURCE_BASE = {"amfi": 100, "amc_website": 88, "index": 85, "advisorkhoj": 62}
+TIER_COLORS = {"green": "#3f9d63", "amber": "#d09a2f",
+               "red": "#c94f4f", "grey": "#9aa0a6"}
+
+
+def _as_of_age_days(as_of) -> int | None:
+    try:
+        return (date.today() - date.fromisoformat(str(as_of or "")[:10])).days
+    except Exception:
+        return None
+
+
+def scheme_confidence(scheme: dict, stats: dict | None = None) -> dict:
+    """0-100 data-confidence score for ONE scheme.
+
+    source base - disclosure-age penalty, blended 70/30 with holdings quality
+    (ISIN% / %NAV coverage) when stats are provided. Tiers: high >= 80,
+    medium >= 55, low < 55; grey for schemes without any holdings record.
+    """
+    cov = scheme.get("coverage") or "has_holdings"
+    src = scheme.get("source") or ""
+    age = _as_of_age_days(scheme.get("as_of"))
+    detail = {"source": src or None, "age_days": age}
+
+    if cov in ("no_disclosure", "missing"):
+        return {"score": 0.0, "tier": "grey",
+                "reason": cov, **detail}
+    if cov == "discovery_needed":
+        return {"score": 20.0, "tier": "red",
+                "reason": "discovery_needed", **detail}
+
+    score = float(SOURCE_BASE.get(src, 50))
+    if age is None:
+        score -= 25          # undated disclosure
+    elif age <= 35:
+        pass                 # monthly cycle + slack: full credit
+    elif age <= 45:
+        score -= 5
+    elif age <= 90:
+        score -= 18
+    elif age <= 180:
+        score -= 32
+    else:
+        score -= 48          # MF-A2 stale territory
+
+    n = (stats or {}).get("n") or 0
+    if n:
+        isin_pct = 100.0 * (stats.get("with_isin") or 0) / n
+        pct_nav = 100.0 * (stats.get("with_pct") or 0) / n
+        quality = round((isin_pct + pct_nav) / 2, 1)
+        detail.update({"holdings": n, "isin_pct": round(isin_pct, 1),
+                       "pct_nav_coverage": round(pct_nav, 1)})
+        score = round(score * 0.7 + quality * 0.3, 1)
+    else:
+        score = round(score, 1)
+
+    tier = "green" if score >= 80 else ("amber" if score >= 55 else "red")
+    return {"score": max(0.0, min(100.0, score)), "tier": tier, **detail}
+
+
+def reliance_metrics(wdb, worst_limit: int = 15) -> dict:
+    """Superadmin rollup: confidence distribution across ALL schemes."""
+    rows = wdb.con.execute(
+        """SELECT s.id, s.fund_name, s.amc, s.source, s.coverage, s.as_of,
+                  COUNT(h.id) AS n,
+                  SUM(CASE WHEN h.isin!='' THEN 1 ELSE 0 END) AS wi,
+                  SUM(CASE WHEN h.percent_nav IS NOT NULL THEN 1 ELSE 0 END) AS wp
+           FROM schemes s LEFT JOIN holdings h ON h.scheme_id = s.id
+           GROUP BY s.id""").fetchall()
+
+    tiers = {"green": 0, "amber": 0, "red": 0, "grey": 0}
+    src_stats: dict[str, dict] = {}
+    scored: list[dict] = []
+    total_score = 0.0
+    scored_n = 0
+    for r in rows:
+        st = {"n": r["n"] or 0, "with_isin": r["wi"] or 0, "with_pct": r["wp"] or 0}
+        cf = scheme_confidence(dict(r), st)
+        tiers[cf["tier"]] += 1
+        src = r["source"] or "none"
+        agg = src_stats.setdefault(src, {"count": 0, "score_sum": 0.0,
+                                         "stale_gt_45d": 0,
+                                         "isin_n": 0, "isin_sum": 0.0})
+        agg["count"] += 1
+        agg["score_sum"] += cf["score"]
+        if cf.get("age_days") is not None and cf["age_days"] > HOLDINGS_STALE_DAYS:
+            agg["stale_gt_45d"] += 1
+        if cf.get("isin_pct") is not None:
+            agg["isin_n"] += 1
+            agg["isin_sum"] += cf["isin_pct"]
+        if (r["coverage"] or "has_holdings") == "has_holdings":
+            total_score += cf["score"]
+            scored_n += 1
+            scored.append({"id": r["id"], "fund_name": r["fund_name"],
+                           "amc": r["amc"], "source": r["source"],
+                           "as_of": r["as_of"], "age_days": cf.get("age_days"),
+                           "score": cf["score"]})
+
+    by_source = {}
+    for src, a in src_stats.items():
+        by_source[src] = {
+            "count": a["count"],
+            "avg_score": round(a["score_sum"] / a["count"], 1),
+            "stale_gt_45d": a["stale_gt_45d"],
+            "avg_isin_pct": round(a["isin_sum"] / a["isin_n"], 1) if a["isin_n"] else None,
+        }
+
+    scored.sort(key=lambda x: (x["score"], -(x["age_days"] or 0)))
+    return {
+        "total_schemes": len(rows),
+        "tiers": tiers,
+        "avg_score": round(total_score / scored_n, 1) if scored_n else None,
+        "by_source": by_source,
+        "worst": scored[:max(1, worst_limit)],
+    }

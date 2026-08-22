@@ -176,6 +176,21 @@ function initSchemes() {
   loadSchemes();
 }
 
+function confBadge(cf) {
+  const TIER = {green: ["high", "#3f9d63"], amber: ["medium", "#d09a2f"],
+                red: ["low", "#c94f4f"], grey: ["no data", "#9aa0a6"]};
+  const [lbl, col] = TIER[(cf && cf.tier) || "grey"] || TIER.grey;
+  const lines = [
+    "Data confidence: " + (cf && cf.score != null ? cf.score + " / 100" : "n/a"),
+    "Source: " + ((cf && cf.source) || "none"),
+    "Disclosure age: " + (cf && cf.age_days != null ? cf.age_days + " days" : "unknown"),
+  ];
+  if (cf && cf.isin_pct != null) lines.push("ISIN coverage: " + cf.isin_pct + "%");
+  if (cf && cf.reason) lines.push("Reason: " + cf.reason);
+  return `<span title="${App.esc(lines.join("\n"))}" style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:${col};white-space:nowrap;margin-left:6px">
+    <span style="width:7px;height:7px;border-radius:50%;background:${col};display:inline-block"></span>${lbl}</span>`;
+}
+
 async function loadSchemes() {
   const p = new URLSearchParams({ limit: schemeState.limit, offset: schemeState.offset });
   const v = (id) => document.getElementById(id).value;
@@ -204,7 +219,7 @@ async function loadSchemes() {
       if (s.is_etf) flags.push(App.badge("ETF", "blue"));
       if (s.is_fof) flags.push(App.badge("FoF", "grey"));
       return `<tr class="clickable" onclick="location.hash='#scheme/${s.id}'">
-        <td><strong>${App.esc(s.fund_name)}</strong><br><span class="mono" style="font-size:11px;color:var(--text-3)">${App.formatDate(s.as_of)}</span></td>
+        <td><strong>${App.esc(s.fund_name)}</strong>${confBadge(s.confidence)}<br><span class="mono" style="font-size:11px;color:var(--text-3)">${App.formatDate(s.as_of)}</span></td>
         <td>${App.esc(s.amc)}</td>
         <td>${App.badge(s.category)} ${flags.join(" ")}</td>
         <td>${App.flagBadge(s.coverage)}</td>
@@ -339,16 +354,16 @@ async function renderSchemeDetail(id, container, titleEl) {
       </div>` : "";
     if (titleEl) titleEl.textContent = `${s.fund_name} \u00b7 ${s.amc} \u00b7 ${App.sourceLabel(s.source)}`;
     container.innerHTML = `
-      <h2>${App.esc(s.fund_name)}</h2>
+      <h2>${App.esc(s.fund_name)}${confBadge(s.confidence)}</h2>
       <div class="page-sub" style="margin-bottom:14px">${App.esc(s.amc)} · ${App.sourceLabel(s.source)}</div>
       <div class="kv" style="margin-bottom:6px">
         <dt>Latest NAV</dt><dd>${s.nav_value != null ? App.esc(s.nav_value) : "\u2014"} <span class="page-sub">as of ${App.esc(s.nav_date ? App.formatDate(s.nav_date) : "\u2014")} \u00b7 daily</span></dd>
         <dt>Holdings as-of</dt><dd>${App.esc(s.holdings_date ? App.formatDate(s.holdings_date) : "\u2014")} <span class="page-sub">(weekly announcement)</span></dd>
       </div>
       <div class="kv" style="margin-bottom:14px">
-      <div class="kv" style="margin-bottom:14px">
         <dt>Category</dt><dd>${App.badge(s.category)}</dd>
         <dt>Coverage</dt><dd>${App.flagBadge(s.coverage)}</dd>
+        <dt>Confidence</dt><dd>${confBadge(s.confidence)}</dd>
         <dt>Holdings</dt><dd>${App.formatNum(h.length)} (${App.formatNum(s.n_equity)} equity)</dd>
         <dt>AUM</dt><dd>${App.formatINR(s.aum, 1)} cr</dd>
       </div>
@@ -2317,6 +2332,11 @@ function initAdmin() {
       <div class="page-sub">Composite of coverage, completeness, freshness and pipeline telemetry · <span id="dhAt"></span></div>
       <div id="dhBars" style="margin-top:10px"><span class="spin"></span> Loading…</div>
     </div>
+    <div id="relianceCard" class="card" style="margin-bottom:16px">
+      <h3 style="margin-bottom:4px">Data reliance — all schemes <span id="relAvg" class="badge grey">…</span></h3>
+      <div class="page-sub">Per-scheme confidence (source trust − staleness + holdings quality) across the whole catalogue</div>
+      <div id="relBody" style="margin-top:10px"><span class="spin"></span> Loading…</div>
+    </div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <h3 style="margin:0">Refresh pipelines <span id="admSched" class="badge grey"></span></h3>
       <button class="btn btn-outline btn-sm" onclick="initAdmin()">Reload</button>
@@ -2350,6 +2370,7 @@ function dhBandColor(band) {
 async function refreshHealthData() {
   const wrap = document.getElementById("dhBars");
   if (!wrap) return;
+  refreshRelianceData();
   try {
     const h = await App.api("/admin/data-health");
     const el = document.getElementById("dhOverall");
@@ -2373,6 +2394,68 @@ async function refreshHealthData() {
     const o = document.getElementById("dhOverall");
     if (o) { o.className = "badge grey"; o.textContent = "N/A"; }
     wrap.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
+  }
+}
+
+const REL_TIER_LABELS = {green: "High", amber: "Medium", red: "Low", grey: "No data"};
+
+async function refreshRelianceData() {
+  const body = document.getElementById("relBody");
+  if (!body) return;
+  try {
+    const r = await App.api("/admin/reliance");
+    const avgEl = document.getElementById("relAvg");
+    if (!avgEl) return;
+    avgEl.className = "badge " + (r.avg_score >= 80 ? "green" : (r.avg_score >= 55 ? "amber" : "red"));
+    avgEl.textContent = `avg ${r.avg_score != null ? r.avg_score : "—"} · ${App.formatNum(r.total_schemes)} schemes`;
+
+    const total = Math.max(1, r.total_schemes);
+    const tiers = Object.entries(r.tiers || {}).map(([t, n]) => {
+      const col = dhBandColor(t);
+      return `<div style="flex:1;text-align:center">
+        <div style="background:#e8eaed;border-radius:4px;height:8px;overflow:hidden">
+          <div style="width:${Math.round(n / total * 100)}%;height:100%;background:${col}"></div>
+        </div>
+        <div style="font-size:.72rem;margin-top:3px"><b style="color:${col}">${REL_TIER_LABELS[t]}</b> ${App.formatNum(n)} (${Math.round(n / total * 100)}%)</div>
+      </div>`;
+    }).join("");
+
+    const srcRows = Object.entries(r.by_source || {}).sort((a, b) => b[1].count - a[1].count)
+      .map(([src, a]) => `<tr>
+        <td><strong>${App.esc(src)}</strong></td>
+        <td class="num">${App.formatNum(a.count)}</td>
+        <td class="num">${a.avg_score != null ? a.avg_score : "—"}</td>
+        <td class="num">${a.stale_gt_45d ? `<span style="color:#c94f4f">${App.formatNum(a.stale_gt_45d)}</span>` : "0"}</td>
+        <td class="num">${a.avg_isin_pct != null ? a.avg_isin_pct + "%" : "—"}</td>
+      </tr>`).join("") || `<tr><td colspan="5" class="empty">No sources.</td></tr>`;
+
+    const worstRows = (r.worst || []).map(w => `<tr class="clickable" onclick="location.hash='#scheme/${w.id}'">
+        <td>${App.esc(w.fund_name)}</td>
+        <td>${App.esc(w.amc)}</td>
+        <td>${App.esc(w.source || "none")}</td>
+        <td class="mono">${App.formatDate(w.as_of)}</td>
+        <td class="num"><span class="badge red">${w.score}</span></td>
+      </tr>`).join("") || `<tr><td colspan="5" class="empty">Nothing below threshold — good.</td></tr>`;
+
+    body.innerHTML = `
+      <div style="display:flex;gap:14px;margin-bottom:12px;flex-wrap:wrap">${tiers}</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:300px">
+          <table class="data"><thead><tr><th>Source</th><th class="r">Schemes</th><th class="r">Avg score</th><th class="r">Stale &gt;45d</th><th class="r">Avg ISIN</th></tr></thead>
+          <tbody>${srcRows}</tbody></table>
+        </div>
+        <div style="flex:1;min-width:300px">
+          <h4 style="margin:2px 0 6px">Least reliable schemes</h4>
+          <div class="table-wrap" style="max-height:240px;overflow:auto">
+            <table class="data"><thead><tr><th>Scheme</th><th>AMC</th><th>Source</th><th>As of</th><th class="r">Score</th></tr></thead>
+            <tbody>${worstRows}</tbody></table>
+          </div>
+        </div>
+      </div>`;
+  } catch (e) {
+    const avgEl = document.getElementById("relAvg");
+    if (avgEl) { avgEl.className = "badge grey"; avgEl.textContent = "N/A"; }
+    body.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
   }
 }
 

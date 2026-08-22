@@ -251,6 +251,12 @@ def api_schemes(request: Request):
         sector=p.get("sector"),
         is_index=_opt_bool(p.get("is_index")), is_etf=_opt_bool(p.get("is_etf")),
         limit=limit, offset=offset)
+    items = data.get("items") or []
+    if items:
+        from webapp import data_health
+        stats = get_db().holdings_stats([s["id"] for s in items])
+        for s in items:
+            s["confidence"] = data_health.scheme_confidence(s, stats.get(s["id"]))
     return data
 
 
@@ -297,6 +303,12 @@ def api_scheme_detail(scheme_id: int, request: Request, holdings: int = 0):
     out["nav_date"] = nav_date
     out["nav_value"] = nav_value
     out["holdings_date"] = out.get("as_of") or None
+    try:
+        from webapp import data_health
+        st = get_db().holdings_stats([scheme_id]).get(scheme_id)
+        out["confidence"] = data_health.scheme_confidence(out, st)
+    except Exception:
+        pass
     if holdings:
         out["holdings"] = get_db().scheme_holdings(scheme_id)
     return out
@@ -729,6 +741,14 @@ def admin_data_health_history(request: Request, limit: int = 100):
     _require_superadmin(request)
     from webapp import data_health
     return {"items": data_health.read_history(max(1, min(limit, 500)))}
+
+
+@app.get("/api/admin/reliance")
+def admin_reliance(request: Request):
+    """Per-scheme data-confidence rollup across ALL schemes."""
+    _require_superadmin(request)
+    from webapp import data_health
+    return data_health.reliance_metrics(get_db())
 
 
 @app.get("/api/admin/refresh-logs")

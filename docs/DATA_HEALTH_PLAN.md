@@ -63,6 +63,27 @@ per-component bars, failing components link to Run-now actions.
 Each fresh computation appends a snapshot to `data/logs/data_health.jsonl`
 (same R2 push treatment as refresh_state).
 
+## Per-scheme confidence badge + reliance metrics (added 22-Aug)
+
+**Scheme Explorer / scheme drawer** — every scheme now carries `confidence`
+in its API payload (webapp/data_health.py `scheme_confidence()`):
+
+- score = source base (amfi 100 · amc_website 88 · index 85 · advisorkhoj 62)
+  − disclosure-age penalty (0 ≤35d … −48 >180d, MF-A2 territory), blended
+  70/30 with holdings quality (ISIN% + %NAV coverage of its holdings rows);
+- tiers: **high ≥80** green · **medium ≥55** amber · **low <55** red ·
+  grey "no data" for no_disclosure/missing;
+- hover tooltip shows source, disclosure age, ISIN coverage; the drawer also
+  lists it as a Confidence row.
+- `/api/schemes` enriches each page via one batched SQL aggregate
+  (`WebDB.holdings_stats`, webapp/db.py); `/api/schemes/{id}` too.
+
+**Superadmin Admin tab → "Data reliance" card** (`GET /api/admin/reliance`,
+superadmin-gated): tier distribution across ALL schemes, avg score,
+per-source table (schemes, avg score, stale >45d count, avg ISIN%), and a
+clickable least-reliable-schemes list. Feeds remediation directly (MF-A2 /
+MF-A3 backlog).
+
 ## Verification (22-Aug-2026)
 - `compileall` / AST clean across `src`, `webapp`, `deploy`; `node --check app.js` OK.
 - Telemetry round-trip: `record()` → `refresh_state.json` written → `summary()`
