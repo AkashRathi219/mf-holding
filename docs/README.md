@@ -31,11 +31,15 @@ Everything documented lives here (`docs/`). Root keeps only `README.md` and
 | [CLIENT_PORTFOLIOS.md](CLIENT_PORTFOLIOS.md) | Client portfolios feature |
 | [DATA_HEALTH_PLAN.md](DATA_HEALTH_PLAN.md) | Data-health score + refresh telemetry design |
 
+| [DECISIONS.md](DECISIONS.md) | Append-only product/engineering decision log |
+| [NAMING_BRAND_ARCHITECTURE.md](NAMING_BRAND_ARCHITECTURE.md) | Product naming (Pulse family), brand critique, subdomain architecture |
+
 ## Ops trackers
 
 | Doc | What it covers |
 |---|---|
 | [APP_REVIEW_ACTIONS.md](APP_REVIEW_ACTIONS.md) | Review action points & status |
+| [plans/EXECUTION_TRACKER.md](plans/EXECUTION_TRACKER.md) | Living task status — parsed by `scripts/tracker_status.py` |
 
 ## Build plans (`plans/`) — approved roadmaps
 
@@ -43,6 +47,7 @@ Everything documented lives here (`docs/`). Root keeps only `README.md` and
 |---|---|
 | [PLAN_SEO_LANDING_PAGES.md](plans/PLAN_SEO_LANDING_PAGES.md) | ✅ BUILT — see `website/` |
 | [PLAN_TRY_APP.md](plans/PLAN_TRY_APP.md) | READY TO BUILD — retail trial micro-app (CAS upload → report card → WhatsApp loop) |
+| [PLAN_TASK_BACKLOG.md](plans/PLAN_TASK_BACKLOG.md) | AUDIT 23-Aug-2026 — incomplete tasks & priority order |
 | [PLAN_PERFORMANCE_ANALYTICS.md](plans/PLAN_PERFORMANCE_ANALYTICS.md) | QUEUED — rolling returns / Sharpe / Sortino / IR engine |
 
 ## Website deliverables (`../website/`) — GHOST pages for search/AI discovery
