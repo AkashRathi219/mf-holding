@@ -19,3 +19,12 @@ next UX pass.
    to its official website and report/factsheet download pages, generated from
    `config/amc_registry.json` (maintained by the monthly AMC-direct link-capture
    pipeline). Static HTML, no backend; ships with the website cluster (task W1).
+
+## 2026-08-23 · D3 — Pulse family adopted; this product becomes FundPulse
+Per `NAMING_BRAND_ARCHITECTURE.md`: Aracharat Ventures products share the
+**…Pulse** suffix. MF holdings analytics = **FundPulse**
+(`fundpulse.aracharatventures.com`); AccessPulse stays reserved for the PwD
+accessibility platform; SensePulse for IoT monitoring. Rename execution is
+deferred and tracked as **R1** in the execution tracker (touch-point checklist
+in the naming doc §4). Until R1 lands, UI/docs keep "Factsheet Engine AI".
+

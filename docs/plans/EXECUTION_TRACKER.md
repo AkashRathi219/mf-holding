@@ -26,10 +26,10 @@ Commits tag task IDs: `fix(scheduler): ... [S2c]`. `Blocked` rows stale >7 d nee
 | S3 | Health deep probe (503 on dead DB) | 1 | done | F8 | 23-Aug | 23-Aug | tests/test_smoke.py::test_health_deep_probe | db probe + r2/scheduler checks, 10s cache, 503 path tested | — |
 | S4 | Feedback durability + admin reader | 1 | done | F8 | 23-Aug | 23-Aug | tests/test_feedback.py | atomic+locked writes, R2 restore/push, GET /api/admin/feedback | — |
 | S5 | CapSolver env-var mechanism + runbook | 1 | done | — | 23-Aug | 23-Aug | tests/test_captcha_env.py | api_key blanked, api_key_env indirection, DEPLOY_RAILWAY runbook added | — |
-| H1 | Login/register rate limiting | 2 | todo | — | 23-Aug | 23-Aug | tests/test_auth_hardening.py::test_rate_limit | — | — |
-| H2 | Token revocation (token_version) | 2 | todo | — | 23-Aug | 23-Aug | tests/test_auth_hardening.py::test_revocation | — | — |
-| H3 | CORS allowlist middleware | 2 | todo | — | 23-Aug | 23-Aug | tests/test_auth_hardening.py::test_cors | — | — |
-| H4 | Secret caching + loud prod failure | 2 | todo | — | 23-Aug | 23-Aug | tests/test_auth_hardening.py::test_secret_hygiene | — | — |
+| H1 | Login/register rate limiting | 2 | done | — | 23-Aug | 23-Aug | tests/test_auth_hardening.py::test_login_rate_limited | webapp/ratelimit.py sliding window (10/5m login, 5/h register), XFF-aware, reusable for Try App | — |
+| H2 | Token revocation (token_version) | 2 | done | — | 23-Aug | 23-Aug | tests/test_auth_hardening.py::test_logout_all_revokes_existing_tokens | users.token_version + tv claim + POST /api/auth/logout-all kill switch; ALTER-guard migration | — |
+| H3 | CORS allowlist middleware | 2 | done | — | 23-Aug | 23-Aug | tests/test_auth_hardening.py::test_cors_allowlisted_origin_gets_headers | _add_cors() env-driven (CORS_ORIGINS); default off; unblocks WEB1/TRY1 | — |
+| H4 | Secret caching + loud prod failure | 2 | done | — | 23-Aug | 23-Aug | tests/test_auth_hardening.py::test_secret_missing_in_prod_fails_loudly | process-level cache (no disk read per request); prod RuntimeError instead of silent auto-generate | — |
 | U1 | Orphaned screens wiring/deletion | 3 | parked | — | 23-Aug | 23-Aug | — | DECISIONS.md D1 | revisit at Try App launch / UX pass |
 | U2 | Route fallback → 404 panel | 3 | todo | — | 23-Aug | 23-Aug | tests/test_routing_ui.py::test_unknown_hash | — | — |
 | U3 | MF-A2 stale badge in UI | 3 | todo | — | 23-Aug | 23-Aug | tests/test_stale_badge.py | — | — |
@@ -39,7 +39,8 @@ Commits tag task IDs: `fix(scheduler): ... [S2c]`. `Blocked` rows stale >7 d nee
 | D3 | Sourcing decision doc (~32 index/commodity rows) | 4 | todo | — | 23-Aug | 23-Aug | docs/DATA_SOURCES_RESEARCH.md section | — | procurement decision needed |
 | D4 | Correct ~89/~209 figures in trackers | 4 | todo | — | 23-Aug | 23-Aug | grep shows no stale counts | — | — |
 | TRY1 | Try App Phases 1-3 build | 5 | blocked | H1, H3, S4 | 23-Aug | 23-Aug | PLAN_TRY_APP checklist | — | needs real CAS PDF fixture + production URL |
-| WEB1 | Replace placeholders in website/*.html | 6 | blocked | — | 23-Aug | 23-Aug | zero TODO/YOURSITE hits | — | needs production domain |
+| R1 | Rebrand product: Factsheet Engine AI → FundPulse | 6 | todo | — | 23-Aug | 23-Aug | grep sweep: zero 'Factsheet Engine AI' hits repo-wide | checklist: docs/NAMING_BRAND_ARCHITECTURE.md §4 | — |
+| WEB1 | Replace placeholders in website/*.html | 6 | blocked | — | 23-Aug | 23-Aug | zero TODO/YOURSITE hits | — | needs production domain (fundpulse.aracharatventures.com) |
 | WEB2 | Waitlist endpoint POST /api/try/waitlist + R2 persist | 6 | todo | H3 | 23-Aug | 23-Aug | tests/test_waitlist.py | — | — |
 | W1 | AMC Report Directory page from amc_registry.json | 6 | todo | — | 23-Aug | 23-Aug | scripts/build_amc_directory.py output | — | — |
 | ANA1 | Scheme metrics engine (/analytics endpoint) | 7 | todo | — | 23-Aug | 23-Aug | metrics unit tests vs hand-computed | — | rf-source decision |

@@ -19,6 +19,8 @@ from pydantic import BaseModel, Field
 
 from . import auth, db
 from .log import get_logger, request_logging_middleware
+from .ratelimit import (AUTH_LOGIN_LIMITER, AUTH_REGISTER_LIMITER,  # [H1]
+                        enforce)
 from .remote_store import ensure as remote_ensure
 from src.stock_refresh import refresh_all  # stdlib-only chain; scheduler wiring
 from .tools_api import router as tools_router
@@ -33,6 +35,37 @@ SUPERADMIN_EMAILS = {e.strip().lower() for e in os.environ.get(
 
 app = FastAPI(title="Factsheet Engine AI", docs_url="/api/docs", openapi_url="/api/openapi.json")
 app.include_router(tools_router)
+
+
+def _add_cors(app, origins: str | None = None) -> None:
+    """[H3] Cross-origin API access for the marketing site, env-driven.
+
+    Set CORS_ORIGINS="https://aracharatventures.com,https://www.…". Empty
+    (default) = same-origin only, no CORS headers at all. Credentials stay
+    disabled — auth is header-based (Authorization/X-Auth-Token), not cookies.
+    """
+    from fastapi.middleware.cors import CORSMiddleware
+
+    raw = origins if origins is not None else os.environ.get("CORS_ORIGINS", "")
+    allowed = [o.strip() for o in raw.split(",") if o.strip()]
+    if not allowed:
+        return
+    if "*" in allowed:
+        log.warning("CORS_ORIGINS contains '*' — allowing all origins; "
+                    "prefer an explicit allowlist in production")
+        allowed = ["*"]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Auth-Token",
+                       "X-Request-ID"],
+        max_age=86400,
+    )
+
+
+_add_cors(app)
 
 
 # --------------------------------------------------------------------------
@@ -246,7 +279,8 @@ def _require_user(request: Request) -> dict:
 # --------------------------------------------------------------------------
 
 @app.post("/api/auth/register")
-def api_register(body: RegisterIn):
+def api_register(request: Request, body: RegisterIn):
+    enforce(AUTH_REGISTER_LIMITER, request)  # [H1]
     try:
         return auth.register_user(body.email, body.name, body.org, body.password)
     except auth.AuthError as e:
@@ -254,11 +288,21 @@ def api_register(body: RegisterIn):
 
 
 @app.post("/api/auth/login")
-def api_login(body: LoginIn):
-    try:
+def api_login(request: Request, body: LoginIn):
+    enforce(AUTH_LOGIN_LIMITER, request)  # [H1] PBKDF2@200k makes unthrottled
+    try:  # attempts a cheap CPU-exhaustion vector as well as a brute-force one
         return auth.login_user(body.email, body.password)
     except auth.AuthError as e:
         raise HTTPException(status_code=401, detail=str(e))
+
+
+@app.post("/api/auth/logout-all")
+def api_logout_all(request: Request):
+    """Kill switch [H2]: invalidates EVERY token issued to this user."""
+    user = _require_user(request)
+    auth.revoke_user_tokens(user["id"])
+    log.info("tokens revoked for user %s", user.get("email"))
+    return {"status": "ok", "revoked": True}
 
 
 @app.get("/api/auth/me")
