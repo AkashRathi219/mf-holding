@@ -112,3 +112,35 @@ Verify what's actually running: `GET /api/version` (commit SHA),
 `GET /api/health` (db/scheduler/r2 flags). CI runs a container-parity
 boot check (`boot-slim` job) on every push so import/deps regressions are
 caught before they land here.
+
+## Public URL & custom domain (Hostinger)
+
+Railway never exposes a service publicly until you generate a domain:
+service → **Settings → Networking → Generate Domain** → port **8080**.
+Copy the EXACT name shown (it includes a random suffix, e.g.
+`mf-holding-production-a1b2c3.up.railway.app`) — guessing the name yields
+DNS_PROBE_FINISHED_NXDOMAIN even though the app runs.
+
+### Pointing fundpulse.aracharatventures.com (Hostinger + Google Workspace)
+
+1. **Railway first:** Settings → Networking → **Custom Domain** → enter
+   `fundpulse.aracharatventures.com`. Railway displays a **CNAME target**
+   (`<something>.up.railway.app`). Keep this tab open.
+2. **Hostinger:** hPanel → Domains → `aracharatventures.com` →
+   **DNS / Nameservers** → add record:
+   | Type | Name | Points to | TTL |
+   |---|---|---|---|
+   | CNAME | `fundpulse` | *(the Railway CNAME target from step 1)* | auto |
+3. Back in Railway, click **Verify/Save**. TLS certificate issues
+   automatically once DNS propagates (minutes to ~1 h).
+4. **Do NOT touch** existing MX/SPF/DKIM records — Google Workspace mail is
+   unaffected by adding one CNAME. Leave nameservers on Hostinger defaults
+   unless you deliberately move them.
+5. When it resolves: set this URL as the production reference everywhere
+   (`SITE_URL`, website placeholders — see task WEB1), and redeploy if any
+   env var references changed.
+
+Troubleshooting: `dig fundpulse.aracharatventures.com CNAME` (or
+nslookup) should return the Railway target; ERR_SSL before cert issuance is
+normal for the first few minutes; if Railway says "domain already taken"
+you may have added it under another project/environment.
