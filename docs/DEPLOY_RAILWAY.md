@@ -113,6 +113,25 @@ Verify what's actually running: `GET /api/version` (commit SHA),
 boot check (`boot-slim` job) on every push so import/deps regressions are
 caught before they land here.
 
+## Railway CLI
+
+```powershell
+npm install -g @railway/cli        # once (already done on the workstation)
+railway login                      # opens browser; or: railway login --browserless
+railway link                       # pick project mf-holding + environment production
+railway status                     # confirms linked service + URL
+railway logs                       # live deploy/runtime logs (--build for build stage)
+railway variables                  # list env vars of the linked environment
+railway variables --set "SECRET_KEY=…"   # set/update without opening the dashboard
+railway redeploy                   # fresh deploy of the current pinned commit
+railway up                         # deploy THIS working directory directly (bypasses git)
+railway run -- python -m uvicorn webapp.main:app   # run locally WITH production env vars injected
+```
+
+Notes: `railway link` settings persist per-directory in `.railway/`
+(gitignored). `railway up` is handy for hotfixes but git-push remains the
+canonical deploy path — always land changes on main too.
+
 ## Public URL & custom domain (Hostinger)
 
 Railway never exposes a service publicly until you generate a domain:
