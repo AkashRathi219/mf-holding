@@ -102,8 +102,10 @@ def _apply_event(pipes: dict, e: dict) -> None:
     if status == "started":
         p["last_started"] = e.get("ts")
         return
-    if status == "success":
-        p["last_status"], p["last_ts"] = "success", e.get("ts")
+    if status == "success" or status == "alive":
+        # 'alive' = scheduler heartbeat [S2f]; treated as success so liveness
+        # flows into the standard last-fetched rollup + 24h counters.
+        p["last_status"], p["last_ts"] = status, e.get("ts")
     elif status == "error":
         # newest failure wins unless a newer success was already recorded
         if p.get("last_status") != "success":

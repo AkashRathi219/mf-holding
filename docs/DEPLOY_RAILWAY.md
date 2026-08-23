@@ -58,3 +58,28 @@ Local equivalents live in `deploy/.env` (gitignored) for the upload tooling.
 - `python deploy/prepare_data.py`  → staged 8,587 files / 826 MB
 - `python deploy/upload_r2.py`     → 1 object changed (updated bond catalog), manifest updated
 - commit + `git push origin main`  → Railway redeploys and boots on the fresh snapshot
+
+## Activating CapSolver (captcha solving) — currently INACTIVE
+
+The captcha solver is **disabled**: no key is configured. The key never lives in
+`config/settings.yaml` (the previously committed value was removed; it is
+considered burned — rotate at CapSolver when activating).
+
+1. Create/copy a key at <https://dashboard.capsolver.com> (rotate if reusing the old one).
+2. Railway service → **Variables** → add:
+   ```
+   CAPSOLVER_API_KEY=CAP-…
+   ```
+3. Redeploy (option 2 above). Verify: container logs show no
+   "Captcha solver not configured" warning on Kotak adapter runs.
+4. Deactivate by deleting the variable. `config/settings.yaml` needs no change —
+   it only names the env var (`captcha.api_key_env`).
+
+## Enabling the in-process scheduler
+
+Set `ENABLE_SCHEDULER=1` on the Railway service **only together with** the slim
+requirements that include `pyyaml`, `apscheduler`, `httpx` (they are, since
+23-Aug-2026). Startup is guarded: an import failure now degrades to a logged
+error instead of crash-looping the deployment [S2b]. Confirm health via
+`GET /api/admin/refresh-summary` → `pipelines.scheduler.last_status == "alive"`
+and `/api/health` → `checks.scheduler.ok`.

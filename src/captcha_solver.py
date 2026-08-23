@@ -54,8 +54,15 @@ class CaptchaSolver:
     @classmethod
     def from_config(cls, config: dict | None = None) -> "CaptchaSolver":
         cfg = config if config is not None else load_captcha_config()
+        # Key resolution: explicit value -> env var named by `api_key_env`
+        # [S5]. Secrets never live in settings.yaml (mirrors the ai: block).
+        api_key = str(cfg.get("api_key") or "").strip()
+        if not api_key:
+            import os
+            env_name = cfg.get("api_key_env") or "CAPSOLVER_API_KEY"
+            api_key = os.environ.get(env_name, "").strip()
         return cls(service=cfg.get("service", "capsolver"),
-                   api_key=cfg.get("api_key", ""),
+                   api_key=api_key,
                    timeout=int(cfg.get("timeout", 180)))
 
     def is_configured(self) -> bool:

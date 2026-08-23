@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -17,11 +18,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import auth, db
+from .log import get_logger, request_logging_middleware
 from .remote_store import ensure as remote_ensure
+from src.stock_refresh import refresh_all  # stdlib-only chain; scheduler wiring
 from .tools_api import router as tools_router
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
+
+log = get_logger("main")
 
 SUPERADMIN_EMAILS = {e.strip().lower() for e in os.environ.get(
     "SUPERADMIN_EMAILS", "akash@aracharatventures.com").split(",") if e.strip()}
@@ -40,7 +45,13 @@ _job_runner_started = False
 def _amfi_job() -> dict:
     from src.refresh_log import track
     with track("amfi_fetch") as _meta:
-        from webapp.amfi_fetch import fetch_mfdata, save
+        try:
+            from webapp.amfi_fetch import fetch_mfdata, save
+        except Exception as e:  # missing dep must surface, not vanish [S2e]
+            log.warning("amfi_fetch unavailable: %s", e,
+                        extra={"path": "/job/amfi_fetch", "status": 0})
+            _meta["error"] = f"import failed: {e}"
+            return {"error": str(e)[:120]}
         data = fetch_mfdata()
         paths = save(data, "latest") if data else []
         _meta.update(amcs=len(data), files=len(paths))
@@ -81,8 +92,12 @@ def _bond_job() -> dict:
                 "bonds": catalog["n_bonds"]}
 
 
-def _nav_job() -> dict:
-    """Daily NAV refresh + per-scheme gap-fill from last-known date to today."""
+def _nav_job(days: int = 7) -> dict:
+    """Daily NAV refresh + per-scheme gap-fill from last-known date to today.
+
+    Accepts ``days`` because the scheduler resolves the lookback window from
+    settings (``scheduler.nav_refresh.days``) and passes it here [S2c].
+    """
     from src.refresh_log import track
     with track("nav_daily", mode="scheduled") as meta:
         try:
@@ -92,7 +107,7 @@ def _nav_job() -> dict:
             pass
         from src.nav_daily import (_update_latest_navs_impl,
                                    fill_gaps_from_last_known)
-        s1 = _update_latest_navs_impl(days=7)  # impl: no nested telemetry event
+        s1 = _update_latest_navs_impl(days=days)  # impl: no nested telemetry event
         meta.update(s1)
         gaps = fill_gaps_from_last_known()
         meta.update({f"gap_{k}": v for k, v in gaps.items()})
@@ -116,34 +131,44 @@ def _noop_pipeline(*args, **kwargs) -> None:
 
 
 def _start_scheduler_thread() -> None:
-    """Run the cron jobs inside the web process when ENABLE_SCHEDULER=1."""
+    """Run the cron jobs inside the web process when ENABLE_SCHEDULER=1.
+
+    Import failures here must never take the web tier down [S2b]: the
+    startup hook wraps this call, and the thread body logs instead of dying
+    silently.
+    """
     global _job_runner_started
     if _job_runner_started or os.environ.get("ENABLE_SCHEDULER") != "1":
         return
     import asyncio
 
-    import yaml
-
-    from src.scheduler import MonthlyScheduler
+    try:
+        import yaml  # noqa: F401  (declared so a missing dep fails loudly HERE)
+        from src.scheduler import MonthlyScheduler
+    except Exception as e:
+        log.error("scheduler disabled — dependency import failed: %s", e)
+        return
 
     def _loop() -> None:
         async def runner() -> None:
-            config = {}
-            cfg_path = BASE_DIR.parent / "config" / "settings.yaml"
             try:
-                config = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+                config = {}
+                cfg_path = BASE_DIR.parent / "config" / "settings.yaml"
+                try:
+                    config = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+                except Exception as e:
+                    log.warning("settings.yaml unreadable, scheduler defaults in use: %s", e)
+                sched = MonthlyScheduler(
+                    _noop_pipeline, config, base_dir=BASE_DIR.parent,
+                    nav_refresh_fn=_nav_job,
+                    stock_refresh_fn=refresh_all,
+                    bond_refresh_fn=_bond_job,
+                    amfi_fn=_amfi_job,
+                )
+                sched.start()
             except Exception:
-                pass
-            from src.nav_daily import update_latest_navs
-            from src.stock_refresh import refresh_all
-            sched = MonthlyScheduler(
-                _noop_pipeline, config, base_dir=BASE_DIR.parent,
-                nav_refresh_fn=_nav_job,
-                stock_refresh_fn=refresh_all,
-                bond_refresh_fn=_bond_job,
-                amfi_fn=_amfi_job,
-            )
-            sched.start()
+                log.exception("scheduler failed to start; continuing without cron jobs")
+                return
             while True:
                 await asyncio.sleep(3600)
 
@@ -155,7 +180,15 @@ def _start_scheduler_thread() -> None:
 
 @app.on_event("startup")
 def _on_startup() -> None:
-    _start_scheduler_thread()
+    try:  # [S2b] a dead scheduler must degrade, never brick the deployment
+        _start_scheduler_thread()
+    except Exception:
+        log.exception("scheduler startup failed; web tier continues without it")
+
+
+@app.middleware("http")
+async def _request_logging(request: Request, call_next):
+    return await request_logging_middleware(request, call_next)
 
 
 @app.middleware("http")
@@ -456,33 +489,72 @@ def api_portfolio_analysis(request: Request, body: dict):
     return pa
 
 
+FEEDBACK_PATH = BASE_DIR.parent / "data" / "feedback.json"
+FEEDBACK_R2_KEY = "logs/feedback.json"
+_feedback_lock = threading.Lock()
+
+
+def _load_feedback() -> list:
+    """Read feedback records, restoring from R2 on a fresh container [S4]."""
+    try:
+        if not FEEDBACK_PATH.exists():
+            remote_ensure(FEEDBACK_R2_KEY, dest=FEEDBACK_PATH)
+    except Exception as e:
+        log.warning("feedback R2 restore failed: %s", e)
+    records: list = []
+    if FEEDBACK_PATH.exists():
+        try:
+            loaded = json.loads(FEEDBACK_PATH.read_text(encoding="utf-8"))
+            if isinstance(loaded, list):
+                records = loaded
+        except Exception as e:
+            log.warning("feedback.json unreadable, starting clean: %s", e)
+            records = []
+    return records
+
+
 @app.post("/api/feedback")
 def api_feedback(request: Request, body: dict):
-    """Capture feature-feedback from the portfolio tools (appended to data/feedback.json)."""
+    """Capture feature-feedback (portfolio tools + try page) into
+    data/feedback.json — atomic write, lock-protected, best-effort pushed to
+    R2 so submissions survive redeploys [S4]."""
     user = _require_user(request)
     message = (body.get("message") or "").strip()
     if not message:
         raise HTTPException(status_code=400, detail="Feedback message is required.")
-    from datetime import datetime
-    from pathlib import Path
-    import json
-    # repo-root data/ (not webapp/data/) so all app data stays under one tree
-    path = BASE_DIR.parent / "data" / "feedback.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    records = []
-    if path.exists():
-        try:
-            records = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            records = []
-    records.append({
+    entry = {
         "at": datetime.now().isoformat(timespec="seconds"),
         "user": (user.get("email") or user.get("name") or ""),
         "message": message,
         "context": body.get("context") or "",
-    })
-    path.write_text(json.dumps(records, indent=2, ensure_ascii=False), encoding="utf-8")
+    }
+    with _feedback_lock:
+        records = _load_feedback()
+        records.append(entry)
+        try:
+            FEEDBACK_PATH.parent.mkdir(parents=True, exist_ok=True)
+            tmp = FEEDBACK_PATH.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(records, indent=2, ensure_ascii=False),
+                           encoding="utf-8")
+            tmp.replace(FEEDBACK_PATH)
+        except Exception as e:
+            log.error("feedback write failed: %s", e)
+            raise HTTPException(status_code=500, detail="Could not store feedback.")
+        try:
+            from .remote_store import is_configured, upload_object
+            if is_configured():
+                upload_object(FEEDBACK_R2_KEY, FEEDBACK_PATH)
+        except Exception as e:  # local copy remains the source of truth
+            log.warning("feedback R2 push failed: %s", e)
     return {"status": "ok", "total": len(records)}
+
+
+@app.get("/api/admin/feedback")
+def admin_feedback(request: Request, limit: int = 200):
+    """Reader side of the feedback loop [L3] — newest last."""
+    _require_superadmin(request)
+    records = _load_feedback()
+    return {"total": len(records), "items": records[-max(1, min(limit, 1000)):]}
 
 
 @app.post("/api/proposal")
@@ -689,16 +761,77 @@ def api_filters(request: Request):
     }
 
 
+_health_cache: tuple[float, dict] | None = None
+_HEALTH_TTL_S = 10.0
+
+
+def _health_probe() -> dict:
+    """Deep readiness probe [S3]: the deployment gate must reflect reality.
+
+    Hard-fails (503) only when the primary DB is unreadable/empty — that is
+    the one condition where serving traffic is pointless. R2 config and
+    scheduler heartbeat are reported informationally.
+    """
+    checks: dict = {}
+    ok = True
+    try:
+        wdb = get_db()
+        n_schemes = wdb.con.execute("SELECT COUNT(*) FROM schemes").fetchone()[0]
+        checks["db"] = {"ok": n_schemes > 0, "schemes": n_schemes}
+        if n_schemes <= 0:
+            ok = False
+    except Exception as e:
+        log.error("health probe: DB unreadable: %s", e)
+        checks["db"] = {"ok": False, "error": str(e)[:120]}
+        ok = False
+    from .remote_store import is_configured
+    checks["r2_configured"] = is_configured()
+    hb_age = _scheduler_heartbeat_age_s()
+    checks["scheduler"] = {
+        "enabled": os.environ.get("ENABLE_SCHEDULER") == "1",
+        "heartbeat_age_s": hb_age,
+        "ok": hb_age is not None and hb_age < 25 * 3600,
+    }
+    return {"status": "ok" if ok else "degraded", "checks": checks,
+            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+
+
+def _scheduler_heartbeat_age_s() -> float | None:
+    """Seconds since the scheduler last recorded an 'alive' heartbeat (S2f)."""
+    try:
+        from src.refresh_log import read_state
+        entry = (read_state().get("pipelines") or {}).get("scheduler") or {}
+        ts = entry.get("last_ts")
+        if not ts:
+            return None
+        ist = timezone(timedelta(hours=5, minutes=30))
+        dt = datetime.fromisoformat(ts)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=ist)
+        return round((datetime.now(ist) - dt).total_seconds(), 1)
+    except Exception:
+        return None
+
+
 @app.get("/api/health")
 def api_health():
-    return {"status": "ok"}
+    global _health_cache
+    import time as _time
+    now = _time.monotonic()
+    if _health_cache and (now - _health_cache[0]) < _HEALTH_TTL_S:
+        payload = _health_cache[1]
+    else:
+        payload = _health_probe()
+        _health_cache = (now, payload)
+    if payload["status"] != "ok":
+        return JSONResponse(status_code=503, content=payload)
+    return payload
 
 
 @app.get("/api/version")
 def api_version():
     """Which exact build is serving this request (Railway injects the git SHA)."""
-    from datetime import timedelta, timezone
-    ist = timezone(timedelta(hours=5, minutes=30))
+    ist = timezone(timedelta(hours=5, minutes=30))  # [S1] datetime now module-level
     return {
         "commit": os.environ.get("RAILWAY_GIT_COMMIT_SHA", ""),
         "service": os.environ.get("RAILWAY_SERVICE_NAME", ""),

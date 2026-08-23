@@ -79,9 +79,12 @@ logging:
   level: INFO
 
 # Third-party captcha solving (used by adapters for captcha-protected sites
-# like Kotak). Leave api_key empty to disable and rely on manual ingest.
-# Get a key from https://dashboard.capsolver.com or https://2captcha.com
+# like Kotak). INACTIVE: no key configured. The key NEVER lives in this file —
+# set the CAPSOLVER_API_KEY environment variable to activate (see
+# docs/DEPLOY_RAILWAY.md, "Activating CapSolver"). Get a key from
+# https://dashboard.capsolver.com or https://2captcha.com
 captcha:
   service: capsolver
-  api_key: "CAP-1A181F2E9903A37E63293EFB1502F8EF17A2EC787E24259330A146FF9A28A096"
+  api_key: ""
+  api_key_env: CAPSOLVER_API_KEY   # [S5] env-var indirection; empty = disabled
   timeout: 180

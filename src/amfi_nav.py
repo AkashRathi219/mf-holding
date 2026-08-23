@@ -182,9 +182,10 @@ class AmfiNav:
 
     @staticmethod
     def default_path() -> Path:
-        from src.pdf_agents import PROJECT_ROOT
-
-        return PROJECT_ROOT / "data" / "universe" / "navall.txt"
+        # PROJECT_ROOT is repo root; do NOT import it from src.pdf_agents —
+        # that module pulls the whole PyMuPDF/pandas stack and would make the
+        # slim web image unable to even resolve this path (slim-deps guard).
+        return Path(__file__).resolve().parent.parent / "data" / "universe" / "navall.txt"
 
 
 _DEFAULT: AmfiNav | None = None

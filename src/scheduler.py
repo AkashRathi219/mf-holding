@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -176,7 +177,12 @@ class MonthlyScheduler:
         logger.info(f"Scheduler triggered at {now}")
 
         try:
-            await self.pipeline_fn(year=now.year, month=now.month)
+            # pipeline_fn may be sync (webapp wiring) or async (CLI wiring);
+            # run both correctly instead of awaiting a plain function [S2d].
+            if inspect.iscoroutinefunction(self.pipeline_fn):
+                await self.pipeline_fn(year=now.year, month=now.month)
+            else:
+                await asyncio.to_thread(self.pipeline_fn, year=now.year, month=now.month)
             marker.parent.mkdir(parents=True, exist_ok=True)
             marker.touch()
             logger.info("Scheduled pipeline completed successfully")
@@ -227,7 +233,24 @@ class MonthlyScheduler:
     def start(self):
         self.setup()
         self.scheduler.start()
+        self._record_heartbeat()
         logger.info("Scheduler started")
+
+    def _record_heartbeat(self) -> None:
+        """Telemetry heartbeat so 'never scheduled' is distinguishable from
+        'never ran' [S2f]: surfaces in /api/admin/refresh-summary and the
+        /api/health scheduler check. Must never break startup."""
+        try:
+            jobs = []
+            for job in self.scheduler.get_jobs():
+                nxt = job.next_run_time.isoformat(timespec="seconds") if job.next_run_time else None
+                jobs.append({"id": job.id, "name": job.name, "next_run_at": nxt})
+            from src.refresh_log import record
+            record("scheduler", "alive", jobs=jobs,
+                   next_wakeup=min((j["next_run_at"] for j in jobs
+                                    if j["next_run_at"]), default=None))
+        except Exception:
+            logger.exception("scheduler heartbeat recording failed")
 
     def stop(self):
         self.scheduler.shutdown()
