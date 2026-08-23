@@ -36,8 +36,8 @@ Legend: ✅ shipped · 🟡 partial · ⬜ open
 | Action | Status |
 |---|---|
 | MF-A1 Wire AMFI/mfdata tier-1 ingestion into CLI + scheduler; per-AMC files match db reader | ✅ `amfi-fetch` command + monthly job (days 8–12) |
-| MF-A2 Flag stale Advisorkhoj-only schemes (>180d) in UI | ⬜ open |
-| MF-A3 Reconcile ~209 active funds without coverage vs `reconciled_active_download.csv` | ⬜ open (data task) |
+| MF-A2 Flag stale Advisorkhoj-only schemes (>180d) in UI | ✅ 23-Aug — `scheme_confidence.stale` flag + red "· stale" badge (list + detail) |
+| MF-A3 Reconcile ~209 active funds without coverage vs `reconciled_active_download.csv` | 🟡 **2 funds left** (HDFC Credit Risk Debt, UTI Credit Risk); discovery backlog pruned 46 → 32 on 23-Aug (14 equity-Nifty ETFs resolved via index_resolver, DB rebuilt) |
 | MF-A4 Universe name-matcher improvements | 🟡 index-resolver boundaries fixed; fund-name matcher untouched |
 | STK-A1 Backfill 1 non-fresh stock file; inspect 2 gap files | ⬜ open (minor) |
 | BUG `stock-status --json` flag shadowed `json` module | ✅ renamed param |
@@ -66,8 +66,8 @@ Legend: ✅ shipped · 🟡 partial · ⬜ open
 
 ## Still open (next up)
 
-1. ⬜ MF-A2 stale-scheme badge in UI
-2. ⬜ MF-A3 ingest/reconcile the ~209 uncovered active funds
+1. ✅ ~~MF-A2 stale-scheme badge in UI~~ — shipped 23-Aug (`scheme_confidence.stale`)
+2. 🟡 MF-A3 download backlog: **2 funds** left; discovery backlog 32 rows awaiting the D3 sourcing decision (BSE/MSCI/Nasdaq/commodity index weights)
 3. ⬜ Modified-duration metric for debt analysis
 4. ⬜ Overlap key fallback by issuer+coupon+maturity (debt name variants understate overlap)
 5. ⬜ Deferred P2 #14 housekeeping items (FK cascades, NAV revisions, code normalization)

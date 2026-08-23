@@ -34,10 +34,10 @@ Commits tag task IDs: `fix(scheduler): ... [S2c]`. `Blocked` rows stale >7 d nee
 | U2 | Route fallback → 404 panel | 3 | done | — | 23-Aug | 23-Aug | tests/test_phase3_ui.py::test_unknown_hash_panel_exists | screen-notfound section + explicit route branch; silent schemes-fallback removed | — |
 | U3 | MF-A2 stale badge in UI | 3 | done | — | 23-Aug | 23-Aug | tests/test_phase3_ui.py::test_scheme_confidence_flags_stale | scheme_confidence.stale flag (>180d) + confBadge "· stale" marker in list+detail | — |
 | U4L | Mask leak fix in source filter (app.js:82) | 3 | done | — | 23-Aug | 23-Aug | tests/test_phase3_ui.py::test_source_filter_dropdown_masked | filter dropdown, confBadge tooltip, reliance table all routed through App.sourceLabel; node --check on both bundles in CI | — |
-| D1 | Close last 2 download-backlog funds | 4 | todo | — | 23-Aug | 23-Aug | data/reference/reconciled_active_download.csv empty | — | sourcing effort |
-| D2 | Resolve 14 Nifty ETFs via index_resolver | 4 | todo | — | 23-Aug | 23-Aug | discovery_needed.csv delta | — | — |
-| D3 | Sourcing decision doc (~32 index/commodity rows) | 4 | todo | — | 23-Aug | 23-Aug | docs/DATA_SOURCES_RESEARCH.md section | — | procurement decision needed |
-| D4 | Correct ~89/~209 figures in trackers | 4 | todo | — | 23-Aug | 23-Aug | grep shows no stale counts | — | — |
+| D1 | Close last 2 download-backlog funds | 4 | todo | — | 23-Aug | 23-Aug | data/reference/reconciled_active_download.csv empty | HDFC Credit Risk Debt + UTI Credit Risk need AMC-direct fetch runs | sourcing effort |
+| D2 | Resolve 14 Nifty ETFs via index_resolver | 4 | done | — | 23-Aug | 23-Aug | DB: coverage='has_holdings', source='index' for all 14 | bank INDEX_MAP entries added; resolver re-run (291 resolved / 23,900 ISINs); discovery_needed.csv pruned 46→32; webapp.db rebuilt + spot-checked | — |
+| D3 | Sourcing decision doc (~32 index/commodity rows) | 4 | blocked | — | 23-Aug | 23-Aug | docs/DATA_SOURCES_RESEARCH.md section | remaining: 9 debt-index weights, 8 no-disclosure AMCs, 7 plan-variants, 4 commodity, 3 BSE, 1 MSCI/Nasdaq | needs procurement decision: external index-weight sources |
+| D4 | Correct ~89/~209 figures in trackers | 4 | done | — | 23-Aug | 23-Aug | grep shows no stale counts | DIRECTION.md status block refreshed to 23-Aug numbers; APP_REVIEW_ACTIONS MF-A2/MF-A3 updated | — |
 | TRY1 | Try App Phases 1-3 build | 5 | blocked | H1, H3, S4 | 23-Aug | 23-Aug | PLAN_TRY_APP checklist | — | needs real CAS PDF fixture + production URL |
 | R1 | Rebrand product: Factsheet Engine AI → FundPulse | 6 | todo | — | 23-Aug | 23-Aug | grep sweep: zero 'Factsheet Engine AI' hits repo-wide | checklist: docs/NAMING_BRAND_ARCHITECTURE.md §4 | — |
 | WEB1 | Replace placeholders in website/*.html | 6 | blocked | — | 23-Aug | 23-Aug | zero TODO/YOURSITE hits | — | needs production domain (fundpulse.aracharatventures.com) |

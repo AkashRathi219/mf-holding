@@ -47,6 +47,9 @@ INDEX_MAP = [
     ("nifty next 50", "NIFTY_Next_50.csv"),
     ("nifty 100", "NIFTY_100.csv"),
     ("nifty bank", "Nifty_Bank.csv"),
+    ("nifty private bank", "Nifty_Private_Bank.csv"),
+    ("nifty psu bank", "Nifty_PSU_Bank.csv"),
+    ("nifty financial services ex bank", "Nifty_Financial_Services_Ex_Bank.csv"),
     ("nifty it", "Nifty_IT.csv"),
     ("nifty 50", "NIFTY_50.csv"),
 ]

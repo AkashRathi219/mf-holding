@@ -53,7 +53,7 @@ mf_holding/
 │   │   ├── advisorkhoj_{download,parse}_report.json
 │   │   ├── advisorkhoj_{complete_schemes,partial_schemes}.*
 │   │   ├── reconciled_missing.csv           #   133 fund-level missing (checked vs parsed)
-│   │   ├── reconciled_active_download.csv   #   96 active (non-index) funds to fetch
+│   │   ├── reconciled_active_download.csv   #   2 active (non-index) funds left to fetch
 │   │   ├── index_resolved_holdings.json     #   31 equity index funds → 3,846 ISIN holdings
 │   │   └── index_unresolved.csv             #   68 index funds not locally resolvable
 │   └── raw/                                 # 🗄 raw downloaded documents (kept, large)
@@ -169,23 +169,25 @@ Manual triggers: `python main.py nav-daily [--days N]`, `python main.py stock-re
 - Everything else must have a holdings document; those with none are the
   **download backlog** (`data/reference/missing_active_download.csv`).
 
-### Current status (14-Aug-2026 universe)
+### Current status (14-Aug-2026 universe · refreshed 23-Aug-2026)
 - Universe: **2,691 funds / 3,812 fund+plan rows** across 51 AMCs (registry has 57).
 - **Naive missing fund-level schemes: 332** — but the original analysis only looked at
   `all_schemes.csv` (deleted), which **never merged the advisorkhoj parsed schemes**.
   `src/reconcile_missing.py` now regenerates the missing list **directly from the Combined
   NAV universe** against the actual parsed JSONs → **~130 true missing**, of which
-  **~89 active (non-index)** is the real download backlog
-  (`data/reference/reconciled_active_download.csv`).
-- **Index / ETF bucket (99) — `src/index_resolver.py`:**
-  - **31 resolved** → mapped to an equity Nifty constituent list → **3,846 ISIN holdings**
-    in `data/reference/index_resolved_holdings.json`.
-  - **68 unresolved locally** (`data/reference/index_unresolved.csv`):
-    **43 debt-index** (G-Sec/SDL/IBX/AAA/BHARAT Bond/1D-Rate — index stats only, no ISIN
-    securities), **13 commodity** (Gold/Silver), **8 BSE**, **2 MSCI**, **2 Nasdaq**.
+  **2 active (non-index)** remain in the download backlog
+  (`data/reference/reconciled_active_download.csv`: HDFC Credit Risk Debt, UTI Credit Risk).
+- **Index / ETF bucket — `src/index_resolver.py` (23-Aug run):**
+  - **291 resolved** → mapped to Nifty constituent lists → **23,900 ISIN holdings**
+    in `data/reference/index_resolved_holdings.json` (bank-index keywords added:
+    Private Bank / PSU Bank / FinServices-ex-Bank).
+  - **499 unresolved locally** (`data/reference/index_unresolved.csv`):
+    **116 debt-index** (index stats only, no ISIN securities), **93 BSE**,
+    **77 commodity** (Gold/Silver), **7 Nasdaq**, **5 MSCI**, rest plan-variants.
 - **Covered: 2,050 / 2,096 fund-level schemes (97.8%)** — every active fund has holdings.
-- **`data/reference/discovery_needed.csv` (46 genuinely-unfilled):**
-  - **14 equity-Nifty index/ETF** → resolvable to `data/nifty/constituents` (index_resolver)
+- **`data/reference/discovery_needed.csv` (32 genuinely-unfilled):**
+  - ~~14 equity-Nifty index/ETF~~ → **RESOLVED 23-Aug** via index_resolver (Tata Private
+    Bank needed a missing INDEX_MAP entry; the rest were already resolving)
   - **9 debt-index** → need NSE/BSE index **weight** data (we only hold index stats)
   - **8 no-disclosure** (HSBC Climate, AlphaGrep ×3, NJ Momentum/Value, Abakkus LMC, Canara BFS)
   - **7 plan/segregated variants** (Kotak Gilt/Infra SP, Franklin G-Sec/Short Term, ABSL 50s-Plus-Debt) — verify holdings source
