@@ -51,6 +51,56 @@ BONDS_CATALOG_JSON = DATA_DIR / "reference" / "bonds_catalog.json"
 _WS = re.compile(r"\s+")
 _NONALNUM = re.compile(r"[^a-z0-9]+")
 
+# nav_history self-heal [NAV-STUB]: a local history file below this many points
+# is treated as a possibly-thin stub (e.g. written by an old nav_daily cold
+# start) that may be shadowing the full R2 object. The first read attempts one
+# upgrade per code per process; genuinely young funds keep their short (honest)
+# history when no better copy exists anywhere.
+NAV_STUB_HEAL_MIN_POINTS = 30
+_nav_heal_attempted: set[str] = set()
+
+
+def _heal_thin_nav_history(code: str, local_points: int) -> dict | None:
+    """Try to upgrade a thin nav_history file to a full one; return the better
+    doc (already persisted) or None.
+
+    Order: (1) force-download the R2 object to a temp file and keep it only if
+    it has MORE points than the local copy (never lose good local data to a
+    worse remote); (2) the mfapi full-history mirror, once per code per
+    process. The once-guard keeps request-path cost bounded: at most one
+    download + one mirror call per thin file per process lifetime."""
+    if code in _nav_heal_attempted:
+        return None
+    _nav_heal_attempted.add(code)
+    path = NAV_HISTORY_DIR / f"{code}.json"
+    tmp = path.parent / (path.name + ".heal")
+    try:
+        got = remote_store.download_to(f"nav_history/{code}.json", tmp)
+        if got is not None:
+            cand = json.loads(tmp.read_text(encoding="utf-8"))
+            if len(cand.get("history") or []) > local_points:
+                tmp.replace(path)
+                return cand
+            tmp.unlink()
+    except Exception:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
+    try:
+        from src.fetch_missing_nav import _build_doc, _fetch
+        resp = _fetch(code)
+        if resp is not None:
+            cand = _build_doc(code, resp)
+            if len(cand.get("history") or []) > local_points:
+                NAV_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(cand), encoding="utf-8")
+                return cand
+    except Exception:
+        pass
+    return None
+
 
 def norm_name(name: str) -> str:
     """Normalize a scheme/company name for fuzzy matching."""
@@ -2442,6 +2492,12 @@ class WebDB:
         except Exception:
             return None
         history = doc.get("history") or []
+        # [NAV-STUB] A suspiciously thin file may be shadowing the full R2
+        # history (cold-start stubs). One upgrade attempt per code/process.
+        if len(history) < NAV_STUB_HEAL_MIN_POINTS:
+            better = _heal_thin_nav_history(code, len(history))
+            if better is not None:
+                doc, history = better, better.get("history") or []
         if not history:
             return None
         # History files are stored in lexicographic 'DD-Mon-YYYY' order (all

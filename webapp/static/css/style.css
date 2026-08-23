@@ -408,6 +408,10 @@ pre.code { background: #101a2e; color: #d7e3ff; padding: 16px; border-radius: va
 .kv dt { color: var(--text-2); font-weight: 600; }
 .kv dd { margin: 0; font-family: var(--mono); }
 
+/* The exact dates a metric was computed over (engine emits *_window objects) */
+.metric-dates { display: block; font-family: var(--mono); font-size: 9.5px;
+  font-weight: 400; color: var(--text-3); margin-top: 2px; letter-spacing: 0; }
+
 @media (max-width: 900px) {
   .auth-wrap { grid-template-columns: 1fr; }
   .auth-side { display: none; }

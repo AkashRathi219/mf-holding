@@ -31,7 +31,10 @@ ROLLING_WINDOW_YEARS = 1      # rolling-return window
 MIN_POINTS_FOR_STATS = 30     # below this, risk metrics are None (honest gaps)
 MIN_CAGR_WINDOW_DAYS = 90     # below this, even since-inception CAGR is None:
                               # annualising a few days fabricates absurd rates
-METHODOLOGY_VERSION = "perf-v1.0-2026-08-23"  # stamped into proposals [ANA4]
+MIN_RISK_WINDOW_DAYS = 365    # risk stats need >=1y of observed span, not just
+                              # >=30 points: 30 points over 5 weeks must never
+                              # masquerade as "3-year" volatility
+METHODOLOGY_VERSION = "perf-v1.1-2026-08-24"  # stamped into proposals [ANA4]
 
 
 def parse_nav_date(s) -> date | None:
@@ -70,17 +73,33 @@ def _window(series: list[tuple[date, float]], cutoff: date
     return pts
 
 
-def _window_cagr(series: list[tuple[date, float]], years: float,
-                 today: date) -> float | None:
-    pts = _window(series, today - timedelta(days=round(years * DAYS_PER_YEAR)))
-    if not pts:
-        return None
+def _window_cagr_info(series: list[tuple[date, float]], years: float,
+                      today: date) -> tuple[float | None, dict | None]:
+    """(CAGR fraction, window metadata) for an N-year slice of ``series``.
+
+    The metadata is returned even when the CAGR is an honest null, so callers
+    can show WHICH dates were considered (e.g. "2026-08-17 -> 2026-08-21,
+    incomplete") next to the em-dash."""
+    req = round(years * DAYS_PER_YEAR)
+    cutoff = today - timedelta(days=req)
+    pts = [(d, v) for d, v in series if v is not None and d >= cutoff]
+    if len(pts) < 2 or pts[0][1] <= 0:
+        return None, None
     (d0, v0), (d1, v1) = pts[0], pts[-1]
+    info = {"start": d0.isoformat(), "end": d1.isoformat(),
+            "days": (d1 - d0).days, "points": len(pts),
+            "complete": (d1 - d0).days >= req - 5}
     # Honest windows only: a fund younger than the requested window gets null,
     # never its since-inception figure masquerading as a 3Y/5Y number.
-    if (d1 - d0).days < round(years * DAYS_PER_YEAR) - 5:
-        return None
-    return cagr_between(v0, v1, (d1 - d0).days)
+    val = None
+    if info["complete"]:
+        val = cagr_between(v0, v1, info["days"])
+    return val, info
+
+
+def _window_cagr(series: list[tuple[date, float]], years: float,
+                 today: date) -> float | None:
+    return _window_cagr_info(series, years, today)[0]
 
 
 def max_drawdown(values: list[float]) -> float | None:
@@ -106,6 +125,8 @@ def rolling_1y_distribution(series: list[tuple[date, float]],
     if len(vals) < MIN_POINTS_FOR_STATS:
         return None
     rets: list[float] = []
+    first_base: date | None = None
+    last_end: date | None = None
     j = 0
     for d, v in vals:
         while j < len(vals) and vals[j][0] < d - timedelta(days=win_days):
@@ -114,11 +135,17 @@ def rolling_1y_distribution(series: list[tuple[date, float]],
             bd, bv = vals[j]
             if (d - bd).days >= tol and bv > 0:
                 rets.append(v / bv - 1.0)
+                if first_base is None:
+                    first_base = bd
+                last_end = d
     if len(rets) < MIN_POINTS_FOR_STATS:
         return None
     pos = sum(1 for r in rets if r > 0)
     rs = sorted(rets)
     return {
+        "window_days": win_days,
+        "first_window_start": first_base.isoformat() if first_base else None,
+        "last_window_end": last_end.isoformat() if last_end else None,
         "n_periods": len(rets),
         "pct_positive": round(pos / len(rets) * 100.0, 1),
         "best_pct": round(rs[-1] * 100.0, 2),
@@ -148,6 +175,11 @@ def benchmark_relative_stats(scheme_rets: dict[str, float],
     common = sorted(set(scheme_rets) & set(bench_rets))
     if len(common) < MIN_POINTS_FOR_STATS:
         return None
+    # Same honesty rule as the risk block: >=30 common days is not enough on
+    # its own — the overlap must span a real period before it may be labelled.
+    if (date.fromisoformat(common[-1]) - date.fromisoformat(common[0])).days \
+            < MIN_RISK_WINDOW_DAYS:
+        return None
     s = [scheme_rets[d] for d in common]
     b = [bench_rets[d] for d in common]
     ms, mb = _mean(s), _mean(b)
@@ -165,6 +197,8 @@ def benchmark_relative_stats(scheme_rets: dict[str, float],
     out["information_ratio"] = (round(active_annual / te, 3)
                                 if te > 0 else None)
     out["n_days"] = len(common)
+    out["window_start"] = common[0]
+    out["window_end"] = common[-1]
     return out
 
 
@@ -190,6 +224,7 @@ def compute_series_analytics(series: list[tuple[str, float]],
         "as_of": today.isoformat(),
         "rf_pct_assumption": rf_pct,
         "points": len(parsed),
+        "methodology_version": METHODOLOGY_VERSION,
         "disclaimer": "Past performance is not indicative of future returns.",
     }
     if not parsed:
@@ -201,18 +236,31 @@ def compute_series_analytics(series: list[tuple[str, float]],
     out["inception"] = {"date": first[0].isoformat(), "nav": first[1],
                         "years": round(span_days / DAYS_PER_YEAR, 2)}
     si = cagr_between(first[1], last[1], span_days)
+    y1_val, y1_win = _window_cagr_info(parsed, 1, today)
+    y3_val, y3_win = _window_cagr_info(parsed, 3, today)
+    y5_val, y5_win = _window_cagr_info(parsed, 5, today)
     out["cagr_pct"] = {
         "since_inception": (round(si * 100.0, 2)
                             if si is not None and span_days >= MIN_CAGR_WINDOW_DAYS
                             else None),
-        "y1": _pct_or_none(_window_cagr(parsed, 1, today)),
-        "y3": _pct_or_none(_window_cagr(parsed, 3, today)),
-        "y5": _pct_or_none(_window_cagr(parsed, 5, today)),
+        "y1": _pct_or_none(y1_val),
+        "y3": _pct_or_none(y3_val),
+        "y5": _pct_or_none(y5_val),
+        # The exact dates each figure spans, so the UI can show WHICH history
+        # was used (and, when complete=false, why the cell is an em-dash).
+        "since_inception_window": {"start": first[0].isoformat(),
+                                   "end": last[0].isoformat(),
+                                   "days": span_days, "points": len(parsed),
+                                   "complete": span_days >= MIN_CAGR_WINDOW_DAYS},
+        "y1_window": y1_win,
+        "y3_window": y3_win,
+        "y5_window": y5_win,
     }
 
     cutoff3y = today - timedelta(days=round(3 * DAYS_PER_YEAR))
     recent = [(d, v) for d, v in parsed if d >= cutoff3y]
-    if len(recent) >= MIN_POINTS_FOR_STATS:
+    recent_span = (recent[-1][0] - recent[0][0]).days if recent else 0
+    if len(recent) >= MIN_POINTS_FOR_STATS and recent_span >= MIN_RISK_WINDOW_DAYS:
         rets = daily_returns([v for _, v in recent])
         n = len(rets)
         mean_d, std_d = _mean(rets), _std(rets)
@@ -228,6 +276,9 @@ def compute_series_analytics(series: list[tuple[str, float]],
                    if dd_dev > 1e-12 else None)
         out["risk"] = {
             "window_years": 3,
+            "window_start": recent[0][0].isoformat(),
+            "window_end": recent[-1][0].isoformat(),
+            "n_points": len(recent),
             "volatility_pct": round(vol_ann * 100.0, 2) if vol_ann > 0 else None,
             "sharpe": round(sharpe, 3) if sharpe is not None else None,
             "sortino": round(sortino, 3) if sortino is not None else None,
@@ -237,6 +288,18 @@ def compute_series_analytics(series: list[tuple[str, float]],
     else:
         out["risk"] = None
         out["rolling_1y"] = None
+        # Machine-readable reason so the UI can state exactly which dates were
+        # considered and why they fall short (honest nulls, never fabrication).
+        out["risk_unavailable"] = {
+            "reason": "insufficient_history",
+            "required_points": MIN_POINTS_FOR_STATS,
+            "required_span_days": MIN_RISK_WINDOW_DAYS,
+            "window_start": cutoff3y.isoformat(),
+            "window_end": today.isoformat(),
+            "found_points": len(recent),
+            "found_start": recent[0][0].isoformat() if recent else None,
+            "found_end": recent[-1][0].isoformat() if recent else None,
+        }
 
     if bench_series:
         bseen = {}

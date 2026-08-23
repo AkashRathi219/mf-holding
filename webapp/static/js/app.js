@@ -401,40 +401,57 @@ async function renderSchemeDetail(id, container, titleEl) {
 }
 
 // ---------- performance & risk analytics [ANA1] ----------
-async function renderSchemeAnalytics(id) {
+// "21 Aug 2025 → 21 Aug 2026" from an engine *_window object — the exact
+// dates a figure was computed over, shown beside every metric.
+function fmtWinRange(w) {
+  if (!w || !w.start || !w.end) return "";
+  return App.formatDate(w.start) + " → " + App.formatDate(w.end);
+}
+
+function renderSchemeAnalytics(id) {
   const el = document.getElementById("analyticsBody");
   if (!el) return;
-  try {
-    const a = await App.api(`/schemes/${id}/analytics`);
+  App.api(`/schemes/${id}/analytics`).then(a => {
     if (a.error) { el.innerHTML = `<div class="empty">${App.esc(a.error)}</div>`; return; }
-    if (!a.risk) { el.innerHTML = `<div class="empty">Not enough NAV history for analytics yet.</div>`; return; }
     const c = a.cagr_pct || {};
     const cell = (label, v, sub) => `<div style="flex:1;min-width:96px;text-align:center;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
       <div style="font-size:10.5px;color:var(--text-2);text-transform:uppercase;letter-spacing:.04em">${label}</div>
       <div style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px">${v != null ? App.formatNum(v, 2) + "%" : "—"}</div>
-      ${sub ? `<div style="font-size:10px;color:var(--text-3)">${sub}</div>` : ""}</div>`;
+      ${sub ? `<div class="metric-dates">${sub}</div>` : ""}</div>`;
+    // CAGR cells always render — each carries the exact window it spans (or,
+    // when complete=false, the short history that earned the em-dash).
     let html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-      ${cell("Since inception", c.since_inception, a.inception ? a.inception.years + "y" : "")}
-      ${cell("1Y CAGR", c.y1)}
-      ${cell("3Y CAGR", c.y3)}
-      ${cell("5Y CAGR", c.y5)}
+      ${cell("Since inception", c.since_inception, fmtWinRange(c.since_inception_window) + (c.since_inception_window && !c.since_inception_window.complete ? " · partial" : ""))}
+      ${cell("1Y CAGR", c.y1, fmtWinRange(c.y1_window) + (c.y1_window && !c.y1_window.complete ? " · partial" : ""))}
+      ${cell("3Y CAGR", c.y3, fmtWinRange(c.y3_window) + (c.y3_window && !c.y3_window.complete ? " · partial" : ""))}
+      ${cell("5Y CAGR", c.y5, fmtWinRange(c.y5_window) + (c.y5_window && !c.y5_window.complete ? " · partial" : ""))}
     </div>`;
     const r = a.risk || {};
     const roll = a.rolling_1y;
     const b = a.benchmark;
-    html += `<div class="kv">
+    if (!a.risk) {
+      // Honest dated empty-state: which dates were considered, what was found.
+      const ru = a.risk_unavailable || {};
+      const detail = ru.window_start
+        ? `Risk stats need ≥ ${ru.required_points ?? 30} NAV points spanning ≥ ${ru.required_span_days ?? 365} days inside ${App.formatDate(ru.window_start)} → ${App.formatDate(ru.window_end)} (3y window). This scheme's history there: ${ru.found_points ?? 0} points${ru.found_start ? ` (${App.formatDate(ru.found_start)} → ${App.formatDate(ru.found_end)})` : ""}.`
+        : "";
+      html += `<div class="empty" style="padding:18px">Not enough NAV history for risk analytics yet.${detail ? `<div class="page-sub" style="margin-top:6px">${detail}</div>` : ""}</div>`;
+    } else {
+      html += `<div class="kv">
+      <dt>Window (risk)</dt><dd>${fmtWinRange(r)} <span class="page-sub">· ${App.formatNum(r.n_points)} NAV points · 3y</span></dd>
       <dt>Volatility (ann., 3y)</dt><dd>${r.volatility_pct != null ? App.formatNum(r.volatility_pct, 2) + "%" : "—"}</dd>
       <dt>Sharpe / Sortino</dt><dd>${r.sharpe != null ? App.formatNum(r.sharpe, 2) : "—"} / ${r.sortino != null ? App.formatNum(r.sortino, 2) : "—"} <span class="page-sub">(rf assumed ${App.formatNum(a.rf_pct_assumption, 1)}%)</span></dd>
       <dt>Max drawdown (3y)</dt><dd>${r.max_drawdown_pct != null ? `<span style="color:#c94f4f">${App.formatNum(r.max_drawdown_pct, 2)}%</span>` : "—"}</dd>
-      ${roll ? `<dt>Rolling 1Y returns</dt><dd>${App.formatNum(roll.pct_positive, 1)}% positive <span class="page-sub">of ${App.formatNum(roll.n_periods)} daily-step windows · median ${App.formatNum(roll.median_pct, 2)}% · range ${App.formatNum(roll.worst_pct, 2)}% to ${App.formatNum(roll.best_pct, 2)}%</span></dd>` : ""}
-      ${b ? `<dt>vs ${App.esc(a.benchmark_index || "benchmark")}</dt><dd>beta ${App.formatNum(b.beta, 2)} · alpha ${b.alpha_pct != null ? App.formatNum(b.alpha_pct, 2) + "%" : "—"} · tracking error ${b.tracking_error_pct != null ? App.formatNum(b.tracking_error_pct, 2) + "%" : "—"}${b.information_ratio != null ? ` · IR ${App.formatNum(b.information_ratio, 2)}` : ""}</dd>` : ""}
+      ${roll ? `<dt>Rolling 1Y returns</dt><dd>${App.formatNum(roll.pct_positive, 1)}% positive <span class="page-sub">of ${App.formatNum(roll.n_periods)} daily-step windows · median ${App.formatNum(roll.median_pct, 2)}% · range ${App.formatNum(roll.worst_pct, 2)}% to ${App.formatNum(roll.best_pct, 2)}% · windows ${fmtWinRange({ start: roll.first_window_start, end: roll.last_window_end })}</span></dd>` : ""}
+      ${b ? `<dt>vs ${App.esc(a.benchmark_index || "benchmark")}</dt><dd>beta ${App.formatNum(b.beta, 2)} · alpha ${b.alpha_pct != null ? App.formatNum(b.alpha_pct, 2) + "%" : "—"} · tracking error ${b.tracking_error_pct != null ? App.formatNum(b.tracking_error_pct, 2) + "%" : "—"}${b.information_ratio != null ? ` · IR ${App.formatNum(b.information_ratio, 2)}` : ""} <span class="page-sub">· common days ${fmtWinRange(b)}</span></dd>` : ""}
     </div>`;
-    html += `<div class="page-sub" style="margin-top:8px">As of ${App.formatDate(a.as_of)} · computed from AMFI NAV history (${App.formatNum(a.points)} points, ${App.esc(a.plan_used || "")} plan). Percentile-neutral factual figures only.</div>
+    }
+    html += `<div class="page-sub" style="margin-top:8px">As of ${App.formatDate(a.as_of)} · computed from AMFI NAV history (${App.formatNum(a.points)} points${a.inception ? `, inception ${App.formatDate(a.inception.date)}` : ""}, ${App.esc(a.plan_used || "")} plan, methodology ${App.esc(a.methodology_version || "")}). Percentile-neutral factual figures only.</div>
     <div class="page-sub" style="margin-top:4px"><b>${App.esc(a.disclaimer)}</b></div>`;
     el.innerHTML = html;
-  } catch (e) {
+  }).catch(e => {
     el.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
-  }
+  });
 }
 
 // ---------- NAV history (Regular / Direct collapsible buttons) ----------
@@ -1503,27 +1520,34 @@ function renderCompareResults(r) {
   const S = r.schemes.map((s, i) => ({ ...s, color: COMPARE_COLORS[i % COMPARE_COLORS.length] }));
   const shortName = (n) => n.length > 34 ? n.slice(0, 33) + "…" : n;
 
-  // metric table rows (window-labelled, neutral wording)
-  const mrow = (label, get) => `<tr><td>${label}</td>${S.map(s => {
+  // metric table rows (window-labelled, neutral wording). Each cell carries
+  // the exact dates that row's figure spans for THAT scheme (schemes differ).
+  const mrow = (label, get, win) => `<tr><td>${label}</td>${S.map(s => {
     const v = get(s);
-    return `<td class="num">${v != null ? App.formatNum(v, 2) : "—"}</td>`;
+    const w = win ? win(s) : null;
+    const sub = w && w.start && w.end
+      ? `<span class="metric-dates">${App.formatDate(w.start)} → ${App.formatDate(w.end)}${w.complete === false ? " · partial" : ""}</span>` : "";
+    return `<td class="num">${v != null ? App.formatNum(v, 2) : "—"}${sub}</td>`;
   }).join("")}</tr>`;
+  const riskWin = s => s.metrics.risk ? { start: s.metrics.risk.window_start, end: s.metrics.risk.window_end } : null;
+  const rollWin = s => s.metrics.rolling_1y ? { start: s.metrics.rolling_1y.first_window_start, end: s.metrics.rolling_1y.last_window_end } : null;
+  const benchWin = s => s.metrics.benchmark ? { start: s.metrics.benchmark.window_start, end: s.metrics.benchmark.window_end } : null;
   const metricTable = `
     <table class="data">
       <thead><tr><th>Metric</th>${S.map(s => `<th title="${App.esc(s.fund_name)}">${App.esc(shortName(s.fund_name))}</th>`).join("")}</tr></thead>
       <tbody>
-        ${mrow("CAGR since inception", s => s.metrics.cagr_pct.since_inception)}
-        ${mrow("1Y CAGR %", s => s.metrics.cagr_pct.y1)}
-        ${mrow("3Y CAGR %", s => s.metrics.cagr_pct.y3)}
-        ${mrow("5Y CAGR %", s => s.metrics.cagr_pct.y5)}
-        ${mrow("Volatility ann. % (3y)", s => s.metrics.risk && s.metrics.risk.volatility_pct)}
-        ${mrow("Sharpe (rf " + App.formatNum(r.rf_pct_assumption, 1) + "%)", s => s.metrics.risk && s.metrics.risk.sharpe)}
-        ${mrow("Sortino", s => s.metrics.risk && s.metrics.risk.sortino)}
-        ${mrow("Max drawdown % (3y)", s => s.metrics.risk && s.metrics.risk.max_drawdown_pct)}
-        ${mrow("Rolling 1Y % positive", s => s.metrics.rolling_1y && s.metrics.rolling_1y.pct_positive)}
-        ${mrow("Beta vs benchmark", s => s.metrics.benchmark && s.metrics.benchmark.beta)}
-        ${mrow("Alpha vs benchmark", s => s.metrics.benchmark && s.metrics.benchmark.alpha_pct)}
-        ${mrow("Tracking error %", s => s.metrics.benchmark && s.metrics.benchmark.tracking_error_pct)}
+        ${mrow("CAGR since inception", s => s.metrics.cagr_pct.since_inception, s => s.metrics.cagr_pct.since_inception_window)}
+        ${mrow("1Y CAGR %", s => s.metrics.cagr_pct.y1, s => s.metrics.cagr_pct.y1_window)}
+        ${mrow("3Y CAGR %", s => s.metrics.cagr_pct.y3, s => s.metrics.cagr_pct.y3_window)}
+        ${mrow("5Y CAGR %", s => s.metrics.cagr_pct.y5, s => s.metrics.cagr_pct.y5_window)}
+        ${mrow("Volatility ann. % (3y)", s => s.metrics.risk && s.metrics.risk.volatility_pct, riskWin)}
+        ${mrow("Sharpe (rf " + App.formatNum(r.rf_pct_assumption, 1) + "%)", s => s.metrics.risk && s.metrics.risk.sharpe, riskWin)}
+        ${mrow("Sortino", s => s.metrics.risk && s.metrics.risk.sortino, riskWin)}
+        ${mrow("Max drawdown % (3y)", s => s.metrics.risk && s.metrics.risk.max_drawdown_pct, riskWin)}
+        ${mrow("Rolling 1Y % positive", s => s.metrics.rolling_1y && s.metrics.rolling_1y.pct_positive, rollWin)}
+        ${mrow("Beta vs benchmark", s => s.metrics.benchmark && s.metrics.benchmark.beta, benchWin)}
+        ${mrow("Alpha vs benchmark", s => s.metrics.benchmark && s.metrics.benchmark.alpha_pct, benchWin)}
+        ${mrow("Tracking error %", s => s.metrics.benchmark && s.metrics.benchmark.tracking_error_pct, benchWin)}
       </tbody>
     </table>`;
   const benchNote = S.filter(s => s.benchmark_index).length
@@ -2057,16 +2081,22 @@ async function renderPortfolioAnalyticsBlock(container, portfolioId) {
     const body = host.querySelector(".pa-body");
     if (a.error) { body.innerHTML = `<div class="empty">${App.esc(a.error)}</div>`; return; }
     const c = a.cagr_pct || {}, rk = a.risk || {}, roll = a.rolling_1y;
-    const cell = (label, v) => `<div style="flex:1;min-width:96px;text-align:center;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
+    const cell = (label, v, sub) => `<div style="flex:1;min-width:96px;text-align:center;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
       <div style="font-size:10.5px;color:var(--text-2);text-transform:uppercase;letter-spacing:.04em">${label}</div>
-      <div style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px">${v != null ? App.formatNum(v, 2) + "%" : "—"}</div></div>`;
+      <div style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px">${v != null ? App.formatNum(v, 2) + "%" : "—"}</div>
+      ${sub ? `<div class="metric-dates">${sub}</div>` : ""}</div>`;
+    const partial = w => w && w.complete === false ? " · partial" : "";
     let html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-      ${cell("CAGR incep.", c.since_inception)}${cell("1Y", c.y1)}${cell("3Y", c.y3)}${cell("5Y", c.y5)}
-      ${cell("Volatility (3y)", rk.volatility_pct)}
+      ${cell("CAGR incep.", c.since_inception, fmtWinRange(c.since_inception_window) + partial(c.since_inception_window))}
+      ${cell("1Y", c.y1, fmtWinRange(c.y1_window) + partial(c.y1_window))}
+      ${cell("3Y", c.y3, fmtWinRange(c.y3_window) + partial(c.y3_window))}
+      ${cell("5Y", c.y5, fmtWinRange(c.y5_window) + partial(c.y5_window))}
+      ${cell("Volatility (3y)", rk.volatility_pct, fmtWinRange(rk))}
     </div><div class="kv">
+      <dt>Window (risk)</dt><dd>${fmtWinRange(rk)}${rk.n_points != null ? ` <span class="page-sub">· ${App.formatNum(rk.n_points)} NAV points</span>` : ""}</dd>
       <dt>Sharpe / Sortino</dt><dd>${rk.sharpe != null ? App.formatNum(rk.sharpe, 2) : "—"} / ${rk.sortino != null ? App.formatNum(rk.sortino, 2) : "—"}</dd>
       <dt>Max drawdown (3y)</dt><dd>${rk.max_drawdown_pct != null ? App.formatNum(rk.max_drawdown_pct, 2) + "%" : "—"}</dd>
-      ${roll ? `<dt>Rolling 1Y positive</dt><dd>${App.formatNum(roll.pct_positive, 1)}% <span class="page-sub">of ${App.formatNum(roll.n_periods)} windows · median ${App.formatNum(roll.median_pct, 2)}%</span></dd>` : ""}
+      ${roll ? `<dt>Rolling 1Y positive</dt><dd>${App.formatNum(roll.pct_positive, 1)}% <span class="page-sub">of ${App.formatNum(roll.n_periods)} windows · median ${App.formatNum(roll.median_pct, 2)}% · windows ${fmtWinRange({ start: roll.first_window_start, end: roll.last_window_end })}</span></dd>` : ""}
       <dt>Constituents</dt><dd>${(a.constituents || []).map(x => `${App.esc(x.fund_name)} (${App.formatNum(x.weight, 1)}%, ${App.esc(x.plan_used)})`).join(" · ")}</dd>
     </div><div id="paGrowthChart" style="margin-top:10px"></div>
     <div class="page-sub" style="margin-top:6px"><b>${App.esc(a.disclaimer)}</b> Diagnostic of your own portfolio — factual AMFI-NAV math, not adviser track record.</div>`;

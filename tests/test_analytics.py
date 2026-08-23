@@ -153,3 +153,119 @@ def test_short_window_since_inception_is_honest_null():
     span = [(d0 + td(days=i), 100 * 1.0004 ** i) for i in range(0, 91, 30)]
     out = compute_series_analytics(span)
     assert out["cagr_pct"]["since_inception"] is not None
+
+
+# ---- perf-v1.1: window disclosure + span guards --------------------------------
+
+
+def test_risk_block_requires_window_span():
+    """40 points over 40 days pass the old points-only gate — they must NOT
+    produce '3y'-labelled risk stats. The same points over 400 days may, with
+    hand-computed annualised volatility."""
+    import math
+
+    d0 = date(2024, 6, 1)
+
+    def alternating_series(n: int) -> list:
+        """Compounding series whose daily returns alternate -0.1% / +0.2%."""
+        out, nav = [], 100.0
+        for i in range(n):
+            nav *= (1 + (0.002 if i % 2 else -0.001))
+            out.append((d0 + td(days=i), nav))
+        return out
+
+    out = compute_series_analytics(alternating_series(40))
+    assert out["risk"] is None and out["rolling_1y"] is None
+    ru = out["risk_unavailable"]
+    assert ru["reason"] == "insufficient_history"
+    assert ru["required_points"] == 30 and ru["required_span_days"] == 365
+    assert ru["found_points"] == 40
+    assert ru["found_start"] == d0.isoformat()
+    assert ru["found_end"] == (d0 + td(days=39)).isoformat()
+    assert ru["window_end"] == (d0 + td(days=39)).isoformat()
+    # the considered window itself is disclosed (as_of - round(3*365.25) days)
+    assert ru["window_start"] == (date(2024, 7, 10) - td(days=1096)).isoformat()
+
+    out = compute_series_analytics(alternating_series(401))
+    r = out["risk"]
+    assert r is not None
+    assert r["window_start"] == d0.isoformat()
+    assert r["window_end"] == (d0 + td(days=400)).isoformat()
+    assert r["n_points"] == 401
+    # hand-computed vol: 400 daily returns, 200x +0.2% and 200x -0.1%
+    m = (200 * 0.002 + 200 * -0.001) / 400
+    var = (200 * (0.002 - m) ** 2 + 200 * (-0.001 - m) ** 2) / 399
+    expected_vol = math.sqrt(var) * math.sqrt(252) * 100
+    assert abs(r["volatility_pct"] - expected_vol) < 0.01
+    assert r["max_drawdown_pct"] == pytest.approx(-0.10)
+
+
+def test_window_dates_emitted_and_complete_flags():
+    """Every metric group carries the exact dates it spans; partial windows
+    are flagged and their values stay honest nulls."""
+    d0 = date(2024, 6, 1)
+    n = 1500  # ~4.1 years: 1Y/3Y complete, 5Y partial
+    series = [(d0 + td(days=i), 100 * 1.0005 ** i) for i in range(n)]
+    out = compute_series_analytics(series)
+    as_of = d0 + td(days=n - 1)
+    assert out["as_of"] == as_of.isoformat()
+    assert out["methodology_version"].startswith("perf-v1.")
+    c = out["cagr_pct"]
+    # constant daily rate -> every COMPLETE window annualizes to the same CAGR
+    expected_cagr = (1.0005 ** 365.25 - 1) * 100
+    assert abs(c["since_inception"] - expected_cagr) < 0.01
+    assert abs(c["y1"] - expected_cagr) < 0.01
+    assert abs(c["y3"] - expected_cagr) < 0.01
+    assert c["y1_window"] == {"start": (as_of - td(days=365)).isoformat(),
+                              "end": as_of.isoformat(), "days": 365,
+                              "points": 366, "complete": True}
+    assert c["y3_window"]["complete"] is True
+    assert c["y3_window"]["days"] == 1096
+    # 5Y requested, ~4.1y available: dates shown, value honestly null
+    assert c["y5"] is None
+    assert c["y5_window"]["complete"] is False
+    assert c["y5_window"]["start"] == d0.isoformat()
+    assert c["since_inception_window"] == {
+        "start": d0.isoformat(), "end": as_of.isoformat(),
+        "days": n - 1, "points": n, "complete": True}
+    # risk slice = points inside as_of - round(3*365.25) = as_of - 1096
+    r = out["risk"]
+    assert r["window_start"] == (as_of - td(days=1096)).isoformat()
+    assert r["window_end"] == as_of.isoformat()
+    assert r["n_points"] == n - (n - 1 - 1096)
+    assert r["max_drawdown_pct"] == 0.0  # monotonic rise
+    assert r["sharpe"] is None or r["sharpe"] > 5  # ~zero vol: honest null
+    roll = out["rolling_1y"]
+    assert roll["window_days"] == 365
+    assert roll["first_window_start"] == d0.isoformat()
+    assert roll["last_window_end"] == as_of.isoformat()
+    assert roll["n_periods"] == n - 360  # ends at indices 360..1499 (360d min per the -5d tolerance)
+    assert roll["pct_positive"] == 100.0
+
+
+def test_benchmark_block_span_guard_and_window_dates():
+    """Benchmark stats need >=365 days of overlap and disclose the common span."""
+    d0 = date(2024, 6, 1)
+    bench, scheme = [], []
+    bv = sv = 100.0
+    for i in range(400):  # 399 common days < 365? no: 399 >= 30 but span 398 < 365? -> 398 days
+        step = (0.001 if i % 2 == 0 else -0.0005)
+        bv *= (1 + step)
+        sv *= (1 + 2 * step)
+        bench.append((d0 + td(days=i), bv))
+        scheme.append((d0 + td(days=i), sv))
+    # 400 daily points -> common return dates span 398 days < 365? 398 > 365 -> computed
+    out = compute_series_analytics(scheme, bench_series=bench)
+    b = out["benchmark"]
+    assert b is not None
+    assert b["window_start"] == (d0 + td(days=1)).isoformat()
+    assert b["window_end"] == (d0 + td(days=399)).isoformat()
+    assert (date.fromisoformat(b["window_end"])
+            - date.fromisoformat(b["window_start"])).days >= 365
+    assert b["beta"] == pytest.approx(2.0, abs=1e-2)
+
+    # a short overlap (60 days) must yield an honest null, not 5-week beta
+    bench_s = bench[:61]
+    scheme_s = scheme[:61]
+    out = compute_series_analytics(scheme_s, bench_series=bench_s)
+    assert out["benchmark"] is None

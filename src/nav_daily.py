@@ -14,8 +14,12 @@ How it works
   (``DownloadNAVHistoryReport_Po.aspx``, same endpoint the full backfill uses).
 * Each scheme's new ``(date, nav)`` points are merged into its existing
   ``data/nav_history/<code>.json`` file (de-duplicated by date, kept in
-  chronological order). New files are created for universe schemes that don't
-  have one yet, so newly launched funds accumulate history from day one.
+  chronological order).
+* A scheme with NO file yet is never seeded with a thin recent-window stub —
+  that stub would shadow the full R2 history forever and starve analytics.
+  Missing files are filled with FULL histories (R2 object, then the mfapi
+  mirror under a per-run cap); codes that can't be filled are left absent so
+  the read path fetches the full file on demand.
 """
 
 from __future__ import annotations
@@ -32,6 +36,16 @@ from .nav_history import _date_key, _fetch_amfi, _parse_nav_text, load_universe
 BASE_DIR = Path(__file__).resolve().parent.parent
 OUT_DIR = BASE_DIR / "data" / "nav_history"
 
+# A thin "recent-window-only" file is worse than no file: webapp.remote_store
+# treats an existing local file as authoritative and never re-fetches, so a
+# stub permanently shadows the full R2 history and analytics honestly reports
+# "not enough NAV history" for years. Missing files must be filled with FULL
+# histories only (R2 object first, mfapi mirror as fallback), never seeded
+# from the short daily window. Cap the per-run full-fetch fan-out so one cold
+# start can't hammer the mirror (the rest are picked up on subsequent runs or
+# served straight from R2 on first read).
+MAX_FULL_HISTORY_FETCHES_PER_RUN = 100
+
 
 def _load_history(path: Path) -> list[dict]:
     try:
@@ -39,16 +53,6 @@ def _load_history(path: Path) -> list[dict]:
         return doc, doc.get("history") or []
     except Exception:
         return {}, []
-
-
-def _latest_name_meta(pts: list[tuple]) -> dict:
-    """Metadata (name/plan/option/isin) from the most recent parsed row, if any."""
-    meta = {}
-    for _code, _d, _nav, name, plan, option, isin, isin_re in pts:
-        if name:
-            meta = {"fund_name": name, "plan": plan, "option": option,
-                    "isin": isin, "isin_reinvestment": isin_re}
-    return meta
 
 
 def update_latest_navs(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
@@ -63,6 +67,15 @@ def update_latest_navs(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
         summary = _update_latest_navs_impl(days, out_dir)
         _meta.update(summary)
         return summary
+
+
+def _full_history_doc(code: str) -> dict | None:
+    """Full since-inception daily history for one code (mfapi AMFI mirror)."""
+    from .fetch_missing_nav import _build_doc, _fetch
+    resp = _fetch(code)
+    if resp is None:
+        return None
+    return _build_doc(code, resp)
 
 
 def _update_latest_navs_impl(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
@@ -80,8 +93,32 @@ def _update_latest_navs_impl(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
     universe_codes = {r["amfi_code"] for r in load_universe() if r["amfi_code"]}
 
     created = updated = unchanged = skipped = 0
+    mirror_fetches = 0
     for code, pts in by_code.items():
         path = out_dir / f"{code}.json"
+        if not path.exists() and code in universe_codes:
+            # [NAV-STUB] Never seed a thin recent-window file: it would shadow
+            # the full R2 history forever (ensure() trusts existing files) and
+            # analytics would honestly report "not enough NAV history" for
+            # years. Fill with a FULL history — R2 object first, then the
+            # mfapi mirror under a strict per-run cap — or leave the file
+            # absent so the read path can fetch it from R2 later.
+            seeded = False
+            try:
+                from webapp import remote_store
+                seeded = remote_store.ensure(
+                    f"nav_history/{code}.json") is not None
+            except Exception:
+                seeded = False
+            if not seeded and mirror_fetches < MAX_FULL_HISTORY_FETCHES_PER_RUN:
+                doc = _full_history_doc(code)
+                if doc is not None:
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    path.write_text(json.dumps(doc), encoding="utf-8")
+                    mirror_fetches += 1
+                    seeded = True
+            if seeded:
+                created += 1
         if path.exists():
             doc, hist = _load_history(path)
             existing_dates = {h.get("date") for h in hist}
@@ -96,27 +133,8 @@ def _update_latest_navs_impl(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
             doc["fetched_at"] = datetime.now().isoformat(timespec="seconds")
             path.write_text(json.dumps(doc), encoding="utf-8")
             updated += 1
-        elif code in universe_codes:
-            hist = [{"date": p[1], "nav": p[2]} for p in pts]
-            hist.sort(key=lambda h: _date_key(h.get("date", "")))
-            meta = _latest_name_meta(pts)
-            doc = {
-                "scheme_code": code,
-                "fund_name": meta.get("fund_name", ""),
-                "category": "",
-                "plan": meta.get("plan", ""),
-                "option": meta.get("option", ""),
-                "isin": meta.get("isin", ""),
-                "isin_reinvestment": meta.get("isin_reinvestment", ""),
-                "currency": "INR",
-                "source": "AMFI",
-                "fetched_at": datetime.now().isoformat(timespec="seconds"),
-                "history": hist,
-            }
-            path.write_text(json.dumps(doc), encoding="utf-8")
-            created += 1
         else:
-            skipped += 1  # non-universe scheme with no existing file â€” ignore
+            skipped += 1  # no file and none seeded — read path may fetch from R2
 
     return {
         "window": f"{start.isoformat()}..{end.isoformat()}",
@@ -125,6 +143,7 @@ def _update_latest_navs_impl(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
         "updated": updated,
         "unchanged": unchanged,
         "skipped": skipped,
+        "mirror_fetches": mirror_fetches,
         "total_nav_points": len(rows),
     }
 
