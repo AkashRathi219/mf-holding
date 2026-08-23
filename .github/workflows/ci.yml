@@ -26,3 +26,51 @@ jobs:
         run: python scripts/tracker_status.py --ci --skip-verify
       - name: Test suite
         run: pytest -q
+
+  boot-slim:
+    # Container-parity boot check: installs ONLY the Railway image deps and
+    # proves the app imports, starts, and answers. Catches deploy-brick
+    # regressions before they reach Railway.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install slim image deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r deploy/requirements-slim.txt
+      - name: Bootstrap skips cleanly without readonly/R2 (dev mode)
+        run: python deploy/bootstrap.py
+      - name: Bootstrap fails fast when readonly lacks R2
+        env:
+          MF_READONLY_DB: "1"
+        run: |
+          if python deploy/bootstrap.py; then
+            echo "::error::bootstrap should exit 1 when MF_READONLY_DB=1 has no R2 vars"; exit 1
+          fi
+      - name: Boot server under slim deps and probe endpoints
+        env:
+          ENABLE_SCHEDULER: "1"
+          SECRET_KEY: "ci-secret-key"
+        run: |
+          python -m uvicorn webapp.main:app --host 127.0.0.1 --port 8099 &
+          UVICORN_PID=$!
+          code=000
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8099/api/version || true)
+            [ "$code" = "200" ] && break
+            sleep 1
+          done
+          [ "$code" = "200" ] || { echo "::error::server never answered /api/version"; exit 1; }
+          h=$(curl -s http://127.0.0.1:8099/api/health)
+          echo "$h"
+          echo "$h" | grep -q '"status":"degraded"'
+          login_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"ci@nowhere.zz","password":"xxxxxxxx"}' \
+            http://127.0.0.1:8099/api/auth/login)
+          echo "login -> $login_code"
+          [ "$login_code" -lt 500 ]
+          kill $UVICORN_PID

@@ -83,3 +83,32 @@ requirements that include `pyyaml`, `apscheduler`, `httpx` (they are, since
 error instead of crash-looping the deployment [S2b]. Confirm health via
 `GET /api/admin/refresh-summary` → `pipelines.scheduler.last_status == "alive"`
 and `/api/health` → `checks.scheduler.ok`.
+
+## Required variables — full checklist
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `MF_READONLY_DB=1` | yes | boot uses the prebuilt DB, never rebuilds |
+| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` | yes | data pulls (bootstrap + lazy fetch) |
+| `SECRET_KEY` | **yes (prod)** | token signing; without it login/register return 503 by design |
+| `ENABLE_SCHEDULER=1` | optional | in-process cron jobs |
+| `CORS_ORIGINS` | optional | allowlist for the marketing site |
+| `SUPERADMIN_EMAILS` | optional | defaults to akash@aracharatventures.com |
+
+## Troubleshooting a failed deploy
+
+Symptom → cause → fix (read the deploy log top-down; bootstrap prints a
+`BOOTSTRAP FAILED` block when it can prove the app cannot serve):
+
+| Log says | Meaning | Fix |
+|---|---|---|
+| `R2 env vars missing`-era behaviour replaced by `MISSING: R2_*` + exit 1 | readonly mode but R2 variables absent/typo'd | add the four R2 vars |
+| `webapp.db  FAILED` + `BOOTSTRAP FAILED … exit 1` | credentials rejected or bucket/prefix wrong | verify the four R2 values against `deploy/.env`; re-run `python deploy/upload_r2.py --verify` locally |
+| boots, then `/api/health` → 503 with `checks.db.error` | DB fetched but unreadable (partial upload?) | re-run `prepare_data.py && upload_r2.py --verify`, redeploy |
+| boots green but login/register return 503 "SECRET_KEY is not configured" | prod guard [H4] refusing to auto-generate a session-killing secret | set `SECRET_KEY` (any long random string) in Variables |
+| `/api/version` shows an old `commit` | stale deployment | Railway → Redeploy |
+
+Verify what's actually running: `GET /api/version` (commit SHA),
+`GET /api/health` (db/scheduler/r2 flags). CI runs a container-parity
+boot check (`boot-slim` job) on every push so import/deps regressions are
+caught before they land here.

@@ -56,6 +56,13 @@ def _get_secret() -> bytes:
         return secret
 
 
+class SecretNotConfiguredError(RuntimeError):
+    """Raised in production when no signing secret can be resolved [H4].
+
+    Endpoints map this to a 503 with an actionable message instead of an
+    opaque 500."""
+
+
 def _resolve_secret() -> bytes:
     if os.environ.get("SECRET_KEY"):
         return os.environ["SECRET_KEY"].encode()
@@ -69,7 +76,7 @@ def _resolve_secret() -> bytes:
     except Exception:
         pass  # fall through
     if _is_prod():
-        raise RuntimeError(
+        raise SecretNotConfiguredError(
             "SECRET_KEY is not configured but the environment is production. "
             "Set the SECRET_KEY env var (or provide webapp/.secret_key via R2) "
             "— refusing to auto-generate, which would invalidate all sessions.")

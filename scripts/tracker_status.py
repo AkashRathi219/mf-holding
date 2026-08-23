@@ -160,15 +160,15 @@ def evaluate(rows: list[dict], skip_verify: bool = True) -> list[dict]:
         if state in ("doing", "review") and active_phase > PHASE_ORDER[r["phase"]]:
             pass  # later phases being worked while this open -> caught below
 
-    # Gate breach: a LATER phase has active work while this phase still open.
-    open_phases = {PHASE_ORDER[r["phase"]] for r in rows
-                   if r["state"] in ("todo", "doing", "blocked", "review")}
-    active_later = [r for r in rows if r["state"] in ("doing", "review")
-                    and PHASE_ORDER[r["phase"]] in open_phases
-                    and PHASE_ORDER[r["phase"]] == max(open_phases)
-                    and any(PHASE_ORDER[o["phase"]] < PHASE_ORDER[r["phase"]]
-                            for o in rows
-                            if o["state"] in ("todo", "doing", "blocked", "review"))]
+    # Gate breach: two phases ACTIVELY worked at once (doing/review on both
+    # sides of a boundary). Mere todo-backlog rows in earlier phases don't
+    # count — the ledger intentionally seeds every future task, so
+    # "todo exists" can't define the frontier (23-Aug refinement after INC1).
+    active_phases = sorted({PHASE_ORDER[r["phase"]] for r in rows
+                            if r["state"] in ("doing", "review")})
+    active_later = [r for r in rows
+                    if r["state"] in ("doing", "review")
+                    and any(p < PHASE_ORDER[r["phase"]] for p in active_phases)]
     for r in active_later:
         add(ORANGE, "GATE-BREACH", r,
             "active phase has open predecessors (serial sequencing)")
@@ -236,12 +236,15 @@ def selftest() -> int:
         {"id": "E1", "task": "later phase active", "phase": "2",
          "state": "doing", "deps": "", "opened": recent, "touched": recent,
          "verify": "", "evidence": "", "blocker": ""},
-        {"id": "E0", "task": "earlier open", "phase": "1", "state": "todo",
-         "deps": "D0", "opened": recent, "touched": recent, "verify": "",
-         "evidence": "", "blocker": ""},
+        {"id": "E0", "task": "earlier phase also active", "phase": "1",
+         "state": "review", "deps": "D0", "opened": recent, "touched": recent,
+         "verify": "", "evidence": "", "blocker": ""},
+        {"id": "F9", "task": "earlier but user-blocked", "phase": "1",
+         "state": "blocked", "deps": "", "opened": old, "touched": old,
+         "verify": "", "evidence": "",
+         "blocker": f"needs input (revalidated {recent})"},
     ]
-    findings = [f for f in evaluate(list(rows))
-                if f["kind"] not in ("STARVED",)]  # C1 touched>5d & ready & phase active
+    findings = evaluate(list(rows))
     kinds = {(f["severity"], f["kind"], f["id"]) for f in findings}
     expect = {(RED, "STUCK-DOING", "A1"), (RED, "STALE-BLOCK", "B1"),
               (ORANGE, "GATE-BREACH", "E1")}

@@ -17,3 +17,6 @@ docs/internal/
 # --- os noise ---
 .DS_Store
 Thumbs.db
+
+# local slim-image repro venv
+.venv-slim/

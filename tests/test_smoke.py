@@ -41,7 +41,7 @@ def test_health_deep_probe(client):
     assert body["checks"]["db"]["schemes"] >= 1
 
 
-def test_health_503_when_db_dead(client, monkeypatch):
+def test_health_503_when_db_dead_in_prod_intent(client, monkeypatch):
     from webapp import main
 
     def broken(force: bool = False):
@@ -51,11 +51,38 @@ def test_health_503_when_db_dead(client, monkeypatch):
         import sqlite3
         return sqlite3.OperationalError("no such db")
 
+    monkeypatch.setenv("MF_READONLY_DB", "1")  # prod-intent declared [S3]
     monkeypatch.setattr(main.db, "get_db", broken)
     monkeypatch.setattr(main, "_db", None)
     monkeypatch.setattr(main, "_health_cache", None)
     r = client.get("/api/health")
     assert r.status_code == 503
+    assert r.json()["checks"]["db"]["ok"] is False
+
+
+def test_health_degraded_ok_without_prod_intent(client, monkeypatch):
+    """Dev checkout with no data and no R2 must NOT crash-loop: 200 + flags."""
+    from webapp import main
+
+    def empty(force: bool = False):
+        class _Empty:
+            con = type("C", (), {"execute": staticmethod(
+                lambda *a, **k: (_ for _ in ()).throw(sqlite_err()))})()
+
+        def sqlite_err():
+            import sqlite3
+            return sqlite3.OperationalError("no such table")
+
+        raise sqlite_err()
+
+    monkeypatch.delenv("MF_READONLY_DB", raising=False)
+    monkeypatch.delenv("R2_ACCOUNT_ID", raising=False)
+    monkeypatch.setattr(main.db, "get_db", empty)
+    monkeypatch.setattr(main, "_db", None)
+    monkeypatch.setattr(main, "_health_cache", None)
+    r = client.get("/api/health")
+    assert r.status_code == 200
+    assert r.json()["status"] == "degraded"
     assert r.json()["checks"]["db"]["ok"] is False
 
 

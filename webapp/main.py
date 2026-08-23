@@ -217,6 +217,11 @@ def _on_startup() -> None:
         _start_scheduler_thread()
     except Exception:
         log.exception("scheduler startup failed; web tier continues without it")
+    try:  # [H4] surface a missing SECRET_KEY at boot, not on first login
+        auth._get_secret()
+    except auth.SecretNotConfiguredError as e:
+        log.critical("SECRET_KEY NOT CONFIGURED: %s — login/register will "
+                     "return 503 until the env var is set", e)
 
 
 @app.middleware("http")
@@ -268,7 +273,10 @@ def _require_user(request: Request) -> dict:
         token = request.headers.get("X-Auth-Token", "")
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required. Please log in.")
-    user = auth.user_from_token(token)
+    try:
+        user = auth.user_from_token(token)
+    except auth.SecretNotConfiguredError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     if not user:
         raise HTTPException(status_code=401, detail="Session expired. Please log in again.")
     return user
@@ -283,6 +291,8 @@ def api_register(request: Request, body: RegisterIn):
     enforce(AUTH_REGISTER_LIMITER, request)  # [H1]
     try:
         return auth.register_user(body.email, body.name, body.org, body.password)
+    except auth.SecretNotConfiguredError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except auth.AuthError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -292,6 +302,8 @@ def api_login(request: Request, body: LoginIn):
     enforce(AUTH_LOGIN_LIMITER, request)  # [H1] PBKDF2@200k makes unthrottled
     try:  # attempts a cheap CPU-exhaustion vector as well as a brute-force one
         return auth.login_user(body.email, body.password)
+    except auth.SecretNotConfiguredError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except auth.AuthError as e:
         raise HTTPException(status_code=401, detail=str(e))
 
@@ -801,12 +813,21 @@ _health_cache: tuple[float, dict] | None = None
 _HEALTH_TTL_S = 10.0
 
 
+def _prod_intent() -> bool:
+    """True when this deployment is EXPECTED to serve the full dataset
+    (Railway-style). In that mode a missing/broken DB is a hard 503; on a dev
+    box with no R2 and no readonly flag an absent DB is just 'no data yet'."""
+    return bool(os.environ.get("MF_READONLY_DB") == "1" or
+                os.environ.get("R2_ACCOUNT_ID"))
+
+
 def _health_probe() -> dict:
     """Deep readiness probe [S3]: the deployment gate must reflect reality.
 
-    Hard-fails (503) only when the primary DB is unreadable/empty — that is
-    the one condition where serving traffic is pointless. R2 config and
-    scheduler heartbeat are reported informationally.
+    503 (via caller) when serving would be pointless — primary DB unreadable/
+    empty — but ONLY when prod-intent is declared (`MF_READONLY_DB=1` or R2
+    configured). A bare dev checkout without data returns 200 + degraded
+    flags instead of crash-looping.
     """
     checks: dict = {}
     ok = True
@@ -821,15 +842,20 @@ def _health_probe() -> dict:
         checks["db"] = {"ok": False, "error": str(e)[:120]}
         ok = False
     from .remote_store import is_configured
-    checks["r2_configured"] = is_configured()
+    r2 = is_configured()
+    checks["r2_configured"] = r2
     hb_age = _scheduler_heartbeat_age_s()
     checks["scheduler"] = {
         "enabled": os.environ.get("ENABLE_SCHEDULER") == "1",
         "heartbeat_age_s": hb_age,
         "ok": hb_age is not None and hb_age < 25 * 3600,
     }
-    return {"status": "ok" if ok else "degraded", "checks": checks,
-            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    status = "ok" if ok else ("degraded" if not _prod_intent() else "error")
+    if not ok and _prod_intent():
+        log.error("health probe FAILED in prod-intent mode: %s", checks["db"])
+    return {"status": status, "checks": checks,
+            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds")}, \
+        (ok or not _prod_intent())
 
 
 def _scheduler_heartbeat_age_s() -> float | None:
@@ -855,11 +881,11 @@ def api_health():
     import time as _time
     now = _time.monotonic()
     if _health_cache and (now - _health_cache[0]) < _HEALTH_TTL_S:
-        payload = _health_cache[1]
+        payload, serving_ok = _health_cache[1]
     else:
-        payload = _health_probe()
-        _health_cache = (now, payload)
-    if payload["status"] != "ok":
+        payload, serving_ok = _health_probe()
+        _health_cache = (now, (payload, serving_ok))
+    if not serving_ok:
         return JSONResponse(status_code=503, content=payload)
     return payload
 
