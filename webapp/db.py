@@ -1,4 +1,4 @@
-"""Data layer for the Factsheet Engine AI webapp.
+"""Data layer for the FundPulse webapp.
 
 Loads the parsed holdings / universe / securities / index-reference files under
 ``data/`` into a single cached SQLite database (``data/webapp.db``), then exposes

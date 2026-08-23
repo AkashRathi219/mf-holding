@@ -1,4 +1,4 @@
-# Factsheet Engine AI — MF Holdings Portal
+# FundPulse — MF Holdings Portal
 
 Web presence of the MF portfolio-holdings research pipeline: a FastAPI app
 (`webapp/`) serving schemes, holdings, stocks and the NSE bond market over a

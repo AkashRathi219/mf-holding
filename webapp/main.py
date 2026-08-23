@@ -1,4 +1,4 @@
-"""FastAPI application for the Factsheet Engine AI webapp.
+"""FastAPI application for the FundPulse webapp.
 
 Serves the static frontend and a JSON API over the built holdings database.
 All data endpoints require a valid session token (login / register first).
@@ -33,7 +33,7 @@ log = get_logger("main")
 SUPERADMIN_EMAILS = {e.strip().lower() for e in os.environ.get(
     "SUPERADMIN_EMAILS", "akash@aracharatventures.com").split(",") if e.strip()}
 
-app = FastAPI(title="Factsheet Engine AI", docs_url="/api/docs", openapi_url="/api/openapi.json")
+app = FastAPI(title="FundPulse", docs_url="/api/docs", openapi_url="/api/openapi.json")
 app.include_router(tools_router)
 
 
@@ -676,7 +676,7 @@ def build_proposal(wdb: db.WebDB, items: list[dict], replacements: dict,
     out: list[str] = []
     out.append("# Client Portfolio Proposal")
     out.append("")
-    out.append(f"_Generated on {_today_str()} - Factsheet Engine AI_")
+    out.append(f"_Generated on {_today_str()} - FundPulse_")
     out.append("")
     out.append(f"Portfolio: {len(pa['schemes'])} schemes · {len(pa['stocks'])} direct stocks · "
                f"allocated {pa['total_weight']:.1f}% · {pa['n_holdings']} underlying securities")

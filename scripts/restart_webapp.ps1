@@ -1,4 +1,4 @@
-# Restart the Factsheet Engine AI webapp (python -m webapp).
+# Restart the FundPulse webapp (python -m webapp).
 #
 # Stops any running `python -m webapp`, starts a fresh instance in the
 # background, and health-checks it until it responds (or fails).

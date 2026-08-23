@@ -1,4 +1,4 @@
-"""Authentication for the Factsheet Engine AI webapp.
+"""Authentication for the FundPulse webapp.
 
 Stateless, dependency-free auth:
 

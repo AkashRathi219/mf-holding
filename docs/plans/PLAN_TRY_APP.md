@@ -99,8 +99,15 @@ Distribution:
 - [ ] Copy review: no advice-flavoured language anywhere
 
 ### Open inputs needed
-- One real CAS PDF as test fixture (none exists in repo — only parsed JSON sample)
+
+> ⚠️ **HARD BLOCKERS — the build cannot start until both are provided.**
+> Tracker: `EXECUTION_TRACKER.md` → TRY1.
+
+- One real CAS PDF as test fixture (**none exists in repo** — only a parsed JSON
+  sample; need a CAMS/KFintech/NSDL statement, PAN-encrypted, to exercise
+  `authenticate(password)` + parser end-to-end)
 - Production URL for `SITE_URL` placeholder
+  (`fundpulse.aracharatventures.com` once DNS is wired)
 
 ## Queued follow-ups
 - Entity compliance checklist (`docs/internal/COMPLIANCE_CHECKLIST.md`)
