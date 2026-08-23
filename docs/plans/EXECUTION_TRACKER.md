@@ -48,10 +48,10 @@ Commits tag task IDs: `fix(scheduler): ... [S2c]`. `Blocked` rows stale >7 d nee
 | ANA3 | Portfolio-level analytics | 7 | todo | ANA1 | 23-Aug | 23-Aug | per plan checklist | — | — |
 | ANA4 | Proposal integration + disclaimer block | 7 | todo | ANA3 | 23-Aug | 23-Aug | per plan checklist | — | — |
 | ANA5 | Methodology/marketing sync | 7 | todo | ANA1 | 23-Aug | 23-Aug | copy review vs guardrails | — | — |
-| DBT1 | FK cascades in userdata.db | 8 | todo | — | 23-Aug | 23-Aug | delete-cascade tests | — | — |
-| DBT2 | NAV revision-aware upsert | 8 | todo | — | 23-Aug | 23-Aug | revised-NAV test | — | — |
-| DBT3 | _norm_code leading-zero preservation | 8 | todo | — | 23-Aug | 23-Aug | normalization tests | — | — |
-| DBT4 | Overlap key issuer+coupon+maturity fallback | 8 | todo | — | 23-Aug | 23-Aug | debt-overlap tests | — | — |
-| DBT5 | Modified-duration metric for debt | 8 | todo | — | 23-Aug | 23-Aug | duration tests | — | — |
-| DBT6 | userdata.db user_id indexes | 8 | todo | — | 23-Aug | 23-Aug | EXPLAIN QUERY PLAN checks | — | — |
-| DBT7 | Hygiene: dead code, stale webapp.db.tmp, hardcoded counts | 8 | todo | — | 23-Aug | 23-Aug | grep sweep clean | — | — |
+| DBT1 | FK cascades in userdata.db | 8 | done | — | 23-Aug | 23-Aug | tests/test_phase8_dbt.py::test_delete_strategy_cascades | application-level cascades (SQLite can't ALTER ADD CONSTRAINT on existing tables; native FKs would need risky table rebuilds) + one-time orphan purge gated by PRAGMA user_version | — |
+| DBT2 | NAV revision-aware upsert | 8 | done | — | 23-Aug | 23-Aug | tests/test_phase8_dbt.py::test_nav_revision_replaces_old_value | INSERT OR IGNORE -> ON CONFLICT DO UPDATE in nav_history worker + nav_repair; identical rows skipped via WHERE | — |
+| DBT3 | _norm_code leading-zero preservation | 8 | done | — | 23-Aug | 23-Aug | tests/test_phase8_dbt.py::test_norm_code_preserves_leading_zeros | digits pass through untouched; only float artifacts ('154477.0') are int-converted | — |
+| DBT4 | Overlap key issuer+coupon+maturity fallback | 8 | todo | — | 23-Aug | 23-Aug | debt-overlap tests | — | next session |
+| DBT5 | Modified-duration metric for debt | 8 | todo | — | 23-Aug | 23-Aug | duration tests | — | next session |
+| DBT6 | userdata.db user_id indexes | 8 | done | — | 23-Aug | 23-Aug | tests/test_phase8_dbt.py::test_indexes_actually_used | 8 indexes created under user_version gate; EXPLAIN QUERY PLAN verifies idx_strategies_user is used | — |
+| DBT7 | Hygiene: dead code, stale webapp.db.tmp, hardcoded counts | 8 | doing | — | 23-Aug | 23-Aug | grep sweep clean | _rationale dead fn removed; data/webapp.db.tmp (41.5 MB) deleted; register.html now fetches live /api/scope-stats instead of hardcoded counts. Remaining: sortable-header CSS, dead drawer fns | — |

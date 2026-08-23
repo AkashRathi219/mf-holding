@@ -14,7 +14,6 @@ Run::
 from __future__ import annotations
 
 import datetime
-import sqlite3
 import sys
 import time
 from datetime import date, timedelta
@@ -97,8 +96,13 @@ def repair(target_codes: set[str]) -> int:
         text = _fetch_with_retry(frm, tod)
         rows = [r for r in _parse_nav_text(text) if r[0] in target_codes]
         cur.executemany(
-            "INSERT OR IGNORE INTO nav_history "
-            "(scheme_code,date,nav,name,plan,option,isin,isin_re) VALUES (?,?,?,?,?,?,?,?)",
+            # [DBT2] revision-aware upsert (mirrors nav_history worker).
+            "INSERT INTO nav_history "
+            "(scheme_code,date,nav,name,plan,option,isin,isin_re) VALUES (?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(scheme_code,date) DO UPDATE SET nav=excluded.nav, "
+            "name=excluded.name, plan=excluded.plan, option=excluded.option, "
+            "isin=excluded.isin, isin_re=excluded.isin_re "
+            "WHERE nav_history.nav IS NOT excluded.nav",
             rows)
         con.commit()
         total += len(rows)

@@ -15,7 +15,7 @@
       <p>Built for SEBI-registered Investment Advisers (RIA), Research Analysts (RA) &amp; MFDs —
          scheme explorer, portfolio overlap diagnostics, IPS-rule compliance reports,
          bond-market yields and white-label client proposals.</p>
-      <div class="stats" style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
+      <div class="stats" id="scopeStats" style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
         <div><strong>2,513</strong><span>schemes · 91% covered</span></div>
         <div><strong>11,069</strong><span>NSE bonds · YTM tagged</span></div>
         <div><strong>133k</strong><span>holding rows · 98.9% ISIN</span></div>
@@ -59,6 +59,22 @@
   </div>
 </div>
 <script src="/static/js/utils.js?v=3"></script>
+<script>
+  // Live data-scope stats (DBT7): replaces drifting hardcoded counts.
+  fetch("/api/scope-stats").then(r => r.ok ? r.json() : null).then(s => {
+    if (!s) return;
+    const box = document.getElementById("scopeStats");
+    if (!box) return;
+    const fmt = n => n == null ? "\u2014" : Number(n).toLocaleString("en-IN");
+    const pct = v => v == null ? "" : ` \u00b7 ${v}% covered`;
+    box.innerHTML = [
+      `<div><strong>${fmt(s.schemes)}</strong><span>schemes${pct(s.schemes_covered_pct)}</span></div>`,
+      `<div><strong>${fmt(s.bonds)}</strong><span>NSE bonds · YTM tagged</span></div>`,
+      `<div><strong>${fmt(s.holdings)}</strong><span>holding rows · ${s.isin_pct == null ? "\u2014" : s.isin_pct + "%"} ISIN</span></div>`,
+      `<div><strong>${fmt(s.stocks)}</strong><span>listed stocks tracked</span></div>`,
+    ].join("");
+  }).catch(() => {});
+</script>
 <script>
   if (App.token) { location.href = "/app"; }
   const btn = document.getElementById("regBtn");

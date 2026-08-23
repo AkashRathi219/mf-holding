@@ -25,7 +25,41 @@ def _conn() -> sqlite3.Connection:
     con = sqlite3.connect(USERDATA_DB)
     con.row_factory = sqlite3.Row
     _init_schema(con)
+    _upgrade_once(con)
     return con
+
+
+_SCHEMA_VERSION = 2  # 1 = initial · 2 = [DBT1/DBT6] cascade deletes + indexes
+
+
+def _upgrade_once(con: sqlite3.Connection) -> None:
+    """One-time per-DB upgrade work, gated by PRAGMA user_version so the
+    per-connection _init_schema stays cheap. [DBT1/DBT6]"""
+    if con.execute("PRAGMA user_version").fetchone()[0] >= _SCHEMA_VERSION:
+        return
+    # Indexes: every hot query filters on user_id / strategy_id.
+    con.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_strategies_user ON strategies(user_id);
+        CREATE INDEX IF NOT EXISTS idx_rules_strategy ON rules(strategy_id);
+        CREATE INDEX IF NOT EXISTS idx_models_user ON model_portfolios(user_id);
+        CREATE INDEX IF NOT EXISTS idx_clients_user ON clients(user_id);
+        CREATE INDEX IF NOT EXISTS idx_cportfolios_user ON client_portfolios(user_id);
+        CREATE INDEX IF NOT EXISTS idx_cportfolios_client ON client_portfolios(client_id);
+        CREATE INDEX IF NOT EXISTS idx_runs_user ON analysis_runs(user_id);
+        CREATE INDEX IF NOT EXISTS idx_runs_portfolio ON analysis_runs(portfolio_id, portfolio_kind);
+        """
+    )
+    # Orphan purge: heal rows stranded before application-level cascades
+    # existed (analysis_runs of deleted portfolios/strategies etc).
+    con.execute(
+        "DELETE FROM analysis_runs WHERE portfolio_kind='client' AND portfolio_id "
+        "NOT IN (SELECT id FROM client_portfolios)")
+    con.execute(
+        "DELETE FROM analysis_runs WHERE strategy_id IS NOT NULL AND strategy_id "
+        "NOT IN (SELECT id FROM strategies)")
+    con.commit()
+    con.execute(f"PRAGMA user_version={_SCHEMA_VERSION}")
 
 
 def _init_schema(con: sqlite3.Connection) -> None:
@@ -190,8 +224,16 @@ def update_strategy(user_id: int, strategy_id: int, **fields) -> dict | None:
 def delete_strategy(user_id: int, strategy_id: int) -> None:
     con = _conn()
     try:
+        # [DBT1] application-level cascade (SQLite can't ALTER ADD CONSTRAINT
+        # onto existing tables; native FKs would need a table rebuild).
         con.execute("DELETE FROM rules WHERE strategy_id=? AND strategy_id IN "
                     "(SELECT id FROM strategies WHERE user_id=?)", (strategy_id, user_id))
+        con.execute("DELETE FROM analysis_runs WHERE strategy_id=? AND strategy_id IN "
+                    "(SELECT id FROM strategies WHERE user_id=?)", (strategy_id, user_id))
+        con.execute("UPDATE model_portfolios SET strategy_id=NULL WHERE strategy_id=? "
+                    "AND user_id=?", (strategy_id, user_id))
+        con.execute("UPDATE client_portfolios SET strategy_id=NULL WHERE strategy_id=? "
+                    "AND user_id=?", (strategy_id, user_id))
         con.execute("DELETE FROM strategies WHERE id=? AND user_id=?", (strategy_id, user_id))
         con.commit()
     finally:
@@ -318,6 +360,13 @@ def update_model(user_id: int, model_id: int, **fields) -> dict | None:
 def delete_model(user_id: int, model_id: int) -> None:
     con = _conn()
     try:
+        # [DBT1] detach client portfolios that were cloned from this model
+        # (they keep their own items_json copies; only the provenance link goes).
+        con.execute("UPDATE client_portfolios SET model_portfolio_id=NULL "
+                    "WHERE model_portfolio_id=? AND user_id=?", (model_id, user_id))
+        con.execute("DELETE FROM analysis_runs WHERE strategy_id IS NULL AND "
+                    "portfolio_kind='model' AND portfolio_id=? AND user_id=?",
+                    (model_id, user_id))
         con.execute("DELETE FROM model_portfolios WHERE id=? AND user_id=?", (model_id, user_id))
         con.commit()
     finally:
@@ -410,6 +459,10 @@ def update_client(user_id: int, client_id: int, **fields) -> dict | None:
 def delete_client(user_id: int, client_id: int) -> None:
     con = _conn()
     try:
+        # [DBT1] cascade: portfolios of this client + their cached runs.
+        con.execute("DELETE FROM analysis_runs WHERE user_id=? AND portfolio_kind='client' "
+                    "AND portfolio_id IN (SELECT id FROM client_portfolios "
+                    "WHERE client_id=?)", (user_id, client_id))
         con.execute("DELETE FROM client_portfolios WHERE user_id=? AND client_id=?",
                     (user_id, client_id))
         con.execute("DELETE FROM clients WHERE id=? AND user_id=?", (client_id, user_id))
@@ -499,6 +552,9 @@ def update_client_portfolio(user_id: int, portfolio_id: int, **fields) -> dict |
 def delete_client_portfolio(user_id: int, portfolio_id: int) -> None:
     con = _conn()
     try:
+        # [DBT1] cached analysis results of a deleted portfolio are dead weight.
+        con.execute("DELETE FROM analysis_runs WHERE portfolio_kind='client' AND "
+                    "portfolio_id=? AND user_id=?", (portfolio_id, user_id))
         con.execute("DELETE FROM client_portfolios WHERE id=? AND user_id=?",
                     (portfolio_id, user_id))
         con.commit()

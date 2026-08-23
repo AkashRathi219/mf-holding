@@ -760,14 +760,6 @@ def _top_overlap_pairs(matrix: list[dict], k: int = 3) -> list[tuple]:
     return pairs[:k]
 
 
-def _rationale(scheme: dict, overlap: dict) -> str:
-    if scheme.get("n_holdings"):
-        return f"Portfolio of {scheme['n_holdings']} holdings" + (
-            f"; top holding {scheme.get('top_holding', '')} at "
-            f"{scheme.get('top_holding_pct', 0):.2f}%." if scheme.get("top_holding_pct") else ".")
-    return "Tracked index exposure with benchmark-aligned holdings."
-
-
 def _opt_bool(v: str | None):
     if v is None:
         return None

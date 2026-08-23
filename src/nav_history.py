@@ -42,7 +42,6 @@ import json
 import re
 import sqlite3
 import ssl
-import sys
 import time
 import urllib.request
 from datetime import date, datetime, timedelta
@@ -82,14 +81,22 @@ def _ssl_ctx() -> ssl.SSLContext:
 
 
 def _norm_code(raw: str) -> str:
-    """Normalise an AMFI scheme code (may arrive as '154477.0')."""
+    """Normalise an AMFI scheme code (may arrive as '154477.0').
+
+    [DBT3] Only strips float artifacts ('154477.0' -> '154477'); a code that
+    arrives as digits keeps its leading zeros ('012345' stays '012345') so it
+    matches the universe/schemes tables exactly.
+    """
     raw = (raw or "").strip()
     if not raw:
         return ""
+    if re.fullmatch(r"\d+", raw):
+        return raw
     try:
-        return str(int(float(raw)))
+        f = float(raw)
     except ValueError:
         return raw
+    return str(int(f)) if f.is_integer() else raw
 
 
 def _resolve_universe_csv() -> Path:
@@ -252,10 +259,23 @@ def backfill(target_codes: set[str], worker_id: int = 0, num_workers: int = 1) -
         if rows:
             for attempt in range(MAX_RETRIES):
                 try:
+                    # [DBT2] revision-aware upsert: when AMFI republishes a
+                    # corrected NAV for (code, date), the new value REPLACES
+                    # the old one instead of being silently ignored. The
+                    # WHERE clause skips identical rows so routine re-fetches
+                    # stay cheap.
                     cur.executemany(
-                        "INSERT OR IGNORE INTO nav_history "
-                        "(scheme_code,date,nav,name,plan,option,isin,isin_re) "
-                        "VALUES (?,?,?,?,?,?,?,?)", rows)
+                        """
+                        INSERT INTO nav_history
+                            (scheme_code,date,nav,name,plan,option,isin,isin_re)
+                        VALUES (?,?,?,?,?,?,?,?)
+                        ON CONFLICT(scheme_code,date) DO UPDATE SET
+                            nav=excluded.nav, name=excluded.name,
+                            plan=excluded.plan, option=excluded.option,
+                            isin=excluded.isin, isin_re=excluded.isin_re
+                        WHERE nav_history.nav IS NOT excluded.nav
+                            OR nav_history.name IS NOT excluded.name
+                        """, rows)
                     con.commit()
                     break
                 except sqlite3.OperationalError:
