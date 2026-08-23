@@ -62,7 +62,20 @@ function route() {
     window.scrollTo(0, 0);
     return;
   }
-  const screen = screens[hash] || screens.schemes;
+  const screen = screens[hash];
+  if (!screen) {
+    // [U2] unknown hashes get an explicit 404 panel — the old silent
+    // fallback to Scheme Explorer is how four built screens went missing.
+    document.querySelectorAll(".screen").forEach(s => s.style.display = "none");
+    document.getElementById("screen-notfound").style.display = "";
+    document.querySelectorAll("#nav a").forEach(a => a.classList.remove("active"));
+    const h = document.getElementById("notfoundHash");
+    if (h) h.textContent = "#" + hash;
+    document.getElementById("pageTitle").textContent = "Not found";
+    document.getElementById("pageSub").textContent = "Unknown screen";
+    window.scrollTo(0, 0);
+    return;
+  }
   const key = screen.key;
   document.querySelectorAll(".screen").forEach(s => s.style.display = "none");
   document.getElementById("screen-" + key).style.display = "";
@@ -79,7 +92,7 @@ async function loadFilters() {
     filters = await App.api("/filters");
     fillSelect("schemeAmc", filters.amcs);
     fillSelect("schemeCategory", filters.categories);
-    fillSelect("schemeSource", filters.sources.map(s => ({ v: s, l: s.replace(/_/g, " ") })));
+    fillSelect("schemeSource", filters.sources.map(s => ({ v: s, l: App.sourceLabel(s) })));  // [U4L] never render raw source keys
     fillSelect("schemeCoverage", filters.coverage.map(s => ({ v: s, l: s.replace(/_/g, " ") })));
     fillSelect("secCap", filters.caps);
     fillSelect("secSector", filters.sectors);
@@ -182,13 +195,16 @@ function confBadge(cf) {
   const [lbl, col] = TIER[(cf && cf.tier) || "grey"] || TIER.grey;
   const lines = [
     "Data confidence: " + (cf && cf.score != null ? cf.score + " / 100" : "n/a"),
-    "Source: " + ((cf && cf.source) || "none"),
+    "Source: " + (cf && cf.source ? App.sourceLabel(cf.source) : "none"),  // [U4L] masked, was raw key
     "Disclosure age: " + (cf && cf.age_days != null ? cf.age_days + " days" : "unknown"),
   ];
+  if (cf && cf.stale) lines.push("Holdings disclosure older than 180 days");  // [U3]
   if (cf && cf.isin_pct != null) lines.push("ISIN coverage: " + cf.isin_pct + "%");
   if (cf && cf.reason) lines.push("Reason: " + cf.reason);
+  const staleMark = (cf && cf.stale)
+    ? `<span title="${App.esc("No fresh holdings disclosure in 180+ days")}" style="color:#c94f4f;font-weight:600"> \u00b7 stale</span>` : "";
   return `<span title="${App.esc(lines.join("\n"))}" style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:${col};white-space:nowrap;margin-left:6px">
-    <span style="width:7px;height:7px;border-radius:50%;background:${col};display:inline-block"></span>${lbl}</span>`;
+    <span style="width:7px;height:7px;border-radius:50%;background:${col};display:inline-block"></span>${lbl}${staleMark}</span>`;
 }
 
 async function loadSchemes() {
@@ -2432,7 +2448,7 @@ async function refreshRelianceData() {
     const worstRows = (r.worst || []).map(w => `<tr class="clickable" onclick="location.hash='#scheme/${w.id}'">
         <td>${App.esc(w.fund_name)}</td>
         <td>${App.esc(w.amc)}</td>
-        <td>${App.esc(w.source || "none")}</td>
+        <td>${App.esc(w.source ? App.sourceLabel(w.source) : "none")}</td>  <!-- [U4L] -->
         <td class="mono">${App.formatDate(w.as_of)}</td>
         <td class="num"><span class="badge red">${w.score}</span></td>
       </tr>`).join("") || `<tr><td colspan="5" class="empty">Nothing below threshold — good.</td></tr>`;

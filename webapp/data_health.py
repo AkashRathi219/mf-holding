@@ -297,7 +297,10 @@ def scheme_confidence(scheme: dict, stats: dict | None = None) -> dict:
     cov = scheme.get("coverage") or "has_holdings"
     src = scheme.get("source") or ""
     age = _as_of_age_days(scheme.get("as_of"))
-    detail = {"source": src or None, "age_days": age}
+    # [U3] explicit MF-A2 flag so any UI can badge staleness without
+    # duplicating the threshold (>180d since last holdings disclosure).
+    detail = {"source": src or None, "age_days": age,
+              "stale": age is not None and age > ADVISORKHOJ_STALE_DAYS}
 
     if cov in ("no_disclosure", "missing"):
         return {"score": 0.0, "tier": "grey",

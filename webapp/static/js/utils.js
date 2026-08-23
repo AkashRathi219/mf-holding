@@ -58,15 +58,19 @@ App.sourceLabel = function (s) {
   const map = {
     amc_website: "AMC website",
     // Internal key kept for the background aggregator fallback (stable link);
-    // user-facing scope attributes the data to the AMC's own disclosures.
+    // user-facing scope attributes the data to the AMC's own disclosures [D2].
     advisorkhoj: "AMC disclosure",
     amfi: "AMFI",
     index: "Index",
     universe_only: "Universe only",
   };
-  if (!s) return "—";
+  if (!s) return "\u2014";
   return map[s] || String(s).replace(/_/g, " ");
 };
+
+// The ONE place raw source keys may be turned into user-facing labels [D2].
+// Every render path MUST go through this (filter dropdowns, tooltips, badges).
+App.maskedSource = App.sourceLabel;
 
 App.esc = function (s) {
   if (s === null || s === undefined) return "";

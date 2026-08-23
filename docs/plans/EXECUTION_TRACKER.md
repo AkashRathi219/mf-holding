@@ -31,9 +31,9 @@ Commits tag task IDs: `fix(scheduler): ... [S2c]`. `Blocked` rows stale >7 d nee
 | H3 | CORS allowlist middleware | 2 | done | — | 23-Aug | 23-Aug | tests/test_auth_hardening.py::test_cors_allowlisted_origin_gets_headers | _add_cors() env-driven (CORS_ORIGINS); default off; unblocks WEB1/TRY1 | — |
 | H4 | Secret caching + loud prod failure | 2 | done | — | 23-Aug | 23-Aug | tests/test_auth_hardening.py::test_secret_missing_in_prod_fails_loudly | process-level cache (no disk read per request); prod RuntimeError instead of silent auto-generate | — |
 | U1 | Orphaned screens wiring/deletion | 3 | parked | — | 23-Aug | 23-Aug | — | DECISIONS.md D1 | revisit at Try App launch / UX pass |
-| U2 | Route fallback → 404 panel | 3 | todo | — | 23-Aug | 23-Aug | tests/test_routing_ui.py::test_unknown_hash | — | — |
-| U3 | MF-A2 stale badge in UI | 3 | todo | — | 23-Aug | 23-Aug | tests/test_stale_badge.py | — | — |
-| U4L | Mask leak fix in source filter (app.js:82) | 3 | todo | — | 23-Aug | 23-Aug | tests/test_source_masking.py | — | — |
+| U2 | Route fallback → 404 panel | 3 | done | — | 23-Aug | 23-Aug | tests/test_phase3_ui.py::test_unknown_hash_panel_exists | screen-notfound section + explicit route branch; silent schemes-fallback removed | — |
+| U3 | MF-A2 stale badge in UI | 3 | done | — | 23-Aug | 23-Aug | tests/test_phase3_ui.py::test_scheme_confidence_flags_stale | scheme_confidence.stale flag (>180d) + confBadge "· stale" marker in list+detail | — |
+| U4L | Mask leak fix in source filter (app.js:82) | 3 | done | — | 23-Aug | 23-Aug | tests/test_phase3_ui.py::test_source_filter_dropdown_masked | filter dropdown, confBadge tooltip, reliance table all routed through App.sourceLabel; node --check on both bundles in CI | — |
 | D1 | Close last 2 download-backlog funds | 4 | todo | — | 23-Aug | 23-Aug | data/reference/reconciled_active_download.csv empty | — | sourcing effort |
 | D2 | Resolve 14 Nifty ETFs via index_resolver | 4 | todo | — | 23-Aug | 23-Aug | discovery_needed.csv delta | — | — |
 | D3 | Sourcing decision doc (~32 index/commodity rows) | 4 | todo | — | 23-Aug | 23-Aug | docs/DATA_SOURCES_RESEARCH.md section | — | procurement decision needed |
