@@ -228,6 +228,7 @@
       <a href="#how">How it works</a>
       <a href="#privacy">Privacy</a>
       <a href="#faq">FAQ</a>
+      <a href="/amc-directory" class="keep">AMC directory</a>
       <!-- TODO: point at live webapp -->
       <a class="keep" href="https://YOURAPP.railway.app/register" style="color:#fff">Get started free ↗</a>
     </div>
@@ -332,7 +333,7 @@
                style="flex:1;min-width:220px;padding:12px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;font-size:14px">
         <button class="btn btn-white" type="submit">Notify me</button>
       </form>
-      <p id="waitMsg" style="visibility:hidden;margin-top:12px;color:#7ee2c8;font-size:13.5px">✓ Thanks! You're on the list.</p>
+      <p id="waitMsg" style="visibility:hidden;margin-top:12px;color:#7ee2c8;font-size:13.5px"></p>
       <p style="font-size:12.5px;color:rgba(255,255,255,.55);margin-top:18px">
         Can't wait? Advisers already use the full engine today.
         <!-- TODO: point at live webapp -->
@@ -373,6 +374,7 @@
       <div>
         <a href="/product">For advisers</a><br><br>
         <a href="/data-methodology">How our data works</a><br><br>
+        <a href="/amc-directory">AMC report directory</a><br><br>
         <a href="https://YOURAPP.railway.app/register">Adviser sign-up</a>
       </div>
       <div>
@@ -391,12 +393,32 @@
       if(d.open){ document.querySelectorAll('details').forEach(function(o){ if(o!==d) o.open=false; }); }
     });
   });
-  // Waitlist stub: TODO replace with real endpoint (POST /api/try/waitlist or form service)
+  // Waitlist -> real endpoint on the webapp (WEB2). APP_URL placeholder is
+  // find-and-replaced together with the other https://YOURAPP.railway.app
+  // occurrences before publishing.
+  var APP_URL = 'https://YOURAPP.railway.app';
   document.getElementById('waitForm').addEventListener('submit', function(e){
     e.preventDefault();
-    document.getElementById('waitMsg').style.visibility = 'visible';
-    e.target.querySelector('input[type=email]').disabled = true;
-    e.target.querySelector('button').disabled = true;
+    var input = e.target.querySelector('input[type=email]');
+    var btn = e.target.querySelector('button');
+    var msg = document.getElementById('waitMsg');
+    var email = (input.value || '').trim();
+    if (!email) return;
+    btn.disabled = true; input.disabled = true;
+    fetch(APP_URL + '/api/try/waitlist', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email: email, source: 'investors'})
+    }).then(function(r){
+      if (!r.ok) throw new Error('http ' + r.status);
+      msg.textContent = '\u2713 Thanks! You\u2019re on the list.';
+      msg.style.visibility = 'visible';
+    }).catch(function(){
+      btn.disabled = false; input.disabled = false;
+      msg.textContent = 'Something went wrong \u2014 please try again in a minute.';
+      msg.style.color = '#f0b4b4';
+      msg.style.visibility = 'visible';
+    });
   });
 </script>
 </body>

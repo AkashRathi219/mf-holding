@@ -14,7 +14,7 @@ import os
 import re
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Iterable
 
@@ -43,6 +43,8 @@ NO_DISCLOSURE_CSV = DATA_DIR / "reference" / "no_disclosure.csv"
 # Ingestion source: niftyindices.com "Market Capitalisation & Weightage" monthly
 # report / API (get_index_constituents returns per-stock weight + ISIN).
 NIFTY_WEIGHTS_JSON = DATA_DIR / "nifty" / "weights.json"
+# Total-return index series for benchmark-relative analytics [ANA1]
+NIFTY_TR_DIR = DATA_DIR / "nifty" / "TR"
 # Bond-market universe built by src/bonds.py (NSE bulk files + computed YTM)
 BONDS_CATALOG_JSON = DATA_DIR / "reference" / "bonds_catalog.json"
 
@@ -1664,6 +1666,93 @@ def _zero_or_floater_name(name: str) -> bool:
     return bool(_ZERO_FLOATER_RE.search(name or ""))
 
 
+# ---- debt instrument identity for overlap fallback [DBT4] -------------------
+# The same bond is often reported differently across sources: one AMC prints
+# "7.38% Gujarat SDL (15/11/2032)" with the ISIN, another "Gujarat SDL 7.38
+# 15/11/2032" without. Keying overlap by ISIN-or-exact-name alone then
+# under-counts debt overlap. This derives an issuer+coupon+maturity identity
+# from the holding line itself.
+_DEBT_KEY_NOISE_RE = re.compile(r"[^A-Z0-9 ]")
+_DEBT_KEY_NOISE_WORDS = frozenset(
+    {"LTD", "LIMITED", "PVT", "PRIVATE", "THE", "AND", "OF", "IN", "LT"})
+_DEBT_KEY_DATE_RE = re.compile(r"[()]?(\d{2})[./-](\d{2})[./-](\d{4})[()]?")
+_DEBT_KEY_COUPON_PCT_RE = re.compile(r"(\d{1,2}(?:\.\d{1,4})?)\s*%")
+_DEBT_KEY_COUPON_BARE_RE = re.compile(r"\b(\d{1,2}\.\d{1,4})\b")
+
+
+def _debt_instrument_key(company: str, coupon, maturity_date) -> str | None:
+    """Issuer+coupon+maturity identity for a debt holding line.
+    ``coupon`` / ``maturity_date`` come from the enriched row when available;
+    otherwise they are recovered from the name (with or without '%' and
+    parentheses). Returns None when neither can be found — i.e. the line isn't
+    recognisably a dated instrument; those keep the legacy exact-name
+    fallback."""
+    text = (company or "").upper()
+    mat = maturity_date or ""
+    if not mat:
+        m = _DEBT_KEY_DATE_RE.search(text)
+        if m:
+            mat = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
+    coup = coupon
+    if coup is None:
+        m = (_DEBT_KEY_COUPON_PCT_RE.search(text)
+             or _DEBT_KEY_COUPON_BARE_RE.search(text))
+        if m:
+            try:
+                coup = float(m.group(1))
+            except ValueError:
+                coup = None
+    if coup is None and not mat:
+        return None
+    # Issuer tokens: drop the numeric artifacts + corporate noise words.
+    text = _MATURITY_RE.sub(" ", text)
+    text = _DEBT_KEY_DATE_RE.sub(" ", text)
+    text = _DEBT_KEY_COUPON_PCT_RE.sub(" ", text)
+    text = _DEBT_KEY_COUPON_BARE_RE.sub(" ", text)
+    tokens = [t for t in _DEBT_KEY_NOISE_RE.sub(" ", text).split()
+              if t not in _DEBT_KEY_NOISE_WORDS]
+    parts = [" ".join(tokens)]
+    if coup is not None:
+        try:
+            parts.append(f"C{round(float(coup), 4)}")
+        except (TypeError, ValueError):
+            pass
+    if mat:
+        parts.append(f"M{mat}")
+    key = "|".join(p for p in parts if p)
+    return key or None
+
+
+def _bond_duration_metrics(coupon, maturity_date: str | None,
+                           ytm=None, price=None) -> dict | None:
+    """Modified/Macaulay duration (years) for a bond record [DBT5].
+
+    ``maturity_date`` is 'YYYY-MM-DD'; tenor runs from today. Needs a
+    positive tenor plus one yield source (YTM or clean price); returns None
+    otherwise — callers just omit the field."""
+    from .analytics import bullet_modified_duration
+
+    if not maturity_date:
+        return None
+    try:
+        yrs = (datetime.strptime(maturity_date, "%Y-%m-%d").date()
+               - datetime.now().date()).days / 365.25
+    except ValueError:
+        return None
+    if yrs <= 0:
+        return None
+    try:
+        got = bullet_modified_duration(
+            coupon_pct=float(coupon) if coupon is not None else None, years=yrs,
+            ytm_pct=float(ytm) if ytm not in (None, 0) else None,
+            price=float(price) if price not in (None, 0) else None)
+    except (TypeError, ValueError):
+        return None
+    if got and got["modified_duration"] <= 0:
+        return None
+    return got
+
+
 
 
 _DEBT_KEYWORDS = ("t-bill", "tbill", "treasury", "goi", "g-sec", "gsec", "gilt",
@@ -2018,6 +2107,326 @@ class WebDB:
             out[plan] = self._load_nav_plan(code, start=start, end=end)
         return out
 
+    # ---- performance & risk analytics [ANA1] --------------------------------
+    # Staged benchmark map: keyword in category+fund name -> Nifty TR index.
+    # Equity-only by design for now (debt/hybrid need composite benchmarks —
+    # documented on the methodology page); unmapped schemes get no benchmark
+    # block rather than a misleading one.
+    _BENCHMARK_RULES = [
+        ("large cap", "NIFTY 100"), ("largecap", "NIFTY 100"),
+        ("mid cap", "NIFTY MIDCAP 150"), ("midcap", "NIFTY MIDCAP 150"),
+        ("small cap", "NIFTY SMALLCAP 250"), ("smallcap", "NIFTY SMALLCAP 250"),
+    ]
+    DEFAULT_EQUITY_BENCHMARK = "NIFTY 500"
+
+    @classmethod
+    def _benchmark_index_for(cls, s: dict) -> str | None:
+        if (s.get("category") or "").lower() != "equity":
+            return None
+        text = ((s.get("category") or "") + " "
+                + (s.get("fund_name") or "")).lower()
+        for kw, idx in cls._BENCHMARK_RULES:
+            if kw in text:
+                return idx
+        return cls.DEFAULT_EQUITY_BENCHMARK
+
+    @staticmethod
+    def _load_tr_index(index_name: str) -> list[tuple[str, float]] | None:
+        """Total-return series [(ISO date, index level)] for a Nifty index."""
+        path = NIFTY_TR_DIR / (index_name.strip().upper().replace(" ", "_") + ".csv")
+        if not path.exists():
+            return None
+        try:
+            rows = []
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                next(fh)  # header: Date,TotalReturnsIndex,NTR_Value
+                for ln in fh:
+                    parts = ln.rstrip("\n").split(",")
+                    if len(parts) < 2 or not parts[1].strip().replace(".", "", 1).isdigit():
+                        continue
+                    rows.append((parts[0].strip(), float(parts[1])))
+            return rows or None
+        except OSError:
+            return None
+
+    def scheme_analytics(self, scheme_id: int) -> dict:
+        """Performance/risk suite for one scheme over its AMFI NAV history.
+
+        Uses the Direct plan when available (investor-comparable), else
+        Regular. Degrades honestly: missing history/benchmark -> explicit
+        nulls, never fabricated numbers."""
+        import os as _os
+        from .analytics import DEFAULT_RF_PCT, compute_series_analytics
+
+        s = self.get_scheme(scheme_id)
+        if not s:
+            return {}
+        nav = self.scheme_nav(scheme_id)
+        plan_used = "direct" if nav.get("direct") else \
+            ("regular" if nav.get("regular") else None)
+        doc = nav.get(plan_used) if plan_used else None
+        base = {"scheme_id": scheme_id,
+                "fund_name": s.get("fund_name"),
+                "category": s.get("category"),
+                "disclaimer":
+                    "Past performance is not indicative of future returns."}
+        if not doc:
+            base["error"] = "no NAV history available for this scheme"
+            return base
+        try:
+            rf = float(_os.environ.get("ANALYTICS_RF_PCT", "") or 0.0)
+        except ValueError:
+            rf = 0.0
+        bench_name = self._benchmark_index_for(s)
+        bench = self._load_tr_index(bench_name) if bench_name else None
+        out = compute_series_analytics(
+            list(zip(doc["dates"], doc["navs"])),
+            rf_pct=rf if rf > 0 else DEFAULT_RF_PCT,
+            bench_series=bench)
+        out.update(base)
+        out["plan_used"] = plan_used
+        out["benchmark_index"] = bench_name if bench else (
+            None if not bench_name else f"{bench_name} (series unavailable)")
+        return out
+
+    @staticmethod
+    def _rolling_1y_points(dates: list[str], navs: list[float],                           step_days: int = 7) -> list[list[float]]:
+        """Rolling 1Y return (%) at ~weekly steps for charting [ANA2]."""
+        from datetime import timedelta
+
+        from .analytics import parse_nav_date
+        pts = []
+        parsed = [(parse_nav_date(d), v) for d, v in zip(dates, navs)]
+        parsed = [(d, v) for d, v in parsed if d and v and v > 0]
+        j = 0
+        next_take = 0
+        win = timedelta(days=365)
+        for i, (d, v) in enumerate(parsed):
+            while j < len(parsed) and parsed[j][0] < d - win:
+                j += 1
+            if j >= len(parsed):
+                break
+            bd, bv = parsed[j]
+            gap = (d - bd).days
+            if i >= next_take and gap >= 355 and bv > 0:
+                pts.append([d.isoformat(), round((v / bv - 1.0) * 100.0, 2)])
+                next_take = i + max(1, step_days)
+        return pts
+
+    def _plan_series(self, scheme_id: int):
+        """(plan_used, {iso_date: nav}) for one scheme — Direct preferred."""
+        from .analytics import parse_nav_date
+        nav = self.scheme_nav(scheme_id)
+        plan = "direct" if nav.get("direct") else \
+            ("regular" if nav.get("regular") else None)
+        doc = nav.get(plan) if plan else None
+        if not doc:
+            return None, None
+        m = {}
+        for d, v in zip(doc["dates"], doc["navs"]):
+            pd = parse_nav_date(d)
+            if pd and v and v > 0:
+                m[pd.isoformat()] = v
+        return plan, m
+
+    def portfolio_analytics(self, items: list[dict]) -> dict:
+        """Performance/risk suite over a weighted scheme basket [ANA3].
+
+        The client-portfolio NAV series is reconstructed as the
+        weight-blended growth of its schemes on their common window
+        (each scheme rebased to 100 at the window start), then run through
+        the same metric engine as single schemes."""
+        from .analytics import DEFAULT_RF_PCT, compute_series_analytics
+
+        entries: list[tuple[int, float]] = []
+        for it in items or []:
+            if (it.get("type") or "").lower() not in ("scheme", "fund", "mf"):
+                continue
+            sid = it.get("id")
+            try:
+                sid = int(sid) if sid else None
+            except (TypeError, ValueError):
+                sid = None
+            if not sid:
+                s = self._resolve_scheme_item(it)
+                sid = s["id"] if s else None
+            if not sid:
+                continue
+            w = float(it.get("weight") or 0.0)
+            if w > 0 and all(sid != e[0] for e in entries):
+                entries.append((sid, w))
+        if len(entries) < 1:
+            return {"error": "no resolvable scheme lines with weights",
+                    "disclaimer":
+                        "Past performance is not indicative of future returns."}
+        total_w = sum(w for _, w in entries)
+
+        series_map: dict[int, dict[str, float]] = {}
+        plans: dict[int, str] = {}
+        for sid, _w in entries:
+            plan, m = self._plan_series(sid)
+            if m:
+                series_map[sid] = m
+                plans[sid] = plan or "?"
+        if len(series_map) < 1:
+            return {"error": "none of the portfolio schemes have NAV history",
+                    "disclaimer":
+                        "Past performance is not indicative of future returns."}
+
+        used = [(sid, w / total_w * 100.0) for sid, w in entries if sid in series_map]
+        starts = [min(m) for m in series_map.values()]
+        ends = [max(m) for m in series_map.values()]
+        start_iso, end_iso = max(starts), min(ends)
+        enough = (date.fromisoformat(end_iso) - date.fromisoformat(start_iso)).days >= 90
+
+        # master grid = densest scheme between start..end
+        grids = {}
+        for sid, m in series_map.items():
+            grids[sid] = [k for k in sorted(m) if start_iso <= k <= end_iso]
+        master_sid = max(grids, key=lambda k: len(grids[k]))
+        grid = grids[master_sid]
+
+        dates_out, values_out = [], []
+        last = {sid: None for sid in series_map}
+        for k in grid:
+            port = 0.0
+            ok = True
+            for sid, w in used:
+                v = series_map[sid].get(k) or last[sid]
+                if v is None:
+                    ok = False  # this line hadn't launched yet at window start
+                    break
+                last[sid] = v
+                port += w * v / series_map[sid][start_iso]
+            if not ok:
+                continue
+            dates_out.append(k)
+            values_out.append(round(port, 4))
+
+        import os as _os
+        try:
+            rf = float(_os.environ.get("ANALYTICS_RF_PCT", "") or 0.0)
+        except ValueError:
+            rf = 0.0
+        out = compute_series_analytics(
+            list(zip(dates_out, values_out)),
+            rf_pct=rf if rf > 0 else DEFAULT_RF_PCT)
+        out.update({
+            "kind": "portfolio",
+            "constituents": [{"scheme_id": sid,
+                              "fund_name": self.get_scheme(sid)["fund_name"],
+                              "weight": round(w, 2),
+                              "plan_used": plans.get(sid, "?")}
+                             for sid, w in sorted(used, key=lambda e: -e[1])],
+            "window": {"start": dates_out[0] if dates_out else None,
+                       "end": dates_out[-1] if dates_out else None},
+            "window_common": enough,
+            "growth_100": {"dates": dates_out, "values": values_out} if values_out else None,
+            "disclaimer": "Past performance is not indicative of future returns.",
+        })
+        return out
+
+    def compare_schemes(self, scheme_ids: list[int]) -> dict:
+        """Side-by-side analytics for 2-12 schemes [ANA2].
+
+        Growth-of-R100 is computed over the COMMON calendar window (latest
+        shared start -> earliest shared last NAV), forward-filled onto the
+        densest scheme's business-day grid so the lines are directly
+        comparable. Rolling-1Y uses each scheme's own full history."""
+        from .analytics import DEFAULT_RF_PCT, compute_series_analytics, parse_nav_date
+
+        ids = [int(i) for i in (scheme_ids or [])][:12]
+        picked = []
+        for sid in ids:
+            s = self.get_scheme(sid)
+            if not s:
+                continue
+            nav = self.scheme_nav(sid)
+            plan_used = "direct" if nav.get("direct") else \
+                ("regular" if nav.get("regular") else None)
+            doc = nav.get(plan_used) if plan_used else None
+            if not doc or not doc["dates"]:
+                continue
+            picked.append((s, plan_used, doc))
+        if len(picked) < 2:
+            return {"schemes": [],
+                    "error": "need at least two schemes with NAV history",
+                    "disclaimer":
+                        "Past performance is not indicative of future returns."}
+
+        # Common window on ISO keys.
+        def iso_bounds(doc):
+            ds = [parse_nav_date(d) for d in doc["dates"]]
+            return ds[0], ds[-1]
+
+        start = max(iso_bounds(doc)[0] for _, _, doc in picked)
+        end = min(iso_bounds(doc)[1] for _, _, doc in picked)
+        enough = (end - start).days >= 90
+
+        # Master grid: the scheme with most points inside the window.
+        grids = []
+        for s, plan, doc in picked:
+            g = [(d, v) for d, v in
+                 ((parse_nav_date(dd), vv) for dd, vv in zip(doc["dates"], doc["navs"]))
+                 if d and start <= d <= end and v and v > 0]
+            grids.append(g)
+        master_idx = max(range(len(grids)), key=lambda k: len(grids[k]))
+        master = grids[master_idx]
+
+        out_schemes = []
+        for k, (s, plan, doc) in enumerate(picked):
+            try:
+                rf = float(os.environ.get("ANALYTICS_RF_PCT", "") or 0.0)
+            except ValueError:
+                rf = 0.0
+            bench_name = self._benchmark_index_for(s)
+            bench = self._load_tr_index(bench_name) if bench_name else None
+            a = compute_series_analytics(
+                list(zip(doc["dates"], doc["navs"])),
+                rf_pct=rf if rf > 0 else DEFAULT_RF_PCT, bench_series=bench)
+            a.pop("disclaimer", None)
+
+            growth = None
+            if enough and master:
+                # Forward-fill this scheme onto the master grid, rebase to 100.
+                own = dict((d.isoformat(), v) for d, v in grids[k])
+                last_v = None
+                gv, gd = [], []
+                for d, _v in master:
+                    v = own.get(d.isoformat())
+                    if v is None and last_v is not None:
+                        v = last_v
+                    elif v is None:
+                        continue  # scheme not yet launched inside the window
+                    last_v = v
+                    gd.append(d.isoformat())
+                    gv.append(v)
+                if len(gd) >= 30 and gv[0]:
+                    base0 = gv[0]
+                    growth = {"dates": gd,
+                              "values": [round(100.0 * v / base0, 4) for v in gv]}
+
+            rolling = self._rolling_1y_points(doc["dates"], doc["navs"])
+            out_schemes.append({
+                "id": s["id"], "fund_name": s.get("fund_name"),
+                "amc": s.get("amc"), "category": s.get("category"),
+                "plan_used": plan,
+                "metrics": a,
+                "growth_100": growth,
+                "rolling_1y": {"dates": [p[0] for p in rolling],
+                               "values": [p[1] for p in rolling]} if rolling else None,
+                "benchmark_index": bench_name if bench else None,
+            })
+
+        return {
+            "as_of": end.isoformat(),
+            "window": {"start": start.isoformat(), "end": end.isoformat(),
+                       "common": enough},
+            "rf_pct_assumption": DEFAULT_RF_PCT,
+            "schemes": out_schemes,
+            "disclaimer": "Past performance is not indicative of future returns.",
+        }
+
     @staticmethod
     def _load_nav_plan(code, start: str | None = None, end: str | None = None) -> dict | None:
         if not code:
@@ -2242,6 +2651,13 @@ class WebDB:
         if (r.get("ytm") in (None, 0)) and rec.get("ytm") is not None and rec["ytm"] > 0:
             r["ytm"] = round(float(rec["ytm"]), 4)
             r["ytm_source"] = rec.get("ytm_source") or ""
+        # Modified duration [DBT5] — computed, never stored.
+        if r.get("modified_duration") is None:
+            m = _bond_duration_metrics(r.get("coupon"), r.get("maturity_date"),
+                                       ytm=r.get("ytm"))
+            if m:
+                r["modified_duration"] = m["modified_duration"]
+                r["macaulay_duration"] = m["macaulay_duration"]
 
 
     def list_bonds(self, q=None, segment=None, rating=None, status=None,
@@ -2321,6 +2737,11 @@ class WebDB:
             return None
         b = dict(b)
         b["rating_band"] = _credit_bucket(b.get("rating"), "", "", b.get("name") or "")
+        m = _bond_duration_metrics(b.get("coupon"), b.get("maturity_date"),
+                                   ytm=b.get("ytm"), price=b.get("price"))  # [DBT5]
+        if m:
+            b["modified_duration"] = m["modified_duration"]
+            b["macaulay_duration"] = m["macaulay_duration"]
         return b
 
     def bond_facets(self) -> dict:
@@ -2509,16 +2930,39 @@ class WebDB:
         schemes = [self.get_scheme(i) for i in scheme_ids]
         schemes = [s for s in schemes if s]
         lookup = {s["id"]: s for s in schemes}
-        weights: dict[int, dict[str, float]] = {}
-        company_meta: dict[str, dict] = {}
+        per_scheme: list[tuple[int, list[dict]]] = []
         for sid in scheme_ids:
             if sid not in lookup:
                 continue
-            holdings = self.scheme_holdings(sid)
+            per_scheme.append((sid, self.scheme_holdings(sid)))
+
+        # [DBT4] ISIN alias map: for every dated debt line that DOES carry an
+        # ISIN, remember its issuer+coupon+maturity identity so the same bond
+        # reported without an ISIN elsewhere still overlaps with it.
+        isin_alias: dict[str, str] = {}
+        for _, holdings in per_scheme:
+            for h in holdings:
+                isin = (h.get("isin") or "").strip()
+                if not isin:
+                    continue
+                dk = _debt_instrument_key(h.get("company") or "",
+                                          h.get("coupon"), h.get("maturity_date"))
+                if dk:
+                    isin_alias.setdefault(dk, isin)
+
+        weights: dict[int, dict[str, float]] = {}
+        company_meta: dict[str, dict] = {}
+        for sid, holdings in per_scheme:
             wmap: dict[str, float] = {}
             has_pct = False
             for h in holdings:
-                key = (h.get("isin") or "").strip() or (h.get("company") or "").strip()
+                isin = (h.get("isin") or "").strip()
+                dk = _debt_instrument_key(h.get("company") or "",
+                                          h.get("coupon"), h.get("maturity_date"))
+                # key priority: explicit ISIN -> instrument identity resolved to
+                # its ISIN via the alias pass -> raw identity -> exact name
+                key = (isin or (dk and isin_alias.get(dk)) or dk
+                       or (h.get("company") or "").strip())
                 if not key:
                     continue
                 p = h.get("percent_nav")

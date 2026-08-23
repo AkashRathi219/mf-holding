@@ -307,6 +307,90 @@ const Charts = {
     }
   },
 
+  // Multi-series line chart for the Compare view [ANA2].
+  // series = [{ name, color, dates:[ISO], values:[num] }] on a shared grid.
+  mountMultiLine(container, series, opts = {}) {
+    const height = opts.height || 260;
+    const fmt = opts.formatValue || ((v) => App.formatNum(v, 1));
+    const n = series[0] && series[0].dates ? series[0].dates.length : 0;
+    container.innerHTML = `
+      <div class="nav-plot"><canvas class="ml-canvas"></canvas><div class="nav-tip" hidden></div></div>
+      <div class="ml-legend" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">
+        ${series.map((s, i) => `<span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#5b6b7f">
+          <span style="width:10px;height:10px;border-radius:2px;background:${s.color};display:inline-block"></span>
+          ${App.esc(s.name)}</span>`).join("")}
+      </div>`;
+    const canvas = container.querySelector(".ml-canvas");
+    const tip = container.querySelector(".nav-tip");
+    const plot = container.querySelector(".nav-plot");
+    const dpr = window.devicePixelRatio || 1;
+    let hoverI = null;
+
+    function render() {
+      const rect = plot.getBoundingClientRect();
+      const w = Math.max(rect.width || 320, 320), h = height;
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      canvas.style.height = h + "px"; canvas.style.width = w + "px";
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      if (n < 2) {
+        ctx.fillStyle = "#8a97a8"; ctx.font = "13px sans-serif"; ctx.textAlign = "center";
+        ctx.fillText("Insufficient data", w / 2, h / 2);
+        return;
+      }
+      const pad = { l: 54, r: 14, t: 16, b: 30 };
+      const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
+      let lo = Infinity, hi = -Infinity;
+      series.forEach(s => s.values.forEach(v => { if (v < lo) lo = v; if (v > hi) hi = v; }));
+      if (!isFinite(lo)) { lo = 0; hi = 1; }
+      const span = (hi - lo) || 1;
+      lo -= span * 0.08; hi += span * 0.08;
+      const X = (i) => pad.l + (i / (n - 1)) * plotW;
+      const Y = (v) => pad.t + plotH - ((v - lo) / (hi - lo)) * plotH;
+      ctx.strokeStyle = "#e8edf4"; ctx.fillStyle = "#8a97a8"; ctx.font = "11px sans-serif";
+      ctx.textAlign = "right";
+      for (let g = 0; g <= 4; g++) {
+        const y = pad.t + plotH - (plotH * g / 4);
+        ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
+        const val = lo + (hi - lo) * g / 4;
+        ctx.fillText(App.formatNum(val, Math.abs(val) >= 1000 ? 0 : 1), pad.l - 6, y);
+      }
+      const labels = series[0].dates;
+      ctx.fillStyle = "#5b6b7f"; ctx.font = "10.5px sans-serif"; ctx.textAlign = "center";
+      [0, Math.floor((n - 1) / 2), n - 1].forEach(i => ctx.fillText(labels[i], X(i), h - 10));
+      series.forEach(s => {
+        ctx.beginPath();
+        s.values.forEach((v, i) => { if (i === 0) ctx.moveTo(X(0), Y(v)); else ctx.lineTo(X(i), Y(v)); });
+        ctx.strokeStyle = s.color; ctx.lineWidth = 1.8; ctx.stroke();
+      });
+      if (hoverI != null) {
+        const x = X(hoverI);
+        ctx.strokeStyle = "rgba(138,151,168,0.55)"; ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + plotH); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    canvas.addEventListener("mousemove", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const padL = 54, plotW = rect.width - padL - 14;
+      let idx = Math.round((e.clientX - rect.left - padL) / plotW * (n - 1));
+      hoverI = Math.max(0, Math.min(n - 1, idx));
+      render();
+      const x = padL + (hoverI / (n - 1)) * plotW;
+      tip.hidden = false;
+      tip.style.left = (x + 14) + "px";
+      tip.innerHTML = `<div class="tip-date">${App.esc(series[0].dates[hoverI])}</div>` +
+        series.map(s => `<div class="tip-nav" style="color:${s.color}">${App.esc(s.name)}: ${fmt(s.values[hoverI])}</div>`).join("");
+    });
+    canvas.addEventListener("mouseleave", () => { hoverI = null; tip.hidden = true; render(); });
+    mountChart(render);
+    render();
+    return { render };
+  },
+
   // Builds an interactive NAV chart inside `container` with preset + custom
   // date-range controls. `data` = { dates:[], navs:[], label } (full series,
   // ascending). Returns a controller with .render() / .setRange(fromKey, toKey).

@@ -191,6 +191,7 @@
       <a href="#confidence">Confidence</a>
       <a href="#cadence">Cadence</a>
       <a href="#gaps">Gaps</a>
+      <a href="/amc-directory" class="keep">AMC directory</a>
       <!-- TODO: point at live webapp -->
       <a class="keep" href="https://YOURAPP.railway.app/register" style="color:#fff">Get started free ↗</a>
     </div>
@@ -307,7 +308,22 @@
   </div>
 </section>
 
-<section id="faq" class="alt">
+<section id="performance" class="alt">
+  <div class="wrap">
+    <span class="kicker">Step 6 — Performance analytics</span>
+    <h2>Every performance figure shows its formula's fingerprints</h2>
+    <p class="lede">Performance and risk metrics are factual computations over the same official AMFI NAV history. This page documents every convention, so any number can be reproduced (methodology stamp <code>perf-v1.0-2026-08-23</code>):</p>
+    <div class="grid2">
+      <div class="panel"><h3>Returns &amp; windows</h3><p>CAGR over since-inception, 1Y, 3Y and 5Y windows using calendar days (365.25-day years). A scheme younger than a requested window shows nothing for that window — never its shorter-history figure in disguise. Rolling 1-year returns are computed at daily steps across each scheme's full history.</p></div>
+      <div class="panel"><h3>Risk metrics</h3><p>Volatility is annualised daily-return standard deviation using 252 trading days. Sharpe and Sortino ratios use a documented risk-free assumption of 6% per year until a live T-bill feed is wired in; Sortino penalises only downside deviation. Maximum drawdown is peak-to-trough on NAV.</p></div>
+      <div class="panel"><h3>Benchmark-relative figures</h3><p>Equity schemes map to Nifty total-return indices by category keywords (large cap → Nifty 100, mid cap → Nifty Midcap 150, small cap → Nifty Smallcap 250, others → Nifty 500). Beta, Jensen's alpha, tracking error and information ratio come from date-aligned daily returns over a common 3-year window. Non-equity categories get no benchmark block rather than a misleading one.</p></div>
+      <div class="panel"><h3>Portfolio reconstruction</h3><p>A client portfolio's series is rebuilt as the weight-blended growth of its schemes, each rebased to 100 at a common start date, forward-filled onto the densest scheme's business-day grid. The result runs through the identical metric engine as single schemes.</p></div>
+    </div>
+    <p class="disclaimer">All performance output is diagnostic of historical public data: neutral wording, computation window beside every figure, and the standing disclaimer that past performance is not indicative of future returns. No forecasts, targets or buy/sell signals are produced anywhere in the pipeline.</p>
+  </div>
+</section>
+
+<section id="faq">
   <div class="wrap">
     <span class="kicker">FAQ</span>
     <h2>Methodology questions, answered plainly</h2>
@@ -336,6 +352,7 @@
       <div><b style="color:#fff">∿ FundPulse</b><br>Data methodology<br>Last reviewed: Aug 2026</div>
       <div>
         <a href="/product">Product overview</a><br><br>
+        <a href="/amc-directory">AMC report directory</a><br><br>
         <a href="https://YOURAPP.railway.app/login">Sign in</a>
       </div>
     </div>

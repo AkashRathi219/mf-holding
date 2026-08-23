@@ -15,6 +15,7 @@
       <a href="#schemes" data-screen="schemes" class="active"><span class="ico">☷</span><span class="lbl">Scheme Explorer</span></a>
       <a href="#securities" data-screen="securities"><span class="ico">⬡</span><span class="lbl">Security Directory</span></a>
       <a href="#bonds" data-screen="bonds"><span class="ico">⚲</span><span class="lbl">Bonds</span></a>
+      <a href="#compare" data-screen="compare"><span class="ico">∿</span><span class="lbl">Compare</span></a>
       <div class="nav-label">Tools</div>
       <a href="#models" data-screen="models"><span class="ico">🗂</span><span class="lbl">Model Portfolios</span></a>
       <a href="#admin" data-screen="admin" id="navAdminLink" style="display:none"><span class="ico">⚙</span><span class="lbl">Superadmin</span></a>
@@ -308,6 +309,27 @@
           </div>
         </div>
         <div id="overlapResults" style="margin-top:18px"></div>
+      </section>
+
+      <!-- Compare schemes [ANA2] -->
+      <section id="screen-compare" class="screen" style="display:none">
+        <div class="card" style="margin-bottom:18px">
+          <h3>Compare schemes <span class="badge grey">2–12</span></h3>
+          <p class="page-sub">Pick schemes to see CAGR windows, risk metrics, growth of ₹100 and rolling 1-year returns side by side — computed from official AMFI NAV history.</p>
+          <div class="toolbar">
+            <div class="field" style="flex:1; min-width:300px">
+              <input type="text" id="compareSearch" placeholder="Type to search and pick schemes…">
+              <div class="hint" id="compareSearchHint"></div>
+            </div>
+          </div>
+          <div id="compareChips" style="min-height:26px; margin-bottom:8px"></div>
+          <div id="compareSuggest" style="display:none; border:1px solid var(--border); border-radius:var(--radius-sm); max-height:240px; overflow:auto;"></div>
+          <div style="margin-top:14px">
+            <button class="btn btn-primary" id="compareRun">Compare</button>
+            <button class="btn btn-outline" id="compareClear" style="margin-left:8px">Clear</button>
+          </div>
+        </div>
+        <div id="compareResults" style="margin-top:4px"></div>
       </section>
 
       <!-- Proposal Generator -->

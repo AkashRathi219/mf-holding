@@ -1,5 +1,6 @@
 """Phase 8 debt fixes: _norm_code leading zeros [DBT3], revision-aware NAV
-upsert [DBT2], userdata cascades + orphan purge + indexes [DBT1/DBT6]."""
+upsert [DBT2], userdata cascades + orphan purge + indexes [DBT1/DBT6],
+overlap instrument-identity fallback [DBT4]."""
 
 from __future__ import annotations
 
@@ -152,3 +153,85 @@ def test_indexes_actually_used(ud):
     finally:
         con.close()
     assert any("idx_strategies_user" in str(row[-1]) for row in plan), plan
+
+
+# ---- DBT4: overlap key issuer+coupon+maturity fallback ------------------------
+
+from webapp.db import _debt_instrument_key  # noqa: E402
+
+
+@pytest.mark.parametrize("company,coupon,maturity,want", [
+    ("7.38% Gujarat SDL (15/11/2032)", 7.38, "2032-11-15",
+     {"GUJARAT", "SDL", "C7.38", "M2032-11-15"}),
+    ("Gujarat SDL 7.38 15/11/2032", None, None,
+     {"GUJARAT", "SDL", "C7.38", "M2032-11-15"}),  # bare forms parse identically
+    ("HDFC Bank Ltd 8.90% (01/09/2027)", 8.9, "2027-09-01",
+     {"HDFC", "BANK", "C8.9", "M2027-09-01"}),
+])
+def test_debt_key_shapes(company, coupon, maturity, want):
+    k = _debt_instrument_key(company, coupon, maturity)
+    assert k
+    parts = k.split("|")
+    issuer_words = set(parts[0].split())
+    metrics = set(parts[1:])
+    assert {w for w in want if w.startswith(("C", "M"))} <= metrics
+    assert {w for w in want if not w.startswith(("C", "M"))} <= issuer_words
+
+
+def test_debt_key_none_without_instrument_signature():
+    # no coupon + no maturity -> not a dated instrument -> legacy path
+    assert _debt_instrument_key("Some Equity Ltd", None, None) is None
+    assert _debt_instrument_key("", 6.5, None) is not None
+
+
+def test_debt_key_equity_name_untouched():
+    """A plain equity name has no dated-instrument signature -> None, so two
+    schemes holding it by name still overlap via the legacy exact-name path."""
+    assert _debt_instrument_key("Test Industries Ltd", None, None) is None
+
+
+def test_overlap_merges_same_bond_with_and_without_isin():
+    """Fund A holds the SDL WITH an ISIN; fund B reports the same bond by name
+    only. Overlap must still see the shared position [DBT4]."""
+    from conftest import WEBAPP_DB
+    from webapp import db as wdb
+
+    con = sqlite3.connect(WEBAPP_DB)
+    cur = con.cursor()
+    cur.execute(
+        "INSERT INTO schemes (key,amc,fund_name,source,as_of,category,plan,coverage,"
+        "n_holdings) VALUES (?,?,?,?,?,?,?,?,?)",
+        ("t-debt-a", "Test AMC", "Debt Fund A", "amfi", "2026-08-01",
+         "Debt", "", "has_holdings", 1))
+    cur.execute(
+        "INSERT INTO schemes (key,amc,fund_name,source,as_of,category,plan,coverage,"
+        "n_holdings) VALUES (?,?,?,?,?,?,?,?,?)",
+        ("t-debt-b", "Test AMC", "Debt Fund B", "amfi", "2026-08-01",
+         "Debt", "", "has_holdings", 1))
+    a_id = cur.execute("SELECT id FROM schemes WHERE key='t-debt-a'").fetchone()[0]
+    b_id = cur.execute("SELECT id FROM schemes WHERE key='t-debt-b'").fetchone()[0]
+    for sid, isin, company, pct in (
+            (a_id, "INE123456789", "7.38% Gujarat SDL (15/11/2032)", 60.0),
+            (b_id, "", "GUJARAT 7.38 SDL 15/11/2032", 55.0)):
+        cur.execute(
+            "INSERT INTO holdings (scheme_id,amc,fund_name,company,isin,"
+            "percent_nav,sector,section,asset_class,source,as_of) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (sid, "Test AMC", "x", company, isin, pct, "", "Debt", "debt",
+             "amfi", "2026-08-01"))
+    con.commit()
+    con.close()
+
+    try:
+        got = wdb.get_db().overlap([a_id, b_id])
+        row_b = next(r for r in got["matrix"] if r["id"] == b_id)
+        assert row_b[f"c_{a_id}"] >= 55.0, \
+            f"same bond reported with/without ISIN must overlap: {got['matrix']}"
+    finally:
+        con = sqlite3.connect(WEBAPP_DB)
+        con.execute("PRAGMA foreign_keys=OFF")
+        cur = con.cursor()
+        cur.executemany("DELETE FROM holdings WHERE scheme_id=?", [(a_id,), (b_id,)])
+        cur.executemany("DELETE FROM schemes WHERE id=?", [(a_id,), (b_id,)])
+        con.commit()
+        con.close()

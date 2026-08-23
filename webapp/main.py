@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from . import auth, db
 from .log import get_logger, request_logging_middleware
 from .ratelimit import (AUTH_LOGIN_LIMITER, AUTH_REGISTER_LIMITER,  # [H1]
-                        enforce)
+                        SlidingWindowRateLimiter, enforce)
 from .remote_store import ensure as remote_ensure
 from src.stock_refresh import refresh_all  # stdlib-only chain; scheduler wiring
 from .tools_api import router as tools_router
@@ -458,6 +458,33 @@ def api_scheme_nav(scheme_id: int, request: Request):
         scheme_id, start=p.get("start") or None, end=p.get("end") or None)
 
 
+@app.get("/api/schemes/{scheme_id}/analytics")
+def api_scheme_analytics(scheme_id: int, request: Request):
+    """Performance & risk suite (CAGR windows, volatility, Sharpe/Sortino,
+    max drawdown, rolling-1Y distribution, benchmark-relative stats) over the
+    scheme's AMFI NAV history [ANA1]. Factual computations only — every figure
+    carries its as-of date and window; never a recommendation."""
+    _require_user(request)
+    out = get_db().scheme_analytics(scheme_id)
+    if not out:
+        raise HTTPException(status_code=404, detail="Scheme not found.")
+    return out
+
+
+@app.post("/api/schemes/compare")
+def api_schemes_compare(request: Request, body: dict):
+    """Compare 2-12 schemes side by side: metric table + growth-of-R100 +
+    rolling-1Y series over a common window [ANA2]. Factual NAV math only."""
+    _require_user(request)
+    ids = body.get("scheme_ids") or []
+    if not isinstance(ids, list) or len(ids) < 2:
+        raise HTTPException(status_code=400,
+                            detail="Provide scheme_ids: at least two scheme ids.")
+    if len(ids) > 12:
+        raise HTTPException(status_code=400, detail="At most 12 schemes per comparison.")
+    return get_db().compare_schemes(ids)
+
+
 @app.get("/api/securities")
 def api_securities(request: Request):
     _require_user(request)
@@ -613,6 +640,84 @@ def admin_feedback(request: Request, limit: int = 200):
     return {"total": len(records), "items": records[-max(1, min(limit, 1000)):]}
 
 
+# --------------------------------------------------------------------------
+# Try App waitlist (public; marketing-site investors page) [WEB2]
+# --------------------------------------------------------------------------
+
+WAITLIST_PATH = BASE_DIR.parent / "data" / "waitlist.json"
+WAITLIST_R2_KEY = "logs/waitlist.json"
+_waitlist_lock = threading.Lock()
+WAITLIST_LIMITER = SlidingWindowRateLimiter(max_events=5, window_seconds=3600)
+_EMAIL_OK_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._%+-@")
+
+
+def _load_waitlist() -> list:
+    """Read waitlist records, restoring from R2 on a fresh container [WEB2]."""
+    try:
+        if not WAITLIST_PATH.exists():
+            remote_ensure(WAITLIST_R2_KEY, dest=WAITLIST_PATH)
+    except Exception as e:
+        log.warning("waitlist R2 restore failed: %s", e)
+    records: list = []
+    if WAITLIST_PATH.exists():
+        try:
+            loaded = json.loads(WAITLIST_PATH.read_text(encoding="utf-8"))
+            if isinstance(loaded, list):
+                records = loaded
+        except Exception as e:
+            log.warning("waitlist.json unreadable, starting clean: %s", e)
+            records = []
+    return records
+
+
+@app.post("/api/try/waitlist")
+def api_try_waitlist(request: Request, body: dict):
+    """Capture a waitlist email from the public investors page.
+
+    No auth (public funnel), per-IP rate limited [H1 limiter], atomic write,
+    lock-protected, best-effort pushed to R2 so signups survive redeploys.
+    Idempotent per email — repeats return ok without duplicating rows."""
+    enforce(WAITLIST_LIMITER, request)
+    email = (body.get("email") or "").strip().lower()
+    if not email or len(email) > 254 or "@" not in email or \
+            set(email) - _EMAIL_OK_CHARS or \
+            email.count("@") != 1 or \
+            not email.split("@")[1].strip(".") or not email.split("@")[0]:
+        raise HTTPException(status_code=400, detail="A valid email is required.")
+    entry = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+             "email": email,
+             "source": (body.get("source") or "investors")[:40]}
+    with _waitlist_lock:
+        records = _load_waitlist()
+        duplicated = any(r.get("email") == email for r in records)
+        if not duplicated:
+            records.append(entry)
+            try:
+                WAITLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+                tmp = WAITLIST_PATH.with_suffix(".json.tmp")
+                tmp.write_text(json.dumps(records, indent=2, ensure_ascii=False),
+                               encoding="utf-8")
+                tmp.replace(WAITLIST_PATH)
+            except Exception as e:
+                log.error("waitlist write failed: %s", e)
+                raise HTTPException(status_code=500, detail="Could not store signup.")
+            try:
+                from .remote_store import is_configured, upload_object
+                if is_configured():
+                    upload_object(WAITLIST_R2_KEY, WAITLIST_PATH)
+            except Exception as e:  # local copy remains the source of truth
+                log.warning("waitlist R2 push failed: %s", e)
+    return {"status": "ok", "total": len(records)}
+
+
+@app.get("/api/admin/waitlist")
+def admin_waitlist(request: Request, limit: int = 200):
+    """Reader side of the waitlist — newest last."""
+    _require_superadmin(request)
+    records = _load_waitlist()
+    return {"total": len(records), "items": records[-max(1, min(limit, 1000)):]}
+
+
 @app.post("/api/proposal")
 def api_proposal(request: Request, body: dict):
     _require_user(request)
@@ -735,7 +840,52 @@ def build_proposal(wdb: db.WebDB, items: list[dict], replacements: dict,
                    f"{_md_cell(ln['category'])} | {ln['weight']:.1f}% | {_md_cell(action)} | "
                    f"{_md_cell(ln['rationale'])} | {_md_cell(remark)} |")
     out.append("")
-    out.append("## 3. Key Rationale")
+    out.append("## 3. Performance snapshot (factual)")
+    out.append("")
+    out.append("Trailing CAGR windows, annualised volatility and maximum drawdown "
+               "computed from official AMFI NAV history. Figures are factual "
+               "computations, percentile-neutral, and never a recommendation.")
+    out.append("")
+    perf_rows: list[list[str]] = []
+    from .analytics import DEFAULT_RF_PCT as _RF, METHODOLOGY_VERSION
+    for ln in lines:
+        if ln["type"] != "scheme" or not ln.get("resolved"):
+            continue
+        try:
+            sid = next((s["id"] for s in pa["schemes"]
+                        if s["fund_name"] == ln["name"]), None)
+            a = wdb.scheme_analytics(sid) if sid else {}
+        except Exception:  # noqa: BLE001 — performance is additive, never fatal
+            a = {}
+        c = (a.get("cagr_pct") or {})
+        rk = (a.get("risk") or {})
+        perf_rows.append([
+            ln["name"], f"{ln['weight']:.1f}%",
+            f"{c['y1']:.2f}%" if c.get("y1") is not None else "—",
+            f"{c['y3']:.2f}%" if c.get("y3") is not None else "—",
+            f"{c['y5']:.2f}%" if c.get("y5") is not None else "—",
+            f"{rk.get('volatility_pct'):.2f}%" if rk.get("volatility_pct") is not None else "—",
+            f"{rk.get('max_drawdown_pct'):.2f}%" if rk.get("max_drawdown_pct") is not None else "—",
+        ])
+    if perf_rows:
+        out.append("| Scheme | Alloc % | 1Y CAGR | 3Y CAGR | 5Y CAGR | Volatility ann.* | Max drawdown* |")
+        out.append("|---|---|---|---|---|---|---|")
+        for row in perf_rows:
+            out.append("| " + " | ".join(_md_cell(v) for v in row) + " |")
+        out.append("")
+        out.append(f"*3-year window where history allows; \"—\" = insufficient NAV "
+                   f"history, never zero. Risk-free rate assumed "
+                   f"{_RF:.1f}% (documented assumption). As-of dates and windows are "
+                   f"intrinsic to each computation.")
+    else:
+        out.append("_No scheme in this proposal has enough NAV history for the "
+                   "performance engine yet._")
+    out.append("")
+    out.append(f"_Methodology stamp: `{METHODOLOGY_VERSION}` · generated "
+               f"{datetime.now(timezone.utc).astimezone().isoformat(timespec='seconds')} · "
+               f"formulas and conventions documented on the FundPulse data-methodology page._")
+    out.append("")
+    out.append("## 4. Key Rationale")
     out.append("")
     out.append("- Portfolio construction emphasises **diversification** and "
                "reduces hidden concentration in overlapping securities.")
@@ -746,9 +896,12 @@ def build_proposal(wdb: db.WebDB, items: list[dict], replacements: dict,
     out.append("")
     out.append("---")
     out.append("")
-    out.append("> **Disclaimer:** This document is a diagnostic tool for factual "
+    out.append("> **Disclaimer (locked):** This document is a diagnostic tool for factual "
                "analysis only and is **not investment advice**. Past performance is "
-               "not indicative of future returns. Please consult a SEBI-registered "
+               "not indicative of future returns. Performance figures are factual "
+               "computations over public AMFI NAV data with their computation windows "
+               "stated alongside; they are not forecasts and create no expectation of "
+               "future results. Please consult a SEBI-registered "
                "investment adviser before making investment decisions.")
     return {"markdown": "\n".join(out), "lines": lines, "schemes": pa["schemes"],
             "stocks": pa["stocks"], "overlap": ov["matrix"], "asset_split": pa["asset_split"]}

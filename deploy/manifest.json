@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-22T15:08:55Z",
+  "generated_at": "2026-08-23T12:57:20Z",
   "schema": 1,
   "files": [
     {
@@ -24,8 +24,8 @@
     },
     {
       "path": "data/logs/refresh_state.json",
-      "size": 905,
-      "sha256": "ac6500175ecdccd49b5233abeefc11dc1463f1f048e0a99146b9504478a5a084"
+      "size": 1779,
+      "sha256": "4d0493075c0cfbe96c0b768be4d8a6b4888f09a2fb92056973b38b3b31f0805e"
     },
     {
       "path": "nav_history/100033.json",
@@ -23353,9 +23353,289 @@
       "sha256": "5d2b8db789058ff432ab96149028c72b5ca606fb0ceebe885d5b03a18f55919a"
     },
     {
-      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/07/bandhan-monthly-portfolio-july-2026.json",
-      "size": 1626045,
-      "sha256": "a7d616e85897c1b1f9721e1c185e74062a7b7e274b0f69849a2080e9ee61a1f5"
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/002a50f2-monthly_portfolio_idfcmf-jan-19.csv",
+      "size": 237491,
+      "sha256": "7f89b426d9995b9dbb59f421abb9ac435b3825bd3d4dffab84033a57f3ca1f49"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/002a50f2-monthly_portfolio_idfcmf-jan-19.json",
+      "size": 678435,
+      "sha256": "15f723eb8457f6cb8bc7ccd341cf5a7d38264227e0caf1bdb8a9fc81d7deca0a"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/01c05d09-monthly_portfolio_idfcmf-may-19.csv",
+      "size": 271473,
+      "sha256": "cb7522bddc758b1dce519f62c06b0b3b5b3049fdf4f2cf85efe64dcb38f0a55b"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/01c05d09-monthly_portfolio_idfcmf-may-19.json",
+      "size": 779542,
+      "sha256": "e54365f6d8b200d0e2068486c4edb3e43e64c0533fc1d36ca7646a37c8e920b7"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/092cd736-monthly_portfolio_report-30-09-2018.csv",
+      "size": 322221,
+      "sha256": "4995b7d2034f95593c4d2c7405c0410e838b6d87b10b79a5892ee3faee120970"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/092cd736-monthly_portfolio_report-30-09-2018.json",
+      "size": 847814,
+      "sha256": "25ba8b5b74d666ea2f6ff5db90692b657f793e405a5f41896b27b9aaf8e4f41f"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/0a75ce7f-monthly-portfolio-report-mar-18.csv",
+      "size": 244423,
+      "sha256": "89b7b91b3b350206700a53baf48daf343faacd26dc3f7f33f634accde56732bc"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/0a75ce7f-monthly-portfolio-report-mar-18.json",
+      "size": 705283,
+      "sha256": "9717bef73d135c405609e480983b7e88f77c14b449f447e70698c28bf5f037e8"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/0f708621-monthly_portfolio_report-apr-18.csv",
+      "size": 241761,
+      "sha256": "5ec6f669cf92606db1ab5c5035107e6008e2b23a6967e5cc17f59f79a58641e9"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/0f708621-monthly_portfolio_report-apr-18.json",
+      "size": 700027,
+      "sha256": "a0ef7fc6a0a5d59f3a8ff80cea429ced806399a3e253f6b03be27c70598bf943"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/1af2469c-december-2022.json",
+      "size": 363,
+      "sha256": "6267e3bc5b8b52316ab214ec0fbe2e71fca6a613f98fbcb5efe36cc65b9b4ec8"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/1bad3d2e-monthly_portfolio_idfcmf-jun-19.csv",
+      "size": 261477,
+      "sha256": "026676ed6f6ea1cc2b824ef47b1ba81ae551724c14140916adc474acac7707e7"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/1bad3d2e-monthly_portfolio_idfcmf-jun-19.json",
+      "size": 751139,
+      "sha256": "373f7085d727800993f9171ae3c141624be4863d24f2aa8fb18fad28c9c73f53"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/48f3d67b-monthly_portfolio_idfcmf-dec-19.csv",
+      "size": 268753,
+      "sha256": "492a3b6db6a6e32b63c82127b642eaf32284a550db10c78ebc00c6aba4427bbe"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/48f3d67b-monthly_portfolio_idfcmf-dec-19.json",
+      "size": 764805,
+      "sha256": "1d7a58fd00597397525a5f904626a3ff5f929c9d2b95d099b95b79b5d4521901"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/4c5d8918-monthly_portfolio_report-may-18.csv",
+      "size": 236394,
+      "sha256": "5182fb5b245c7f9975d59e2e598d4ce7eed028e353ee7ce2dc95556aeb6eff44"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/4c5d8918-monthly_portfolio_report-may-18.json",
+      "size": 684134,
+      "sha256": "135da46edc45518092ba8c9a1e0d88c035300bce6dd17365fad387e77da9b2aa"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/4dfe82ff-monthly_portfolio_report-jul-18.csv",
+      "size": 230492,
+      "sha256": "63fca0ecbeee2418c3b3c8d5f71ca31399675b26be5410a1f575f0ebf7e7b86c"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/4dfe82ff-monthly_portfolio_report-jul-18.json",
+      "size": 667794,
+      "sha256": "8b961c7ac40aeaaae2a55c1289f2a18532631a8d2eee5de436a6875ef906ac92"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/557c068e-monthly_portfolio_idfcmf-feb-19.csv",
+      "size": 237177,
+      "sha256": "133fcedc18b30de76741ef6a18203f64e985bda41906024d08b7c7be66f3d0a8"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/557c068e-monthly_portfolio_idfcmf-feb-19.json",
+      "size": 679504,
+      "sha256": "51749f537b6a7a619b573abece28d201803a20e0d9f664631ab696507bf75345"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/7eeed092-monthly_portfolio_idfcmf-dec-18.csv",
+      "size": 232703,
+      "sha256": "6e9511fb3a5ef023f968ad250d3e1b3bbd2f18deca66748e8305da62a739fa3b"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/7eeed092-monthly_portfolio_idfcmf-dec-18.json",
+      "size": 666131,
+      "sha256": "525300587aa3463f2369366eea0d8472557ddb557dd6063a4f4add2e64c1ea8a"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/8bfb5880-monthly_portfolio_idfcmf-oct-18.csv",
+      "size": 235255,
+      "sha256": "e049fc4bed961743801e2f61f887a0f21873a6df941ca735094f39e51504031a"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/8bfb5880-monthly_portfolio_idfcmf-oct-18.json",
+      "size": 670080,
+      "sha256": "9605760319ea3b6dbddbe7a46bfa4d1a75dd90371ac4536337a5be5e4eea16c8"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/935cc621-monthly_portfolio_report-jun-18.csv",
+      "size": 224279,
+      "sha256": "18860c7a1edc502a911f585b4d35f015d06fa7b48285ecce5fe25afec45099c2"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/935cc621-monthly_portfolio_report-jun-18.json",
+      "size": 650340,
+      "sha256": "707c8e1aca9969056b4f499e7505578382ac23955494b00002c32a18ad5916a6"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/94c09007-monthly_portfolio_report-dec-17.csv",
+      "size": 236255,
+      "sha256": "f3ecf1d7babfa8c6dee0455eb46e88367457b756df982004b76c48b9fb2e48d2"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/94c09007-monthly_portfolio_report-dec-17.json",
+      "size": 679333,
+      "sha256": "32d2faf6adb1a822bce6251081945cc25e998b2c063e9b815ae32a2e5f93ce50"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/9ee43209-monthly_portfolio_report-jan-18.csv",
+      "size": 242449,
+      "sha256": "8ede85750166828cef51b88ce5a8726ee0a2154afec5dbf1219605ba92f9975a"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/9ee43209-monthly_portfolio_report-jan-18.json",
+      "size": 699130,
+      "sha256": "153b9b03f64116328fcc55b5b7d631faded90347e61a2f3d2b7a36a0b93268a9"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/a18bf23b-monthly_portfolio_report-aug-18.csv",
+      "size": 225193,
+      "sha256": "ec7689947b83d7fc7117c7c6d0afe8dd6e60da7b2d92319905d90fea6a16b638"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/a18bf23b-monthly_portfolio_report-aug-18.json",
+      "size": 667441,
+      "sha256": "4940d32d98a82b109c81487a3a75d2908d0e8318db9d2c41250fd9efeecd07af"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/a19947d0-monthly_portfolio_idfcmf-apr-19.csv",
+      "size": 263217,
+      "sha256": "a31e85c50ceba9136a319a9c3d3c8494f8238fa45624075f05d8f26b7b68a6c1"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/a19947d0-monthly_portfolio_idfcmf-apr-19.json",
+      "size": 754292,
+      "sha256": "9d75a5fb0a1f98497f7f4b670f61ffd58760cb9fc18d0867505ebdf22b696de8"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/aa1ad3d1-monthly_portfolio_report-feb-18.csv",
+      "size": 237778,
+      "sha256": "5ef466f77a303c3802f9cb470f07fb8659d51a78a3d396360fe5a2589c04e731"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/aa1ad3d1-monthly_portfolio_report-feb-18.json",
+      "size": 687096,
+      "sha256": "8a4f37ef6ea9b3d4181acc04cfb8887d0f82e2f2aad77b1f1c6797cba9dd1b81"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/b3a438e4-monthly_portfolio_idfcmf-nov-18_1.csv",
+      "size": 233602,
+      "sha256": "bd18ad7bf7e60886b13533c5fca45886c52bf3d75f06fd74a059d3800f5edc53"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/b3a438e4-monthly_portfolio_idfcmf-nov-18_1.json",
+      "size": 670947,
+      "sha256": "3cdc2b7e464f8a2a722b20828ee521c3cb21a49102d83365f9f0a3e7848083b9"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/b51f00d8-monthly_half-yearlyportfolioandderivativedisclosure-at-march31-2019.csv",
+      "size": 389792,
+      "sha256": "1034a6c95531f696d8a969e5bccc51cd9cb8740857ce7426b72225ccb51e1296"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/b51f00d8-monthly_half-yearlyportfolioandderivativedisclosure-at-march31-2019.json",
+      "size": 1024121,
+      "sha256": "f6bba9031de907ed726dc4c9c20b252da209293dc12b37ba991c64e5a8648c4c"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/c28b2beb-monthly_portfolio_idfcmf-oct-19.csv",
+      "size": 264168,
+      "sha256": "6a96b12b730763bf3ac4a46bb2c3aec3e780311b99294bcb5322c63a689c8043"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/c28b2beb-monthly_portfolio_idfcmf-oct-19.json",
+      "size": 753645,
+      "sha256": "b9370c32f2c3085c8aa1a100bf29140ef2f31486e7e54be2991fa95f3f470e09"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/ca1bd829-monthly_portfolio_idfcmf-nov-19.csv",
+      "size": 262723,
+      "sha256": "0adb63fa7714c33bd429c469e72329ac5b3c2dd923fdef7aba4a229626f0487b"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/ca1bd829-monthly_portfolio_idfcmf-nov-19.json",
+      "size": 746819,
+      "sha256": "96bcfb7c0e621b535dde21e68b0aff8ca8a1fad63cee5ce7281d7840f6d882bb"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/db97a2fa-september-2022.json",
+      "size": 364,
+      "sha256": "a1218a562b921bf2d205cc4cf58377f75003f7084638c0600fdd1b6bddd4798a"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/e5c0c0cb-june-2024.json",
+      "size": 359,
+      "sha256": "83cd217d4e0b9eda97004f209a6647f6cd1f17be63b20d7790d4fe71932727ad"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/e6f2c87d-september-2024.json",
+      "size": 364,
+      "sha256": "18e5ed0e680f8b1a0d01dbdbd0c2caeb0187530003f881788021be67a2c7520c"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/e984ac69-monthly_portfolio_idfcmf-jul-19.csv",
+      "size": 267513,
+      "sha256": "c90218420af67cb5191e31db5600526d6e99554427dfc06480fc33b241724e80"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/e984ac69-monthly_portfolio_idfcmf-jul-19.json",
+      "size": 769796,
+      "sha256": "9474ee8946c01b3786b13e15bdd372ee892ddd4255ec4aa6a7db51b677085259"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/f38c19de-march-2023.json",
+      "size": 360,
+      "sha256": "a789dc64d52bc3bef4014027ab20beff50e56482494bd7ee14e40177c6dcb2d2"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/f83bb3df-monthly_portfolio_idfcmf-apr-19.csv",
+      "size": 263217,
+      "sha256": "a31e85c50ceba9136a319a9c3d3c8494f8238fa45624075f05d8f26b7b68a6c1"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/f83bb3df-monthly_portfolio_idfcmf-apr-19.json",
+      "size": 754292,
+      "sha256": "4da00aa297ef3179bdca0eab5c4b0c9e5dd18ac04e0b2d74981fb8b95a759a6a"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/fa6d2544-monthly_portfolio_idfcmf-aug-19.csv",
+      "size": 268822,
+      "sha256": "f0bb270d203eb4676db70c9180d6a971fb90821c5e4816d31dd4d09e11a9838b"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/fa6d2544-monthly_portfolio_idfcmf-aug-19.json",
+      "size": 770044,
+      "sha256": "33cc58d17f1f42921421278d2b1108c80c72a0e40fb9596736179944d0a03ff7"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/fc0de0cb-monthly_half-yearly-portfolio-and-derivative_sept_30_2019.csv",
+      "size": 359037,
+      "sha256": "be7726393f961b2c26f45bc634ed59409d030c125b77de1797c3c43906599620"
+    },
+    {
+      "path": "parsed/amc_websites/Bandhan_Mutual_Fund/2026/08/fc0de0cb-monthly_half-yearly-portfolio-and-derivative_sept_30_2019.json",
+      "size": 986293,
+      "sha256": "f447a3d89f42645e122262b7038a09665f38b330f8ce4669dc78cadd95749d67"
     },
     {
       "path": "parsed/amc_websites/Bank_of_India_Mutual_Fund/2026/07/factsheet-july-2026.csv",
@@ -27619,8 +27899,8 @@
     },
     {
       "path": "parsed/amc_websites/report_2026_08.json",
-      "size": 105738,
-      "sha256": "dd60fa0facdbffe56f3671030800b11cb451fd24a0039e6e6616471475ae7ecc"
+      "size": 8871,
+      "sha256": "e46907fdd4835be86b73438982276b7e885d13a42241e90966fef9870b5f34cd"
     },
     {
       "path": "parsed/amc_websites/Samco_Mutual_Fund/2026/07/04ProductDashboard_July2026_1786361023.json",
@@ -30109,8 +30389,8 @@
     },
     {
       "path": "reference/discovery_needed.csv",
-      "size": 5072,
-      "sha256": "ac3df685948b778ff8c76fe5483b220b52ba0e3ace2014cd51fd80d9a65297aa"
+      "size": 3501,
+      "sha256": "76980fda8aa45362691a9da257e69d1c8153fab487843717b73479339dc8b3e3"
     },
     {
       "path": "reference/equity_isin.db",
@@ -30124,13 +30404,13 @@
     },
     {
       "path": "reference/index_resolved_holdings.json",
-      "size": 2182838,
-      "sha256": "ed538ff61bc80bf8082b441881a40fe9c6ab830038beb271180a63169476b724"
+      "size": 2068902,
+      "sha256": "34328eee21045dd45a734fb8a5cd211473e2037c3fb83c10877295bd0ef23198"
     },
     {
       "path": "reference/index_unresolved.csv",
-      "size": 49370,
-      "sha256": "cba7162426396b9dace4974b7bb30edd340725bf44b14c8e259e456d1cd48d31"
+      "size": 50587,
+      "sha256": "d4e0f9aee96cf88f6c173c52c1b7e144048a5c54725b83b524221b1366d45c9a"
     },
     {
       "path": "reference/isin_latest_nav.json",
@@ -43219,14 +43499,14 @@
     },
     {
       "path": "webapp.db",
-      "size": 40906752,
-      "sha256": "e8861b0a2744c80664e9d65d32399d752e8460ae7b918d0b84d07e50312e37b6"
+      "size": 41263104,
+      "sha256": "ca9eb078df97d07a9661cdf55f2cda0b70a5706f47283be59a4c48e0786ad7d7"
     },
     {
       "path": "webapp_auth.db",
       "size": 16384,
-      "sha256": "9a4b5e80d8c5a1f1261c2d1d7f7b086a9ed1f227812ccd4ced9edf5abb29c6d2"
+      "sha256": "c856b304795a2d7531f6b127798d6cbca6be767d1f603f801be3fb6d6f729d6b"
     }
   ],
-  "total_bytes": 828723353
+  "total_bytes": 853211129
 }

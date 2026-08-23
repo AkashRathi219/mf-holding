@@ -1122,6 +1122,36 @@ def api_analyze(request: Request, body: dict):
     return result
 
 
+@router.post("/portfolio-analytics")
+def api_portfolio_analytics(request: Request, body: dict):
+    """Performance & risk over a client portfolio / model / raw items [ANA3].
+
+    Accepts the same resolution inputs as /analyze (items, or
+    portfolio_id + portfolio_kind). Reconstructs the weighted scheme basket's
+    NAV series on the schemes' common window and runs the standard metric
+    engine. Diagnostic of the user's own portfolio — factual NAV math only."""
+    u = _user(request)
+    uid = _uid(u)
+    wdb = dbm.get_db()
+    items = body.get("items")
+    if not items:
+        kind = body.get("portfolio_kind") or "client"
+        pid = int(body.get("portfolio_id") or 0)
+        if kind == "model":
+            model = userdata.get_model(uid, pid)
+            if not model:
+                raise HTTPException(status_code=404, detail="Model not found.")
+            items = model["items"]
+        else:
+            cp = userdata.get_client_portfolio(uid, pid)
+            if not cp:
+                raise HTTPException(status_code=404, detail="Client portfolio not found.")
+            items = cp["items"]
+    out = wdb.portfolio_analytics(items)
+    out["label"] = body.get("label") or ""
+    return out
+
+
 def metrics_serialize(metrics: dict) -> dict:
     return {k: (round(v, 2) if isinstance(v, float) else v) for k, v in metrics.items()}
 

@@ -4,6 +4,7 @@ const screens = {
   schemes: { key: "schemes", title: "Scheme Explorer", sub: "Filter 6,400+ schemes across 50+ AMCs", init: initSchemes },
   securities: { key: "securities", title: "Security Directory", sub: "3,941 unique ISINs · 846 pure listed stocks", init: initSecurities },
   bonds: { key: "bonds", title: "Bonds", sub: "NSE debt market: G-Sec, SDL, T-Bills & corporate bonds with YTM", init: initBonds },
+  compare: { key: "compare", title: "Compare Schemes", sub: "Performance & risk, side by side — factual AMFI-NAV math only", init: initCompare },
   models: { key: "models", title: "Model Portfolios", sub: "Strategies, clients, client portfolios & compliance", init: initModels },
   admin: { key: "admin", title: "Superadmin · Data Ops", sub: "Refresh pipelines, telemetry and error logs", init: initAdmin },
 };
@@ -385,18 +386,55 @@ async function renderSchemeDetail(id, container, titleEl) {
       </div>
       ${planTable}
       ${debtPanel}
+      <div id="schemeAnalytics" class="nav-section" style="margin-top:16px">
+        <h3>Performance &amp; risk</h3>
+        <div id="analyticsBody" class="page-sub"><span class="spin"></span> Loading…</div>
+      </div>
       <h3 style="margin-top:20px">Holdings by asset class</h3>
       ${topHolding}
       ${holdingsHtml}
       ${buildNavSection(id, nav)}`;
+    renderSchemeAnalytics(id);
   } catch (e) {
     container.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
   }
 }
 
-function openSchemeDrawer(id) {
-  document.getElementById("drawerBackdrop").classList.add("open");
-  renderSchemeDetail(id, document.getElementById("drawer"), null);
+// ---------- performance & risk analytics [ANA1] ----------
+async function renderSchemeAnalytics(id) {
+  const el = document.getElementById("analyticsBody");
+  if (!el) return;
+  try {
+    const a = await App.api(`/schemes/${id}/analytics`);
+    if (a.error) { el.innerHTML = `<div class="empty">${App.esc(a.error)}</div>`; return; }
+    if (!a.risk) { el.innerHTML = `<div class="empty">Not enough NAV history for analytics yet.</div>`; return; }
+    const c = a.cagr_pct || {};
+    const cell = (label, v, sub) => `<div style="flex:1;min-width:96px;text-align:center;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
+      <div style="font-size:10.5px;color:var(--text-2);text-transform:uppercase;letter-spacing:.04em">${label}</div>
+      <div style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px">${v != null ? App.formatNum(v, 2) + "%" : "—"}</div>
+      ${sub ? `<div style="font-size:10px;color:var(--text-3)">${sub}</div>` : ""}</div>`;
+    let html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      ${cell("Since inception", c.since_inception, a.inception ? a.inception.years + "y" : "")}
+      ${cell("1Y CAGR", c.y1)}
+      ${cell("3Y CAGR", c.y3)}
+      ${cell("5Y CAGR", c.y5)}
+    </div>`;
+    const r = a.risk || {};
+    const roll = a.rolling_1y;
+    const b = a.benchmark;
+    html += `<div class="kv">
+      <dt>Volatility (ann., 3y)</dt><dd>${r.volatility_pct != null ? App.formatNum(r.volatility_pct, 2) + "%" : "—"}</dd>
+      <dt>Sharpe / Sortino</dt><dd>${r.sharpe != null ? App.formatNum(r.sharpe, 2) : "—"} / ${r.sortino != null ? App.formatNum(r.sortino, 2) : "—"} <span class="page-sub">(rf assumed ${App.formatNum(a.rf_pct_assumption, 1)}%)</span></dd>
+      <dt>Max drawdown (3y)</dt><dd>${r.max_drawdown_pct != null ? `<span style="color:#c94f4f">${App.formatNum(r.max_drawdown_pct, 2)}%</span>` : "—"}</dd>
+      ${roll ? `<dt>Rolling 1Y returns</dt><dd>${App.formatNum(roll.pct_positive, 1)}% positive <span class="page-sub">of ${App.formatNum(roll.n_periods)} daily-step windows · median ${App.formatNum(roll.median_pct, 2)}% · range ${App.formatNum(roll.worst_pct, 2)}% to ${App.formatNum(roll.best_pct, 2)}%</span></dd>` : ""}
+      ${b ? `<dt>vs ${App.esc(a.benchmark_index || "benchmark")}</dt><dd>beta ${App.formatNum(b.beta, 2)} · alpha ${b.alpha_pct != null ? App.formatNum(b.alpha_pct, 2) + "%" : "—"} · tracking error ${b.tracking_error_pct != null ? App.formatNum(b.tracking_error_pct, 2) + "%" : "—"}${b.information_ratio != null ? ` · IR ${App.formatNum(b.information_ratio, 2)}` : ""}</dd>` : ""}
+    </div>`;
+    html += `<div class="page-sub" style="margin-top:8px">As of ${App.formatDate(a.as_of)} · computed from AMFI NAV history (${App.formatNum(a.points)} points, ${App.esc(a.plan_used || "")} plan). Percentile-neutral factual figures only.</div>
+    <div class="page-sub" style="margin-top:4px"><b>${App.esc(a.disclaimer)}</b></div>`;
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
+  }
 }
 
 // ---------- NAV history (Regular / Direct collapsible buttons) ----------
@@ -702,6 +740,7 @@ async function openBondDetail(isin) {
         ${kv("Last trade date", App.esc(b.last_trade_date || "—"))}
         ${kv("Last trade price", b.price != null ? App.formatNum(b.price, 4) + ` <span class="page-sub">(per ₹${App.formatNum(b.face_value || 100, 0)})</span>` : "—")}
         ${kv("Yield to maturity", y)}
+        ${kv("Modified duration", b.modified_duration != null ? App.formatNum(b.modified_duration, 2) + " yrs <span class=\"page-sub\">(price sensitivity per 1% yield move \u2248 " + App.formatNum(b.modified_duration, 2) + "%)</span>" : "—")}
         ${kv("Weighted avg price / yield", (b.wa_price != null ? App.formatNum(b.wa_price, 4) : "—") + " / " + (b.wa_yield != null ? App.formatNum(b.wa_yield, 2) + "%" : "—"))}
         ${kv("Traded value", b.traded_value_cr != null ? "" + App.formatNum(b.traded_value_cr, 2) + " ₹cr · last " + App.esc(b.last_trade_value_lakhs != null ? "₹" + App.formatNum(b.last_trade_value_lakhs, 2) + " lakhs" : "n/a") : "—")}
       </div>
@@ -761,11 +800,6 @@ async function renderSecurityDetail(isin, container, titleEl) {
   } catch (e) {
     container.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
   }
-}
-
-function openSecDrawer(isin) {
-  document.getElementById("drawerBackdrop").classList.add("open");
-  renderSecurityDetail(isin, document.getElementById("drawer"), null);
 }
 
 // ---------- stock price / actions / reports ----------
@@ -1400,6 +1434,144 @@ function renderOverlapResults(r) {
   out.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+// ---------- compare schemes [ANA2] ----------
+const COMPARE_COLORS = ["#2456d6", "#16a085", "#c94f4f", "#d09a2f", "#7d5bd6",
+                        "#2f9fc9", "#b0567a", "#5f7a1e", "#8a5a3c", "#4f5560",
+                        "#a03232", "#1f6f43"];
+const compareState = { selected: new Map() };
+
+function initCompare() {
+  const search = document.getElementById("compareSearch");
+  const hint = document.getElementById("compareSearchHint");
+  search.addEventListener("input", App.debounce(async () => {
+    const q = search.value.trim();
+    if (q.length < 2) { document.getElementById("compareSuggest").style.display = "none"; return; }
+    hint.textContent = "Searching…";
+    try {
+      const data = await App.api("/schemes?search=" + encodeURIComponent(q) + "&coverage=has_holdings&limit=15");
+      hint.textContent = "";
+      const box = document.getElementById("compareSuggest");
+      if (!data.items.length) { box.style.display = "block"; box.innerHTML = `<div class="empty">No schemes found.</div>`; return; }
+      box.style.display = "block";
+      box.innerHTML = data.items.map(s => `<div class="chip" style="cursor:pointer;display:flex;border-radius:0;background:#fff;border-bottom:1px solid var(--border);justify-content:space-between;width:100%"
+        onclick="pickCompare(${s.id}, '${App.esc(s.fund_name.replace(/'/g, "\\'"))}')">
+        <span>${App.esc(s.fund_name)}</span><span class="badge blue">${App.esc(s.amc)}</span></div>`).join("");
+    } catch (e) { hint.textContent = e.message; }
+  }, 250));
+  document.getElementById("compareRun").addEventListener("click", runCompare);
+  document.getElementById("compareClear").addEventListener("click", () => {
+    compareState.selected.clear(); renderCompareChips();
+  });
+}
+
+function pickCompare(id, name) {
+  if (!compareState.selected.has(id) && compareState.selected.size >= 12) {
+    App.toast("Maximum 12 schemes per comparison.", true); return;
+  }
+  compareState.selected.set(id, name);
+  renderCompareChips();
+  document.getElementById("compareSuggest").style.display = "none";
+  document.getElementById("compareSearch").value = "";
+}
+
+function removeCompare(id) { compareState.selected.delete(id); renderCompareChips(); }
+
+function renderCompareChips() {
+  const chips = document.getElementById("compareChips");
+  chips.innerHTML = [...compareState.selected.entries()].map(([id, name], i) =>
+    `<span class="chip" style="border-left:4px solid ${COMPARE_COLORS[i % COMPARE_COLORS.length]}">${App.esc(name)} <button onclick="removeCompare(${id})">✕</button></span>`).join("") ||
+    `<span class="page-sub">No schemes selected yet.</span>`;
+}
+
+async function runCompare() {
+  const ids = [...compareState.selected.keys()];
+  const out = document.getElementById("compareResults");
+  if (ids.length < 2) { App.toast("Pick at least two schemes to compare.", true); return; }
+  out.innerHTML = `<div class="empty"><span class="spin"></span> Computing comparison…</div>`;
+  try {
+    const r = await App.api("/schemes/compare", { method: "POST", body: JSON.stringify({ scheme_ids: ids }) });
+    renderCompareResults(r);
+  } catch (e) { out.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`; }
+}
+
+function renderCompareResults(r) {
+  const out = document.getElementById("compareResults");
+  if (r.error || !r.schemes || r.schemes.length < 2) {
+    out.innerHTML = `<div class="empty">${App.esc(r.error || "Not enough comparable schemes.")}</div>`;
+    return;
+  }
+  const S = r.schemes.map((s, i) => ({ ...s, color: COMPARE_COLORS[i % COMPARE_COLORS.length] }));
+  const shortName = (n) => n.length > 34 ? n.slice(0, 33) + "…" : n;
+
+  // metric table rows (window-labelled, neutral wording)
+  const mrow = (label, get) => `<tr><td>${label}</td>${S.map(s => {
+    const v = get(s);
+    return `<td class="num">${v != null ? App.formatNum(v, 2) : "—"}</td>`;
+  }).join("")}</tr>`;
+  const metricTable = `
+    <table class="data">
+      <thead><tr><th>Metric</th>${S.map(s => `<th title="${App.esc(s.fund_name)}">${App.esc(shortName(s.fund_name))}</th>`).join("")}</tr></thead>
+      <tbody>
+        ${mrow("CAGR since inception", s => s.metrics.cagr_pct.since_inception)}
+        ${mrow("1Y CAGR %", s => s.metrics.cagr_pct.y1)}
+        ${mrow("3Y CAGR %", s => s.metrics.cagr_pct.y3)}
+        ${mrow("5Y CAGR %", s => s.metrics.cagr_pct.y5)}
+        ${mrow("Volatility ann. % (3y)", s => s.metrics.risk && s.metrics.risk.volatility_pct)}
+        ${mrow("Sharpe (rf " + App.formatNum(r.rf_pct_assumption, 1) + "%)", s => s.metrics.risk && s.metrics.risk.sharpe)}
+        ${mrow("Sortino", s => s.metrics.risk && s.metrics.risk.sortino)}
+        ${mrow("Max drawdown % (3y)", s => s.metrics.risk && s.metrics.risk.max_drawdown_pct)}
+        ${mrow("Rolling 1Y % positive", s => s.metrics.rolling_1y && s.metrics.rolling_1y.pct_positive)}
+        ${mrow("Beta vs benchmark", s => s.metrics.benchmark && s.metrics.benchmark.beta)}
+        ${mrow("Alpha vs benchmark", s => s.metrics.benchmark && s.metrics.benchmark.alpha_pct)}
+        ${mrow("Tracking error %", s => s.metrics.benchmark && s.metrics.benchmark.tracking_error_pct)}
+      </tbody>
+    </table>`;
+  const benchNote = S.filter(s => s.benchmark_index).length
+    ? `<div class="page-sub" style="margin-top:6px">Benchmarks: ${S.filter(s => s.benchmark_index).map(s => `${App.esc(shortName(s.fund_name))} → ${App.esc(s.benchmark_index)}`).join(" · ")}</div>`
+    : "";
+
+  let chartsHtml = "";
+  const growthSeries = S.filter(s => s.growth_100).map(s => ({
+    name: shortName(s.fund_name), color: s.color,
+    dates: s.growth_100.dates, values: s.growth_100.values }));
+  if (growthSeries.length >= 1) {
+    chartsHtml += `<div class="card" style="margin-bottom:18px">
+      <h3>Growth of ₹100</h3>
+      <div class="page-sub">Common window ${App.formatDate(r.window.start)} → ${App.formatDate(r.window.end)}${r.window.common ? "" : " · ⚠ overlapping history too short for a fair common start — series shown from each scheme's own first shared NAV"}</div>
+      <div id="compareGrowthChart" style="margin-top:10px"></div>
+    </div>`;
+  }
+  const rollSeries = S.filter(s => s.rolling_1y && s.rolling_1y.dates.length > 30)
+    .map(s => ({ name: shortName(s.fund_name), color: s.color,
+                 dates: s.rolling_1y.dates, values: s.rolling_1y.values }));
+  if (rollSeries.length >= 1) {
+    chartsHtml += `<div class="card" style="margin-bottom:18px">
+      <h3>Rolling 1-year returns (%)</h3>
+      <div class="page-sub">Daily-history windows stepped weekly · per scheme's own full record</div>
+      <div id="compareRollingChart" style="margin-top:10px"></div>
+    </div>`;
+  }
+
+  out.innerHTML = `
+    <div class="card" style="margin-bottom:18px">
+      <h3>Metric table <span class="page-sub">as of ${App.formatDate(r.as_of)} · ${App.formatNum(S[0].metrics.points)}+ NAV points per scheme</span></h3>
+      <div class="table-wrap" style="max-height:none">
+        ${metricTable}
+      </div>
+      ${benchNote}
+      <div class="page-sub" style="margin-top:8px"><b>${App.esc(r.disclaimer)}</b> Factual figures computed from AMFI NAV history — not a recommendation; percentile-neutral by design.</div>
+    </div>
+    ${chartsHtml}`;
+  if (growthSeries.length >= 1) {
+    Charts.mountMultiLine(document.getElementById("compareGrowthChart"), growthSeries,
+                          { formatValue: v => "₹" + App.formatNum(v, 0) });
+  }
+  if (rollSeries.length >= 1) {
+    Charts.mountMultiLine(document.getElementById("compareRollingChart"), rollSeries,
+                          { formatValue: v => App.formatNum(v, 1) + "%" });
+  }
+}
+
 // ---------- proposal (uses the shared portfolio builder) ----------
 function initProposal() {
   pfMount("pr", pfRunProposal, true);
@@ -1866,7 +2038,48 @@ async function mvAnalyzeCp(id) {
   try {
     const r = await apiT("/analyze", { method: "POST", body: JSON.stringify({ portfolio_id: Number(id), portfolio_kind: "client" }) });
     renderCompliance(container, r);
+    renderPortfolioAnalyticsBlock(container, id);
   } catch (e) { container.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`; }
+}
+
+// [ANA3] portfolio-level performance & risk, shown under the compliance table
+async function renderPortfolioAnalyticsBlock(container, portfolioId) {
+  const host = document.createElement("div");
+  host.id = "mvCpAnalytics";
+  host.className = "card";
+  host.style.marginTop = "18px";
+  container.appendChild(host);
+  host.innerHTML = `<h3>Performance &amp; risk</h3>
+    <div class="page-sub">Weight-blended NAV reconstruction of this portfolio over its schemes' common window.</div>
+    <div class="pa-body" style="margin-top:8px"><span class="spin"></span> Loading…</div>`;
+  try {
+    const a = await apiT("/portfolio-analytics", { method: "POST", body: JSON.stringify({ portfolio_id: Number(portfolioId), portfolio_kind: "client" }) });
+    const body = host.querySelector(".pa-body");
+    if (a.error) { body.innerHTML = `<div class="empty">${App.esc(a.error)}</div>`; return; }
+    const c = a.cagr_pct || {}, rk = a.risk || {}, roll = a.rolling_1y;
+    const cell = (label, v) => `<div style="flex:1;min-width:96px;text-align:center;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
+      <div style="font-size:10.5px;color:var(--text-2);text-transform:uppercase;letter-spacing:.04em">${label}</div>
+      <div style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px">${v != null ? App.formatNum(v, 2) + "%" : "—"}</div></div>`;
+    let html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      ${cell("CAGR incep.", c.since_inception)}${cell("1Y", c.y1)}${cell("3Y", c.y3)}${cell("5Y", c.y5)}
+      ${cell("Volatility (3y)", rk.volatility_pct)}
+    </div><div class="kv">
+      <dt>Sharpe / Sortino</dt><dd>${rk.sharpe != null ? App.formatNum(rk.sharpe, 2) : "—"} / ${rk.sortino != null ? App.formatNum(rk.sortino, 2) : "—"}</dd>
+      <dt>Max drawdown (3y)</dt><dd>${rk.max_drawdown_pct != null ? App.formatNum(rk.max_drawdown_pct, 2) + "%" : "—"}</dd>
+      ${roll ? `<dt>Rolling 1Y positive</dt><dd>${App.formatNum(roll.pct_positive, 1)}% <span class="page-sub">of ${App.formatNum(roll.n_periods)} windows · median ${App.formatNum(roll.median_pct, 2)}%</span></dd>` : ""}
+      <dt>Constituents</dt><dd>${(a.constituents || []).map(x => `${App.esc(x.fund_name)} (${App.formatNum(x.weight, 1)}%, ${App.esc(x.plan_used)})`).join(" · ")}</dd>
+    </div><div id="paGrowthChart" style="margin-top:10px"></div>
+    <div class="page-sub" style="margin-top:6px"><b>${App.esc(a.disclaimer)}</b> Diagnostic of your own portfolio — factual AMFI-NAV math, not adviser track record.</div>`;
+    body.innerHTML = html;
+    if (a.growth_100 && a.growth_100.dates.length > 10) {
+      Charts.mountMultiLine(document.getElementById("paGrowthChart"),
+        [{ name: a.label || "Portfolio", color: "#2456d6",
+           dates: a.growth_100.dates, values: a.growth_100.values }],
+        { formatValue: v => "₹" + App.formatNum(v, 0) });
+    }
+  } catch (e) {
+    host.querySelector(".pa-body").innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
+  }
 }
 
 function fmtDeviation(x) {

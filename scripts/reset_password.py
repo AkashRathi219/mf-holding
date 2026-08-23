@@ -64,6 +64,7 @@ def main() -> int:
         orig_db = auth.AUTH_DB_PATH
         try:
             auth.AUTH_DB_PATH = test_db
+            old_token = auth._make_token(uid, email, "x")
             salt = __import__("secrets").token_hex(16)
             tcon = sqlite3.connect(test_db)
             tcon.execute(
@@ -74,8 +75,8 @@ def main() -> int:
             tcon.close()
             got = auth.login_user(email, password)
             assert got["user"]["id"] == uid
-            old_token_rejected = auth.user_from_token(
-                auth._make_token(uid, email, "x")) is not None or True
+            assert auth.user_from_token(old_token) is None, \
+                "pre-rotation token still valid after token_version bump"
         except Exception as e:
             print(f"ABORT: verification failed, nothing written: {e}")
             return 1
