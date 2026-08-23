@@ -38,16 +38,19 @@ class _JsonFormatter(logging.Formatter):
 
 
 def setup_logging(level: int = logging.INFO) -> None:
-    """Idempotent root config for the 'webapp' namespace only."""
+    """Idempotent config: JSON handler on the 'webapp' namespace AND the
+    'src' namespace (scheduler/refresh pipelines) so their failures — e.g. a
+    silently-dead scheduler thread — are visible in container logs."""
     global _CONFIGURED
     if _CONFIGURED:
         return
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(_JsonFormatter())
-    root = logging.getLogger("webapp")
-    root.setLevel(level)
-    root.addHandler(handler)
-    root.propagate = False
+    for ns in ("webapp", "src"):
+        lg = logging.getLogger(ns)
+        lg.setLevel(level)
+        lg.addHandler(handler)
+        lg.propagate = False
     _CONFIGURED = True
 
 

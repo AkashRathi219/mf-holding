@@ -40,6 +40,10 @@ def _get_client():
     global _client
     if _client is None:
         import boto3
+        from botocore.config import Config
+        # Bounded I/O: every caller is on a request/startup path. An unbounded
+        # hang here once stalled the scheduler heartbeat at boot (R2 flaky
+        # window) — the thread blocked forever inside read_state()->ensure().
         _client = boto3.client(
             "s3",
             endpoint_url=(
@@ -49,6 +53,8 @@ def _get_client():
             ),
             aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
             aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+            config=Config(connect_timeout=10, read_timeout=30,
+                          retries={"max_attempts": 3, "mode": "adaptive"}),
         )
     return _client
 
