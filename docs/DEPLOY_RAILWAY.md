@@ -132,34 +132,43 @@ Notes: `railway link` settings persist per-directory in `.railway/`
 (gitignored). `railway up` is handy for hotfixes but git-push remains the
 canonical deploy path — always land changes on main too.
 
-## Public URL & custom domain (Hostinger)
+## Public URL & custom domain
 
 Railway never exposes a service publicly until you generate a domain:
 service → **Settings → Networking → Generate Domain** → port **8080**.
 Copy the EXACT name shown (it includes a random suffix, e.g.
 `mf-holding-production-a1b2c3.up.railway.app`) — guessing the name yields
 DNS_PROBE_FINISHED_NXDOMAIN even though the app runs.
+**Current public URL: `https://mf-holding-production-7baa.up.railway.app`**
 
-### Pointing fundpulse.aracharatventures.com (Hostinger + Google Workspace)
+> Stale-NXDOMAIN gotcha: a freshly generated name can sit in your router's
+> DNS cache as "not found" for hours. Verify via public resolvers
+> (`nslookup <host> 1.1.1.1`) before assuming breakage; `ipconfig /flushdns`
+> or switching adapter DNS to 1.1.1.1 fixes local resolution immediately.
+
+### Pointing fundpulse.aracharatventures.com (any registrar)
+
+Works identically at Namecheap / GoDaddy / Porkbun / Cloudflare / Hostinger /
+whoever manages the zone — find their "DNS records" page and:
 
 1. **Railway first:** Settings → Networking → **Custom Domain** → enter
    `fundpulse.aracharatventures.com`. Railway displays a **CNAME target**
    (`<something>.up.railway.app`). Keep this tab open.
-2. **Hostinger:** hPanel → Domains → `aracharatventures.com` →
-   **DNS / Nameservers** → add record:
-   | Type | Name | Points to | TTL |
+2. **Registrar DNS console:** add one record —
+   | Type | Host/Name | Value/Target | TTL |
    |---|---|---|---|
-   | CNAME | `fundpulse` | *(the Railway CNAME target from step 1)* | auto |
+   | CNAME | `fundpulse` | *(the Railway CNAME target from step 1)* | default |
 3. Back in Railway, click **Verify/Save**. TLS certificate issues
    automatically once DNS propagates (minutes to ~1 h).
-4. **Do NOT touch** existing MX/SPF/DKIM records — Google Workspace mail is
-   unaffected by adding one CNAME. Leave nameservers on Hostinger defaults
-   unless you deliberately move them.
+4. **Do NOT touch** existing MX/SPF/DKIM/TXT records — mail setups (e.g.
+   Google Workspace) are unaffected by adding one CNAME. If the domain sits
+   on parking nameservers (e.g. dns-parking.com), first switch nameservers
+   to the real registrar's DNS or Cloudflare so the CNAME is actually served.
 5. When it resolves: set this URL as the production reference everywhere
    (`SITE_URL`, website placeholders — see task WEB1), and redeploy if any
    env var references changed.
 
-Troubleshooting: `dig fundpulse.aracharatventures.com CNAME` (or
-nslookup) should return the Railway target; ERR_SSL before cert issuance is
-normal for the first few minutes; if Railway says "domain already taken"
-you may have added it under another project/environment.
+Troubleshooting: `Resolve-DnsName fundpulse.aracharatventures.com -Server 1.1.1.1`
+should return the Railway target once propagated; ERR_SSL before cert
+issuance is normal for the first few minutes; if Railway says "domain
+already taken" you may have added it under another project/environment.
