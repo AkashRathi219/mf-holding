@@ -29,6 +29,8 @@ DAYS_PER_YEAR = 365.25        # calendar-day CAGR exponent
 DEFAULT_RF_PCT = 6.0          # documented assumption until a T-bill feed lands
 ROLLING_WINDOW_YEARS = 1      # rolling-return window
 MIN_POINTS_FOR_STATS = 30     # below this, risk metrics are None (honest gaps)
+MIN_CAGR_WINDOW_DAYS = 90     # below this, even since-inception CAGR is None:
+                              # annualising a few days fabricates absurd rates
 METHODOLOGY_VERSION = "perf-v1.0-2026-08-23"  # stamped into proposals [ANA4]
 
 
@@ -195,11 +197,14 @@ def compute_series_analytics(series: list[tuple[str, float]],
         return out
 
     first, last = parsed[0], parsed[-1]
+    span_days = (last[0] - first[0]).days
     out["inception"] = {"date": first[0].isoformat(), "nav": first[1],
-                        "years": round((last[0] - first[0]).days / DAYS_PER_YEAR, 2)}
+                        "years": round(span_days / DAYS_PER_YEAR, 2)}
+    si = cagr_between(first[1], last[1], span_days)
     out["cagr_pct"] = {
-        "since_inception": round(
-            (cagr_between(first[1], last[1], (last[0] - first[0]).days) or 0) * 100.0, 2),
+        "since_inception": (round(si * 100.0, 2)
+                            if si is not None and span_days >= MIN_CAGR_WINDOW_DAYS
+                            else None),
         "y1": _pct_or_none(_window_cagr(parsed, 1, today)),
         "y3": _pct_or_none(_window_cagr(parsed, 3, today)),
         "y5": _pct_or_none(_window_cagr(parsed, 5, today)),

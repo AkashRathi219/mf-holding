@@ -138,3 +138,18 @@ def test_compute_series_empty_degrades_honestly():
     short = [("2026-08-01", 100.0), ("2026-08-02", 101.0)]
     out = compute_series_analytics(short)
     assert out["risk"] is None and out["rolling_1y"] is None
+
+
+def test_short_window_since_inception_is_honest_null():
+    """A days-long history must NOT yield an annualized CAGR (compare table
+    showed e.g. -17.23% from 5 NAV points before the 90-day floor)."""
+    d0 = date(2024, 6, 1)
+    week = [(d0 + td(days=i), 100 * (1 + (0.001 if i % 2 else -0.0012)))
+            for i in range(6)]
+    out = compute_series_analytics(week)
+    assert out["cagr_pct"]["since_inception"] is None
+    assert out["cagr_pct"]["y1"] is None
+    # 90 days exactly -> annualized figure is legitimate again
+    span = [(d0 + td(days=i), 100 * 1.0004 ** i) for i in range(0, 91, 30)]
+    out = compute_series_analytics(span)
+    assert out["cagr_pct"]["since_inception"] is not None

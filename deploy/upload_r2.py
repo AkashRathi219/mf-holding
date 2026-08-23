@@ -26,10 +26,12 @@ import hashlib
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 
 ROOT = Path(__file__).resolve().parent.parent
 STAGE = ROOT / "deploy" / "data"
@@ -100,6 +102,8 @@ def main() -> int:
         endpoint_url=ENDPOINT.format(account_id=os.environ["R2_ACCOUNT_ID"]),
         aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
         aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+        config=Config(retries={"max_attempts": 5, "mode": "adaptive"},
+                      connect_timeout=30, read_timeout=120),
     )
 
     bucket = os.environ["R2_BUCKET"]
@@ -115,8 +119,6 @@ def main() -> int:
 
     files = sorted(p for p in STAGE.rglob("*") if p.is_file())
     prefix = args.bucket_prefix.strip("/")
-    keys = {(prefix + "/" + p.relative_to(STAGE).as_posix()).lstrip("/")
-            for p in files}
 
     existing = {}
     token = None
@@ -157,20 +159,66 @@ def main() -> int:
         return 0
 
     def _up(item):
+        """Upload one object with per-object retry + backoff (flaky links
+        abort the whole batch otherwise)."""
         key, p, ctype = item
-        client.upload_file(str(p), bucket, key, ExtraArgs={"ContentType": ctype})
-        return key
+        last_err = None
+        for attempt in range(4):
+            try:
+                client.upload_file(str(p), bucket, key,
+                                   ExtraArgs={"ContentType": ctype})
+                return key, p.stat().st_size, None
+            except (BotoCoreError, ClientError, OSError) as e:
+                last_err = e
+                time.sleep(min(2 ** attempt * 2, 30))
+        return key, p.stat().st_size, str(last_err)
+
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        tqdm = None
 
     ok = fail = 0
+    uploaded_bytes = 0
+    failures: list[str] = []
+    bar = (tqdm(total=len(to_upload), unit="obj", dynamic_ncols=True,
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} "
+                           "[{elapsed}<{remaining}, {postfix}]")
+           if tqdm else None)
+    last_print = 0.0
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as ex:
-        for key in ex.map(_up, to_upload):
-            ok += 1
-    print(f"uploaded {ok} objects")
+        futs = {ex.submit(_up, it): it[0] for it in to_upload}
+        for fut in concurrent.futures.as_completed(futs):
+            key, nbytes, err = fut.result()
+            if err:
+                fail += 1
+                failures.append(f"{key}: {err}")
+            else:
+                ok += 1
+                uploaded_bytes += nbytes
+            if bar is not None:
+                bar.update(1)
+                bar.set_postfix_str(f"{uploaded_bytes / 1e6:.0f} MB, "
+                                    f"{fail} failed")
+            elif time.time() - last_print >= 15:
+                last_print = time.time()
+                print(f"  progress: {ok + fail}/{len(to_upload)} "
+                      f"({uploaded_bytes / 1e6:.0f} MB), {fail} failed",
+                      flush=True)
+    if bar is not None:
+        bar.close()
+    print(f"uploaded {ok} objects, {fail} failed")
+    for f in failures[:10]:
+        print(f"  FAILED {f}")
+    if failures:
+        print(f"  ({len(failures)} failed total — re-run to resume; "
+              f"unchanged objects are skipped)")
 
     if args.verify:
         m = json.loads(MANIFEST.read_text(encoding="utf-8"))
-        entries = {e["path"]: (e["size"], e["sha256"]) for e in m["files"]}
         mismatched = checked = 0
+        vbar = (tqdm(total=len(m["files"]), unit="obj", dynamic_ncols=True)
+                if tqdm else None)
         for ent in m["files"]:
             key = (prefix + "/" + ent["path"]).lstrip("/")
             resp = client.get_object(Bucket=bucket, Key=key)
@@ -180,6 +228,10 @@ def main() -> int:
             if got != (ent["size"], ent["sha256"]):
                 mismatched += 1
                 print(f"  MISMATCH {key}")
+            if vbar is not None:
+                vbar.update(1)
+        if vbar is not None:
+            vbar.close()
         print(f"verified {checked} objects, {mismatched} mismatched")
 
     manifest_key = (prefix + "/manifest.json").lstrip("/")
