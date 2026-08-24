@@ -382,7 +382,11 @@ const Charts = {
       const pad = { l: 54, r: 14, t: 16, b: 30 };
       const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
       let lo = Infinity, hi = -Infinity;
-      series.forEach(s => s.values.forEach(v => { if (v < lo) lo = v; if (v > hi) hi = v; }));
+      series.forEach(s => s.values.forEach(v => {
+        if (v == null || !isFinite(v)) return;   // union-grid gaps
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }));
       if (!isFinite(lo)) { lo = 0; hi = 1; }
       const span = (hi - lo) || 1;
       lo -= span * 0.08; hi += span * 0.08;
@@ -401,8 +405,17 @@ const Charts = {
       ctx.fillStyle = Charts._c("--text-2"); ctx.font = "10.5px sans-serif"; ctx.textAlign = "center";
       [0, Math.floor((n - 1) / 2), n - 1].forEach(i => ctx.fillText(labels[i], X(i), h - 10));
       series.forEach(s => {
+        // [BUG-M16] gap-aware polyline: null values (dates a scheme's own
+        // history doesn't cover on the union grid) break the line instead of
+        // dragging it to zero/baseline.
         ctx.beginPath();
-        s.values.forEach((v, i) => { if (i === 0) ctx.moveTo(X(0), Y(v)); else ctx.lineTo(X(i), Y(v)); });
+        let pen = false;
+        s.values.forEach((v, i) => {
+          if (v == null || !isFinite(v)) { pen = false; return; }
+          const x = X(i), y = Y(v);
+          if (!pen) { ctx.moveTo(x, y); pen = true; }
+          else ctx.lineTo(x, y);
+        });
         ctx.strokeStyle = Charts._resolve(s.color); ctx.lineWidth = 1.8; ctx.stroke();
       });
       if (hoverI != null) {

@@ -1738,9 +1738,28 @@ function renderCompareResults(r) {
       <div id="compareGrowthChart" style="margin-top:10px"></div>
     </div>`;
   }
-  const rollSeries = S.filter(s => s.rolling_1y && s.rolling_1y.dates.length > 30)
+  const rollRaw = S.filter(s => s.rolling_1y && s.rolling_1y.dates.length > 30)
     .map(s => ({ name: shortName(s.fund_name), color: s.color,
                  dates: s.rolling_1y.dates, values: s.rolling_1y.values }));
+  // [BUG-M16] each scheme's rolling-1Y runs over ITS OWN history window;
+  // plotting the series index-aligned stretched short histories across long
+  // ones and mislabeled shared tooltips. Align every series onto the UNION
+  // date grid instead — gaps break the line and show "—" in the tooltip.
+  let rollUnion = [];
+  const byDate = rollRaw.map(s => {
+    const set = new Set();
+    s.dates.forEach(d => set.add(d));
+    return { s, m: new Map(s.dates.map((d, i) => [d, s.values[i]])), set };
+  });
+  if (rollRaw.length) {
+    const all = new Set();
+    byDate.forEach(x => x.set.forEach(d => all.add(d)));
+    rollUnion = [...all].sort();
+  }
+  const rollSeries = byDate.map(({ s, m }) => ({
+    name: s.name, color: s.color, dates: rollUnion,
+    values: rollUnion.map(d => (m.has(d) ? m.get(d) : null)),
+  }));
   if (rollSeries.length >= 1) {
     chartsHtml += `<div class="card" style="margin-bottom:18px">
       <h3>Rolling 1-year returns (%)</h3>

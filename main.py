@@ -891,9 +891,9 @@ def parse(file_path):
 @click.option("--amc", "-a", type=str, default=None,
               help="Only ingest files for an AMC matching this name (partial match)")
 @click.option("--year", "-y", type=int, default=None,
-              help="Month to assign when not detectable from the filename")
-@click.option("--month", "-m", type=int, default=None,
               help="Year to assign when not detectable from the filename")
+@click.option("--month", "-m", type=int, default=None,
+              help="Month to assign when not detectable from the filename")
 def ingest(amc, year, month):
     """Ingest manually downloaded documents.
 
