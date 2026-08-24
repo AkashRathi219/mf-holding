@@ -13,6 +13,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import threading
 from datetime import date, datetime
 from pathlib import Path
@@ -30,6 +31,7 @@ AMC_WEBSITES_DIR = DATA_DIR / "parsed" / "amc_websites"
 ADVISORKHOJ_DIR = DATA_DIR / "parsed" / "advisorkhoj"
 AMFI_DIR = DATA_DIR / "parsed" / "amfi"
 UNIVERSE_CSV = DATA_DIR / "universe" / "Combined NAV - 14-Aug-2026.csv"
+NAVALL_TXT = DATA_DIR / "universe" / "navall.txt"
 EQUITY_ISINS_CSV = DATA_DIR / "reference" / "equity_isins.csv"
 INDEX_RESOLVED_JSON = DATA_DIR / "reference" / "index_resolved_holdings.json"
 NAV_HISTORY_DIR = DATA_DIR / "nav_history"
@@ -302,6 +304,9 @@ def _fingerprint() -> str:
     files: list[Path] = [
         UNIVERSE_CSV, EQUITY_ISINS_CSV, INDEX_RESOLVED_JSON,
         DISCOVERY_NEEDED_CSV, NO_DISCLOSURE_CSV,
+        # [BUG-M11] these feed schemes.amfi_*/isin_* and index %NAV weights —
+        # refreshing them must invalidate the cache like any other source.
+        NAVALL_TXT, NIFTY_WEIGHTS_JSON, BONDS_CATALOG_JSON,
     ]
     for d in (AMC_WEBSITES_DIR, ADVISORKHOJ_DIR, AMFI_DIR):
         if d.is_dir():
@@ -325,7 +330,22 @@ def _source_files() -> list[Path]:
     return [p for p in files if p.exists()]
 
 
+def _like(text: str) -> str:
+    """[BUG-L2] Escape LIKE wildcards in user input; use with ESCAPE '\\'
+    clauses so '%'/_'_ in a query match literally instead of scanning wild."""
+    return (text or "").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 _CODE_RE = re.compile(r"^[A-Z0-9]{1,5}$")
+
+
+class _RevStr(str):
+    """String that compares in REVERSE order (descending sorts on text keys)."""
+
+    def __lt__(self, other): return str.__gt__(self, other)
+    def __gt__(self, other): return str.__lt__(self, other)
+    def __le__(self, other): return str.__ge__(self, other)
+    def __ge__(self, other): return str.__le__(self, other)
 _JUNK_NAME_RE = re.compile(
     r"^(?:sheet\d+|top\s+\d+\s+holdings?|product\s+labell|please\s+mention|"
     r"name\s+of\s+the\s+(?:instrument|security)|industry\s+classification|"
@@ -852,7 +872,7 @@ def _load_navall_plan_codes() -> dict[str, dict]:
     regular/direct token — their code is stored under BOTH plans so the NAV chart
     renders regardless of the selected tab.
     """
-    path = DATA_DIR / "universe" / "navall.txt"
+    path = NAVALL_TXT
     out: dict[str, dict] = {}
     if not path.exists():
         return out
@@ -1940,9 +1960,7 @@ def _debt_details(company: str, yield_str, sector: str) -> dict:
     m = _MATURITY_RE.search(company or "")
     if m:
         maturity = f"{m.group(3)}-{m.group(2)}-{m.group(1)}"
-    ytm = _num(yield_str)
-    if ytm is not None and ytm < 1:
-        ytm = round(ytm * 100, 4)  # fraction -> percent
+    ytm = _num(yield_str)  # [BUG-M12] scale decided per sleeve, not per value
     rating = None
     if sector and _RATING_LIKE_RE.search(sector):
         rating = sector.strip()
@@ -2095,7 +2113,8 @@ class WebDB:
                      limit=100, offset=0) -> dict:
         where, args = [], []
         if amc:
-            where.append("amc LIKE ?"); args.append(f"%{amc}%")
+            where.append("amc LIKE ? ESCAPE '\\'")
+            args.append(f"%{_like(amc)}%")
         if category:
             where.append("category=?"); args.append(category)
         if source:
@@ -2107,8 +2126,10 @@ class WebDB:
         if is_etf is not None:
             where.append("is_etf=?"); args.append(1 if is_etf else 0)
         if search:
-            where.append("(fund_name LIKE ? OR amc LIKE ? OR key LIKE ?)")
-            args += [f"%{search}%", f"%{search}%", f"%{norm_name(search)}%"]
+            where.append("(fund_name LIKE ? ESCAPE '\\' OR amc LIKE ? ESCAPE '\\' "
+                         "OR key LIKE ?)")
+            args += [f"%{_like(search)}%", f"%{_like(search)}%",
+                     f"%{_like(norm_name(search))}%"]
         if cap or sector:
             joins = ["schemes s"]
             if cap:
@@ -2170,6 +2191,15 @@ class WebDB:
                 r.update(_debt_details(r.get("company") or "", r.get("yield") or "",
                                        r.get("sector") or ""))
                 self._enrich_bond_fields(r)
+        # [BUG-M12] fraction-vs-percent decided per SCHEME batch: a source that
+        # exports true fractions has EVERY yield < 1; an isolated genuine
+        # 0.85% quote among normal 5-9% yields must stay 0.85, not become 85.
+        debt_ytms = [r["ytm"] for r in rows
+                     if r.get("asset_class") == "debt" and r.get("ytm")]
+        if debt_ytms and max(debt_ytms) < 1:
+            for r in rows:
+                if r.get("asset_class") == "debt" and r.get("ytm"):
+                    r["ytm"] = round(r["ytm"] * 100, 4)
         return rows
 
     def scheme_nav(self, scheme_id: int, start: str | None = None,
@@ -2504,9 +2534,29 @@ class WebDB:
         })
         # [ANA3 movement] cash-flow-aware value path from real transactions.
         if transactions:
-            from .analytics import portfolio_movement_series
-            mv = portfolio_movement_series(items, transactions,
-                                           self._movement_nav_map)
+            from .analytics import parse_nav_date, portfolio_movement_series
+            # statement-embedded NAVs (tier-3 of the source ladder): the CAS
+            # records carry the fund's actual NAV on every transaction date
+            tx_navs_by_key: dict[tuple[str, str], dict[str, float]] = {}
+            for t in transactions:
+                n = t.get("nav")
+                if n in (None, ""):
+                    continue
+                d = parse_nav_date(t.get("date") or "")
+                if not d:
+                    continue
+                key = ((t.get("amfi_code") or "").strip(),
+                       (t.get("isin") or "").strip().upper())
+                try:
+                    tx_navs_by_key.setdefault(key, {})[d.isoformat()] = float(n)
+                except (TypeError, ValueError):
+                    continue
+
+            def _movement_lookup(code: str, isin: str):
+                return self._movement_nav_map(
+                    code, isin, tx_navs=tx_navs_by_key.get((code, isin)))
+
+            mv = portfolio_movement_series(items, transactions, _movement_lookup)
             out["movement"] = mv
             out["movement_source"] = "cas_transactions"
         else:
@@ -2514,12 +2564,20 @@ class WebDB:
             out["movement_source"] = None
         return out
 
-    def _movement_nav_map(self, amfi_code: str, isin: str) -> dict[str, float] | None:
-        """{iso_date: nav} for one scheme referenced by a transaction record.
+    def _movement_nav_map(self, amfi_code: str, isin: str,
+                          tx_navs: dict[str, float] | None = None
+                          ) -> tuple[dict[str, float], str] | None:
+        """({iso_date: nav}, source) for one scheme referenced by a
+        transaction record — the NAV-SOURCE LADDER, slightest deviation first:
 
-        Uses the record's AMFI code when present (fast path), else the
-        statement ISIN -> schemes table -> plan codes. Direct plan preferred,
-        Regular fallback — same investor-comparable convention as elsewhere.
+        1. ``amfi_history``  local file / R2 object (actual AMFI NAVs)
+        2. ``mfapi_history`` mfapi full-history mirror, fetched once and
+           persisted (actual AMFI NAVs; zero deviation, one network call)
+        3. ``statement_tx``  the NAVs embedded in the CAS transactions
+           themselves (real fund NAVs on tx dates, step-held between)
+
+        Direct plan preferred, Regular fallback — same investor-comparable
+        convention as elsewhere. ``None`` when no tier resolves.
         """
         from .analytics import parse_nav_date
 
@@ -2538,7 +2596,7 @@ class WebDB:
                 doc = self._load_nav_plan(code)
                 got = _map(doc)
                 if got:
-                    return got
+                    return got, "amfi_history"
         if isin:
             row = self.con.execute(
                 "SELECT amfi_regular, amfi_direct FROM schemes "
@@ -2551,7 +2609,30 @@ class WebDB:
                     doc = self._load_nav_plan(code)
                     got = _map(doc)
                     if got:
-                        return got
+                        return got, "amfi_history"
+        # mfapi mirror tier (persisted, so the request path pays once ever)
+        if amfi_code:
+            try:
+                from src.fetch_missing_nav import _build_doc, _fetch
+                resp = _fetch(amfi_code)
+                if resp is not None:
+                    doc = _build_doc(amfi_code, resp)
+                    history = doc.get("history") or []
+                    if history:
+                        NAV_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+                        (NAV_HISTORY_DIR / f"{amfi_code}.json").write_text(
+                            json.dumps(doc), encoding="utf-8")
+                        got = {}
+                        for hrow in history:
+                            pd = parse_nav_date(hrow.get("date"))
+                            if pd and hrow.get("nav"):
+                                got[pd.isoformat()] = hrow["nav"]
+                        if got:
+                            return got, "mfapi_history"
+            except Exception:
+                pass
+        if tx_navs:
+            return dict(tx_navs), "statement_tx"
         return None
 
     def compare_schemes(self, scheme_ids: list[int]) -> dict:
@@ -2584,8 +2665,18 @@ class WebDB:
 
         # Common window on ISO keys.
         def iso_bounds(doc):
-            ds = [parse_nav_date(d) for d in doc["dates"]]
-            return ds[0], ds[-1]
+            # [BUG] an unparseable first/last date made max()/min() raise
+            # TypeError -> endpoint 500. Drop undatable points instead.
+            ds = [d for d in (parse_nav_date(x) for x in doc["dates"]) if d]
+            return (ds[0], ds[-1]) if ds else (None, None)
+
+        picked = [(s, plan, doc) for s, plan, doc in picked
+                  if iso_bounds(doc)[0] is not None]
+        if len(picked) < 2:
+            return {"schemes": [],
+                    "error": "need at least two schemes with NAV history",
+                    "disclaimer":
+                        "Past performance is not indicative of future returns."}
 
         start = max(iso_bounds(doc)[0] for _, _, doc in picked)
         end = min(iso_bounds(doc)[1] for _, _, doc in picked)
@@ -2810,8 +2901,9 @@ class WebDB:
                         limit=100, offset=0) -> dict:
         where, args = [], []
         if q:
-            where.append("(name LIKE ? OR isin LIKE ? OR aliases LIKE ?)")
-            args += [f"%{q}%", f"%{q.upper()}%", f"%{q}%"]
+            where.append("(name LIKE ? ESCAPE '\\' OR isin LIKE ? ESCAPE '\\' "
+                         "OR aliases LIKE ? ESCAPE '\\')")
+            args += [f"%{_like(q)}%", f"%{_like(q.upper())}%", f"%{_like(q)}%"]
         if confirmed_equity is not None:
             where.append("confirmed_equity=?"); args.append(confirmed_equity)
         if cap:
@@ -2959,7 +3051,13 @@ class WebDB:
             v = b.get(key)
             if v is None:
                 return (1, 0)
-            return (0, -v if desc and isinstance(v, (int, float)) else v)
+            if desc and isinstance(v, (int, float)):
+                return (0, -v)
+            if desc:
+                # [BUG] strings cannot be negated — 'maturity_desc' used to
+                # silently sort ascending under its descending label.
+                return (0, _RevStr(str(v)))
+            return (0, v)
         out.sort(key=sk)
         return {"total": total, "as_of": cat.get("as_of"),
                 "sources": cat.get("sources"),
@@ -3149,8 +3247,10 @@ class WebDB:
                 "examples": unmatched[:6] + not_in_uni[:4]}
 
     def _holding_ytm_pct(self, h: dict) -> float | None:
-        """YTM (%) for a debt holding: the fund's own yield text first, then the
-        bond catalog's reported OR computed YTM (NSE price + coupon + maturity)."""
+        """YTM (%) for ONE holding — legacy per-value helper.
+
+        Prefer _sleeve_yield_pct: the fraction heuristic here can inflate a
+        genuine sub-1% quote; batch context is authoritative [BUG-M12]."""
         y = self._pct_or_none(h.get("yield"))
         if y is not None:
             return round(y, 4)
@@ -3158,6 +3258,29 @@ class WebDB:
         if y is not None:
             return round(y, 4)
         return None
+
+    @staticmethod
+    def _sleeve_yield_pct(holdings: list):
+        """[BUG-M12] Yield-unit decision ONCE PER DEBT SLEEVE.
+
+        Fraction-exporting sources have EVERY value < 1, so scaling the whole
+        sleeve together is safe; a lone genuine sub-1% quote among normal
+        5-9% yields stays untouched. Returns get(h, key) -> float | None."""
+        vals = []
+        for h in holdings or []:
+            for k in ("yield", "ytm"):
+                f = _num(h.get(k))
+                if f is not None and f > 0:
+                    vals.append(f)
+        fractional = bool(vals) and max(vals) < 1
+
+        def get(h: dict, key: str) -> float | None:
+            f = _num(h.get(key))
+            if f is None:
+                return None
+            return round(f * 100, 4) if fractional else round(f, 4)
+
+        return get
 
     # ---- overlap ----
     def overlap(self, scheme_ids: list[int]) -> dict:
@@ -3502,7 +3625,9 @@ class WebDB:
         effective_total = round(sum(h["weight"] for h in holdings), 2)
         coverage_pct = round(effective_total / total_weight * 100, 1) if total_weight else 0.0
 
-        gold_re = re.compile(r"\\bgold\\b", re.I)
+        # [BUG-C5] was r"\\bgold\\b" (literal backslash-b) — dead code that
+        # never matched, so gold funds fell through to the debt fallback.
+        gold_re = re.compile(r"\bgold\b", re.I)
         rating_re = re.compile(r"(?:AAA|AA\+|AA|A1\+|BBB|A\+|SOV|SOVEREIGN)", re.I)
         debt_text_re = re.compile(
             r"(government security|state government|g-sec|gsec|sovereign|treasury|"
@@ -3657,7 +3782,13 @@ class WebDB:
         out = {"debt_pct": round(asset_split.get("debt", 0.0), 2),
                "n_debt_holdings": len(debt_holdings)}
 
-        y_h = [(h["weight"], self._holding_ytm_pct(h)) for h in debt_holdings]
+        _ypct = self._sleeve_yield_pct(debt_holdings)
+
+        def _ytm_of(h: dict) -> float | None:
+            v = _ypct(h, "yield")
+            return v if v is not None else _ypct(h, "ytm")
+
+        y_h = [(h["weight"], _ytm_of(h)) for h in debt_holdings]
         y_h = [(w, y) for w, y in y_h if y is not None]
         out["ytm_pct"] = (round(sum(w * y for w, y in y_h) / sum(w for w, _ in y_h), 2)
                           if y_h else None)
@@ -3694,7 +3825,7 @@ class WebDB:
                                    for k, v in sorted(instr.items(), key=lambda x: -x[1])]
         out["top_debt_holdings"] = [{
             "company": h.get("company", ""), "isin": h.get("isin", ""),
-            "rating": h.get("rating") or "", "yield": self._holding_ytm_pct(h),
+            "rating": h.get("rating") or "", "yield": _ytm_of(h),
             "maturity_date": h.get("maturity_date"),
             "coupon": h.get("coupon"),
             "ytm_source": h.get("ytm_source") or "",
@@ -3711,9 +3842,9 @@ class WebDB:
         seen = set()
         for h in self.con.execute(
             """SELECT h.company, h.isin, h.fund_name, h.amc, h.sector, h.as_of
-               FROM holdings h WHERE h.company LIKE ? OR h.isin LIKE ? OR h.isin=?
+               FROM holdings h WHERE h.company LIKE ? ESCAPE '\\' OR h.isin LIKE ? ESCAPE '\\' OR h.isin=?
                ORDER BY h.percent_nav DESC NULLS LAST LIMIT ?""",
-            (f"%{q}%", f"%{q.upper()}%", q.upper(), limit)).fetchall():
+            (f"%{_like(q)}%", f"%{_like(q.upper())}%", q.upper(), limit)).fetchall():
             d = dict(h)
             if d["isin"] and d["isin"] in seen:
                 continue

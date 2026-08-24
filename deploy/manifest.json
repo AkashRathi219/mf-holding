@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-23T16:00:15Z",
+  "generated_at": "2026-08-24T18:36:39Z",
   "schema": 1,
   "files": [
     {
@@ -24,8 +24,8 @@
     },
     {
       "path": "data/logs/refresh_state.json",
-      "size": 2260,
-      "sha256": "9caf641897402633d8d46deedebfdf3cd70af00817a523f389d8d954579eac02"
+      "size": 932,
+      "sha256": "689984aea9cdbb8616be324422c667cb2a86a1b69a1e83f612c3fcefee8e4a41"
     },
     {
       "path": "nav_history/100033.json",
@@ -1776,6 +1776,16 @@
       "path": "nav_history/108690.json",
       "size": 253431,
       "sha256": "9868ba28e57cc38a2690a6a232f44e3b6e4750b95c273820d93238188ecd548c"
+    },
+    {
+      "path": "nav_history/108691.json",
+      "size": 223226,
+      "sha256": "a81698186aef10f4d52a4f98665f80888863bc8f89b5a299ef0d1c826b95c823"
+    },
+    {
+      "path": "nav_history/108701.json",
+      "size": 181945,
+      "sha256": "46dc87e9cdea2e68f1e0f5d3dbd5f7b0f885b54877bc2c148d86a5d163e15026"
     },
     {
       "path": "nav_history/108717.json",
@@ -4933,6 +4943,11 @@
       "sha256": "92bb37b1532eacf4a094f0bf53820213661d0c9cfcebe7e340661c36b7d75eb6"
     },
     {
+      "path": "nav_history/123691.json",
+      "size": 128895,
+      "sha256": "841cdee9376973e86eadd53035720b5cb6180c33c11555fa237ce53d2ae74372"
+    },
+    {
       "path": "nav_history/123693.json",
       "size": 128844,
       "sha256": "2a4a5c45c9409ac1a1b651e20d880baba1cbdb03263c8ba81f686821e296f76c"
@@ -7096,6 +7111,11 @@
       "path": "nav_history/144173.json",
       "size": 80711,
       "sha256": "a261ab7a491ffc187501a4a627d6d99d6e1a35b431a1b1d3b35424f7b9211686"
+    },
+    {
+      "path": "nav_history/144189.json",
+      "size": 80725,
+      "sha256": "b5053381d3cf62c84b91ad8615284dafa218e93eeb971408f6c626ec93f7d725"
     },
     {
       "path": "nav_history/144310.json",
@@ -30415,7 +30435,7 @@
     {
       "path": "reference/isin_latest_nav.json",
       "size": 584038,
-      "sha256": "1afca2e939b4580bf70769079102dd1799181942b161e547c95f08f43b0ff09b"
+      "sha256": "97ff39ffc455a31c8bba60d9dc4f72eb2d005e7282c2d4d916ae29a612d7ef3a"
     },
     {
       "path": "reference/nav_completeness.json",
@@ -30436,6 +30456,11 @@
       "path": "reference/reconciled_missing.csv",
       "size": 4342,
       "sha256": "70039ef8ae89f825bcba95d2164ee278b06668bf399afb387661b9cad114a256"
+    },
+    {
+      "path": "reference/scheme_code_resolution.csv",
+      "size": 41202,
+      "sha256": "a776e843435d983b8d3aa178f999ebd5e54f046d670b97a5d1e8b211657a0d3a"
     },
     {
       "path": "reference/ter_07-2026_missing.csv",
@@ -43490,7 +43515,7 @@
     {
       "path": "userdata.db",
       "size": 1097728,
-      "sha256": "ac867a86b6d54ce5daca894a5369c782c4aa530f744729906c3fb1e2acb53677"
+      "sha256": "fd148c25fa0d8461b842229ece8d5a2be96b4c9e85c9c48dfdb5a6a9e010f1c7"
     },
     {
       "path": "webapp/.secret_key",
@@ -43508,5 +43533,5 @@
       "sha256": "c856b304795a2d7531f6b127798d6cbca6be767d1f603f801be3fb6d6f729d6b"
     }
   ],
-  "total_bytes": 852681497
+  "total_bytes": 853336162
 }

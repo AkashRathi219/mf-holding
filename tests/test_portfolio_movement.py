@@ -28,7 +28,7 @@ def _nav_map(start: date, rate: float, n: int) -> dict:
 
 
 def _lookup(nav: dict):
-    return lambda amfi_code, isin: nav
+    return lambda amfi_code, isin: (nav, "test")
 
 
 def _tx(day: str, units: float, amount: float, ttype: str = "PURCHASE",
@@ -197,7 +197,7 @@ def test_phantom_flow_from_unvalued_scheme_excluded():
               isin="INF000000999", code="700009")]  # phantom ₹1.7cr purchase
     # real lookups return None for codes without NAV history
     got = portfolio_movement_series(items, tx,
-                                    lambda a, i: nav if a == "700001" else None)
+                                    lambda a, i: (nav, "test") if a == "700001" else None)
     assert got is not None and "error" not in got
     # the ghost purchase must NOT distort the valued path: no |r| > 20% day
     assert all(abs(r) <= 20.0 for r in got["daily_returns"]["values"])
@@ -379,6 +379,71 @@ def test_sample_invested_reconciles_purch_minus_redeem():
     assert abs(net - 14298394.0) < 50000
     assert abs(cin - 416790864.0) < 50000
     assert abs(cout - (-402492469.0)) < 50000
+
+
+# ---- NAV-source ladder (file -> R2 -> mfapi -> statement-tx) ----------------------
+
+
+def test_nav_source_ladder_mfapi_tier(tmp_path, monkeypatch):
+    """No local file + R2 miss -> the mfapi mirror fills in, persists the
+    file, and the source is stamped mfapi_history."""
+    from webapp import db as wdb
+    from src import fetch_missing_nav as fmn
+
+    hist = tmp_path / "navhist"
+    hist.mkdir(exist_ok=True)
+    monkeypatch.setattr(wdb, "NAV_HISTORY_DIR", hist)
+    monkeypatch.setattr(wdb.remote_store, "ensure", lambda rel: None)
+
+    mirror = {"meta": {"scheme_name": "Liquid Fund"},
+              "data": [{"date": (date(2020, 2, 9) + td(days=i)).strftime("%d-%m-%Y"),
+                        "nav": str(round(100 + i * 0.01, 4))}
+                       for i in range(120)]}
+    monkeypatch.setattr(fmn, "_fetch", lambda code: mirror if code == "700009" else None)
+
+    w = wdb.WebDB()
+    got = w._movement_nav_map("700009", "")
+    assert got is not None
+    navs, source = got
+    assert source == "mfapi_history"
+    assert len(navs) == 120
+    assert (hist / "700009.json").exists()  # persisted for future reads
+
+
+def test_nav_source_ladder_statement_tx_tier(tmp_path, monkeypatch):
+    """When no file/R2/mirror exists, the CAS records' own NAVs are used
+    (real fund NAVs on tx dates) and stamped statement_tx."""
+    from webapp import db as wdb
+    from src import fetch_missing_nav as fmn
+
+    hist = tmp_path / "navhist"
+    hist.mkdir(exist_ok=True)
+    monkeypatch.setattr(wdb, "NAV_HISTORY_DIR", hist)
+    monkeypatch.setattr(wdb.remote_store, "ensure", lambda rel: None)
+    monkeypatch.setattr(fmn, "_fetch", lambda code: None)
+
+    w = wdb.WebDB()
+    tx_navs = {"2026-01-05": 101.0, "2026-02-05": 102.0}
+    got = w._movement_nav_map("700010", "", tx_navs=tx_navs)
+    assert got is not None
+    navs, source = got
+    assert source == "statement_tx"
+    assert navs == tx_navs
+
+
+def test_constituents_carry_nav_source():
+    d0 = date(2026, 1, 2)
+    nav = {}
+    v = 10.0
+    for i in range(5):
+        if i:
+            v = round(v * 1.01, 4)
+        nav[(d0 + td(days=i)).isoformat()] = v
+    items = [{"isin": "INF000000101", "name": "Test Fund", "units": 600.0,
+              "amfi_code": "700001"}]
+    tx = [_tx((d0 + td(days=3)).isoformat(), 100, 1030.30)]
+    got = portfolio_movement_series(items, tx, _lookup(nav))
+    assert got["constituents"][0]["nav_source"] == "test"
 
 
 # ---- T5: full exit ---------------------------------------------------------------

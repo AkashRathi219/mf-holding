@@ -175,18 +175,29 @@ async function loadDashboard() {
 }
 
 // ---------- scheme explorer ----------
+// [BUG-H7] route() runs screen.init() on EVERY entry; without a wire-guard,
+// listeners stack up per visit (one Next click jumped N pages and fired N
+// racing loads). Attach handlers exactly once per screen; data loads still
+// re-run on every entry.
+const wiredScreens = new Set();
+function wireOnce(key, fn) {
+  if (!wiredScreens.has(key)) { wiredScreens.add(key); fn(); }
+}
+
 const schemeState = { offset: 0, limit: 50 };
 function initSchemes() {
-  const search = document.getElementById("schemeSearch");
-  search.addEventListener("input", App.debounce(() => { schemeState.offset = 0; loadSchemes(); }, 300));
-  ["schemeAmc", "schemeCategory", "schemeSource", "schemeCoverage"].forEach(id =>
-    document.getElementById(id).addEventListener("change", () => { schemeState.offset = 0; loadSchemes(); }));
-  document.getElementById("schemeReset").addEventListener("click", () => {
-    ["schemeAmc", "schemeCategory", "schemeSource", "schemeCoverage"].forEach(id => document.getElementById(id).value = "");
-    search.value = ""; schemeState.offset = 0; loadSchemes();
+  wireOnce("schemes", () => {
+    const search = document.getElementById("schemeSearch");
+    search.addEventListener("input", App.debounce(() => { schemeState.offset = 0; loadSchemes(); }, 300));
+    ["schemeAmc", "schemeCategory", "schemeSource", "schemeCoverage"].forEach(id =>
+      document.getElementById(id).addEventListener("change", () => { schemeState.offset = 0; loadSchemes(); }));
+    document.getElementById("schemeReset").addEventListener("click", () => {
+      ["schemeAmc", "schemeCategory", "schemeSource", "schemeCoverage"].forEach(id => document.getElementById(id).value = "");
+      search.value = ""; schemeState.offset = 0; loadSchemes();
+    });
+    document.getElementById("schemeNext").addEventListener("click", () => { schemeState.offset += schemeState.limit; loadSchemes(); });
+    document.getElementById("schemePrev").addEventListener("click", () => { schemeState.offset = Math.max(0, schemeState.offset - schemeState.limit); loadSchemes(); });
   });
-  document.getElementById("schemeNext").addEventListener("click", () => { schemeState.offset += schemeState.limit; loadSchemes(); });
-  document.getElementById("schemePrev").addEventListener("click", () => { schemeState.offset = Math.max(0, schemeState.offset - schemeState.limit); loadSchemes(); });
   loadSchemes();
 }
 
@@ -252,6 +263,11 @@ async function loadSchemes() {
 }
 
 async function renderSchemeDetail(id, container, titleEl) {
+  // [BUG-H6] drop controllers bound to the PREVIOUS scheme's DOM — otherwise
+  // the stale guard re-paints the old (detached) canvas and this scheme's
+  // NAV pane stays blank for every subsequent visit.
+  navControllers = {};
+  navCache = null;
   container.innerHTML = `<div class="empty"><span class="spin"></span> Loading…</div>`;
   try {
     const [s, nav] = await Promise.all([
@@ -426,8 +442,13 @@ async function renderSchemeDetail(id, container, titleEl) {
 // "21 Aug 2025 → 21 Aug 2026" from an engine *_window object — the exact
 // dates a figure was computed over, shown beside every metric.
 function fmtWinRange(w) {
-  if (!w || !w.start || !w.end) return "";
-  return App.formatDate(w.start) + " → " + App.formatDate(w.end);
+  if (!w) return "";
+  // [BUG-L1] engine emits window_start/window_end; some callers pass
+  // {start,end} shorthands — accept both key styles.
+  const s = w.start != null ? w.start : w.window_start;
+  const e = w.end != null ? w.end : w.window_end;
+  if (!s || !e) return "";
+  return App.formatDate(s) + " → " + App.formatDate(e);
 }
 
 function renderSchemeAnalytics(id) {
@@ -620,16 +641,18 @@ function openDrawer(html) {
 // ---------- securities ----------
 const secState = { offset: 0, limit: 50 };
 function initSecurities() {
-  const search = document.getElementById("secSearch");
-  search.addEventListener("input", App.debounce(() => { secState.offset = 0; loadSecurities(); }, 300));
-  ["secEquity", "secCap", "secSector"].forEach(id =>
-    document.getElementById(id).addEventListener("change", () => { secState.offset = 0; loadSecurities(); }));
-  document.getElementById("secReset").addEventListener("click", () => {
-    ["secEquity", "secCap", "secSector"].forEach(id => document.getElementById(id).value = "");
-    search.value = ""; secState.offset = 0; loadSecurities();
+  wireOnce("securities", () => {
+    const search = document.getElementById("secSearch");
+    search.addEventListener("input", App.debounce(() => { secState.offset = 0; loadSecurities(); }, 300));
+    ["secEquity", "secCap", "secSector"].forEach(id =>
+      document.getElementById(id).addEventListener("change", () => { secState.offset = 0; loadSecurities(); }));
+    document.getElementById("secReset").addEventListener("click", () => {
+      ["secEquity", "secCap", "secSector"].forEach(id => document.getElementById(id).value = "");
+      search.value = ""; secState.offset = 0; loadSecurities();
+    });
+    document.getElementById("secNext").addEventListener("click", () => { secState.offset += secState.limit; loadSecurities(); });
+    document.getElementById("secPrev").addEventListener("click", () => { secState.offset = Math.max(0, secState.offset - secState.limit); loadSecurities(); });
   });
-  document.getElementById("secNext").addEventListener("click", () => { secState.offset += secState.limit; loadSecurities(); });
-  document.getElementById("secPrev").addEventListener("click", () => { secState.offset = Math.max(0, secState.offset - secState.limit); loadSecurities(); });
   loadSecurities();
 }
 
@@ -1587,26 +1610,28 @@ const COMPARE_COLORS = ["@chart-1", "@chart-5", "@chart-8", "@chart-4", "@chart-
 const compareState = { selected: new Map() };
 
 function initCompare() {
-  const search = document.getElementById("compareSearch");
-  const hint = document.getElementById("compareSearchHint");
-  search.addEventListener("input", App.debounce(async () => {
-    const q = search.value.trim();
-    if (q.length < 2) { document.getElementById("compareSuggest").style.display = "none"; return; }
-    hint.textContent = "Searching…";
-    try {
-      const data = await App.api("/schemes?search=" + encodeURIComponent(q) + "&coverage=has_holdings&limit=15");
-      hint.textContent = "";
-      const box = document.getElementById("compareSuggest");
-      if (!data.items.length) { box.style.display = "block"; box.innerHTML = `<div class="empty">No schemes found.</div>`; return; }
-      box.style.display = "block";
-      box.innerHTML = data.items.map(s => `<div class="chip" style="cursor:pointer;display:flex;border-radius:0;background:var(--surface);border-bottom:1px solid var(--border);justify-content:space-between;width:100%"
-        onclick="pickCompare(${s.id}, '${App.esc(s.fund_name.replace(/'/g, "\\'"))}')">
-        <span>${App.esc(s.fund_name)}</span><span class="badge blue">${App.esc(s.amc)}</span></div>`).join("");
-    } catch (e) { hint.textContent = e.message; }
-  }, 250));
-  document.getElementById("compareRun").addEventListener("click", runCompare);
-  document.getElementById("compareClear").addEventListener("click", () => {
-    compareState.selected.clear(); renderCompareChips();
+  wireOnce("compare", () => {
+    const search = document.getElementById("compareSearch");
+    const hint = document.getElementById("compareSearchHint");
+    search.addEventListener("input", App.debounce(async () => {
+      const q = search.value.trim();
+      if (q.length < 2) { document.getElementById("compareSuggest").style.display = "none"; return; }
+      hint.textContent = "Searching…";
+      try {
+        const data = await App.api("/schemes?search=" + encodeURIComponent(q) + "&coverage=has_holdings&limit=15");
+        hint.textContent = "";
+        const box = document.getElementById("compareSuggest");
+        if (!data.items.length) { box.style.display = "block"; box.innerHTML = `<div class="empty">No schemes found.</div>`; return; }
+        box.style.display = "block";
+        box.innerHTML = data.items.map(s => `<div class="chip" style="cursor:pointer;display:flex;border-radius:0;background:var(--surface);border-bottom:1px solid var(--border);justify-content:space-between;width:100%"
+          onclick="pickCompare(${s.id}, '${App.esc(s.fund_name.replace(/'/g, "\\'"))}')">
+          <span>${App.esc(s.fund_name)}</span><span class="badge blue">${App.esc(s.amc)}</span></div>`).join("");
+      } catch (e) { hint.textContent = e.message; }
+    }, 250));
+    document.getElementById("compareRun").addEventListener("click", runCompare);
+    document.getElementById("compareClear").addEventListener("click", () => {
+      compareState.selected.clear(); renderCompareChips();
+    });
   });
 }
 
@@ -1815,19 +1840,21 @@ let mv = null;          // current sub-view key
 let modelEditId = null; // model being edited in the builder (null = new)
 
 function initModels() {
-  document.querySelectorAll("#modelsTabs .nav-toggle").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const v = btn.dataset.mview;
-      document.querySelectorAll("#modelsTabs .nav-toggle").forEach(b => b.classList.toggle("active", b === btn));
-      ["overview", "strategies", "clients", "clientportfolios"].forEach(k => {
-        document.getElementById("mview-" + k).style.display = (k === v) ? "" : "none";
+  wireOnce("models", () => {
+    document.querySelectorAll("#modelsTabs .nav-toggle").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const v = btn.dataset.mview;
+        document.querySelectorAll("#modelsTabs .nav-toggle").forEach(b => b.classList.toggle("active", b === btn));
+        ["overview", "strategies", "clients", "clientportfolios"].forEach(k => {
+          document.getElementById("mview-" + k).style.display = (k === v) ? "" : "none";
+        });
+        mv = v;
+        renderMView(v);
       });
-      mv = v;
-      renderMView(v);
     });
   });
-  mv = "overview";
-  renderMView("overview");
+  if (!mv) mv = "overview";
+  renderMView(mv);
 }
 
 function renderMView(v) {
@@ -2289,12 +2316,13 @@ function renderPortfolioMovementBlock(container, a) {
     <div class="page-sub" style="margin-top:14px">Daily returns (%) — flow-adjusted, 1-day move of the portfolio value</div>
     <div id="mvReturnChart" style="margin-top:8px"></div>
     <div class="table-wrap" style="max-height:26vh;overflow:auto;margin-top:14px">
-      <table class="data"><thead><tr><th>Scheme</th><th class="r">Tx</th><th class="r">Opening units</th><th class="r">End units</th><th>First tx</th><th>Last tx</th></tr></thead>
+      <table class="data"><thead><tr><th>Scheme</th><th class="r">Tx</th><th class="r">Opening units</th><th class="r">End units</th><th>First tx</th><th>Last tx</th><th>NAV source</th></tr></thead>
       <tbody>${(mv.constituents || []).map(x => `<tr>
         <td>${App.esc(x.name)}</td><td class="num">${App.formatNum(x.tx_count)}</td>
         <td class="num">${x.opening_units != null ? App.formatNum(x.opening_units, 2) : "—"}</td>
         <td class="num">${x.end_units != null ? App.formatNum(x.end_units, 2) : "—"}</td>
-        <td class="mono">${App.formatDate(x.first_tx)}</td><td class="mono">${App.formatDate(x.last_tx)}</td></tr>`).join("") || `<tr><td colspan="6" class="empty">\u2014</td></tr>`}</tbody></table>
+        <td class="mono">${App.formatDate(x.first_tx)}</td><td class="mono">${App.formatDate(x.last_tx)}</td>
+        <td class="mono">${App.esc(x.nav_source || "amfi_history")}</td></tr>`).join("") || `<tr><td colspan="7" class="empty">\u2014</td></tr>`}</tbody></table>
     </div>
     <div class="page-sub" style="margin-top:8px"><b>${App.esc(mv.disclaimer)}</b> Money-weighted view of the investor's own income — purchases/redemptions included, unlike the weight-blended index above. Daily-path figures are flow-adjusted; the money-weighted XIRR reflects the statement's entire transaction history (holdings before the earliest transaction are deduced and valued at the earliest available NAV — partial statements will show a distorted opening and a noisy XIRR).</div>`;
   const vs = mv.value_series || {};

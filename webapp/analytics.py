@@ -516,9 +516,10 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
 
     schemes: list[dict] = []
     for key, txs in by_key.items():
-        nav_map = nav_lookup(key[0], key[1]) if nav_lookup else None
-        if not nav_map:
+        res = nav_lookup(key[0], key[1]) if nav_lookup else None
+        if not res:
             continue  # honest skip — no history for this scheme
+        nav_map, nav_source = res
         # normalise nav keys to date objects (lookup may return ISO strings)
         normalised: dict[date, float] = {}
         for k, v in nav_map.items():
@@ -532,6 +533,7 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
         if opening < 0:  # CAMS rounding/partial statements — never negative
             opening = 0.0
         schemes.append({"key": key, "txs": txs, "nav": normalised,
+                        "nav_source": nav_source,
                         "end_units": end_units.get(key, 0.0),
                         "opening_units": opening,
                         "name": (txs[0].get("name") or "Scheme")})
@@ -695,6 +697,7 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
         "constituents": [
             {"name": s["name"], "amfi_code": s["key"][0],
              "isin": s["key"][1], "tx_count": len(s["txs"]),
+             "nav_source": s.get("nav_source") or "amfi_history",
              "opening_units": round(s["opening_units"], 4),
              "end_units": round(s["end_units"], 4),
              "first_tx": s["txs"][0]["d"].isoformat(),
