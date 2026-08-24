@@ -200,14 +200,17 @@ def seed_for_user(uid: int, reset: bool = False) -> dict:
             "actual", cas_items,
             model_portfolio_id=models.get(MODEL_NAME),
             strategy_id=strategies.get(STRATEGY_NAME))
-        # [ANA3] movement analytics needs the actual cash-flow history: the
-        # seeded Client 1 portfolio carries the sample's 907 transactions.
-        cps = userdata.list_client_portfolios(uid)
-        cp = next((p for p in cps if p["name"] == DEFAULT_PORTFOLIO_NAME), None)
-        if cp and cas_tx:
-            userdata.update_client_portfolio(uid, cp["id"],
-                                             transactions=cas_tx)
         created["portfolios"].append(DEFAULT_PORTFOLIO_NAME)
+
+    # [ANA3 movement] BOTH seeded 'actual' portfolios demo the movement
+    # analytics with the sample's transactions — newly created AND backfilled
+    # on re-seed for portfolios made before transactions_json existed.
+    if cas_tx:
+        for p in userdata.list_client_portfolios(uid):
+            if p["name"] in (PORTFOLIO_NAME, DEFAULT_PORTFOLIO_NAME) \
+                    and p.get("kind") == "actual" and not p.get("transactions"):
+                userdata.update_client_portfolio(uid, p["id"],
+                                                 transactions=cas_tx)
 
     _heal_model_links(uid, models)
     return created
