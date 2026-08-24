@@ -385,9 +385,13 @@ def test_nav_gap_day_keeps_value_flat():
     assert got["value_series"]["values"] == [pytest.approx(1000.0, abs=0.01),
                                              pytest.approx(1000.0, abs=0.01),
                                              pytest.approx(1020.0, abs=0.01)]
-    # daily returns are PERCENT (0.0% then +2.0% over the gap day)
+    # daily returns are PERCENT (0.0% then +2.0% over the gap day), each
+    # dated its OWN day — dates/values strictly aligned
     assert got["daily_returns"]["values"] == [pytest.approx(0.0, abs=1e-9),
                                               pytest.approx(2.0, abs=1e-6)]
+    assert got["daily_returns"]["dates"] == [(d0 + td(days=1)).isoformat(),
+                                             (d0 + td(days=3)).isoformat()]
+    assert len(got["daily_returns"]["dates"]) == len(got["daily_returns"]["values"])
 
 
 # ---- T7: normalisation (sign, drops, ISIN fallback) ------------------------------
@@ -500,6 +504,11 @@ def test_movement_end_to_end_via_db(tmp_path, monkeypatch):
         # (almost) every transaction attributable — the handful of ISIN-only
         # records with no resolvable code are honestly skipped
         assert 890 <= sum(c["tx_count"] for c in m["constituents"]) <= 903
+        # daily-return dates/values strictly aligned (artifact exclusions
+        # must shift values AND dates together)
+        dr = m["daily_returns"]
+        assert len(dr["dates"]) == len(dr["values"])
+        assert dr["dates"] == sorted(dr["dates"])
     finally:
         con = sqlite3.connect(WEBAPP_DB)
         cur = con.cursor()

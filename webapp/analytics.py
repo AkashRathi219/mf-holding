@@ -616,6 +616,7 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
     ARTIFACT_THRESHOLD = 0.20  # 20% portfolio-level daily move bound
     artifact_days = 0
     rets: list[float] = []
+    ret_days: list[date] = []  # each retained return is dated ITS OWN day
     linked = [1.0]
     for i in range(1, len(days)):
         v_prev = vals[i - 1]
@@ -626,6 +627,7 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
             artifact_days += 1
             continue
         rets.append(r)
+        ret_days.append(days[i])
         linked.append(linked[-1] * (1.0 + r))
     if not rets:
         return {"error": "no usable return observations"}
@@ -651,7 +653,7 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
         "cash_in": round(cash_in, 2),
         "cash_out": round(cash_out, 2),
         "total_twr_pct": round(total_twr * 100.0, 2),
-        "daily_returns": {"dates": [d.isoformat() for d in days[1:]],
+        "daily_returns": {"dates": [d.isoformat() for d in ret_days],
                           "values": [round(r * 100.0, 4) for r in rets]},
         "value_series": {"dates": [d.isoformat() for d in days],
                          "values": [round(v, 2) for v in vals]},
