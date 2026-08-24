@@ -72,11 +72,13 @@ def _heal_thin_nav_history(code: str, local_points: int) -> dict | None:
     """Try to upgrade a thin nav_history file to a full one; return the better
     doc (already persisted) or None.
 
-    Order: (1) force-download the R2 object to a temp file and keep it only if
-    it has MORE points than the local copy (never lose good local data to a
-    worse remote); (2) the mfapi full-history mirror, once per code per
-    process. The once-guard keeps request-path cost bounded: at most one
-    download + one mirror call per thin file per process lifetime."""
+    Heal = R2-only [DATA-POLICY: AMFI/AMC/NSE only — the request path never
+    calls third-party mirrors, and an 81-window AMFI portal walk is too heavy
+    for a request]: force-download the R2 object to a temp file and keep it
+    only if it has MORE points than the local copy (never lose good local
+    data to a worse remote). Deeper fills belong to the scheduled nav_daily
+    batch, the pre-heal job, or the offline scripts. The once-per-code-per-
+    process guard keeps request-path cost bounded."""
     if code in _nav_heal_attempted:
         return None
     _nav_heal_attempted.add(code)
@@ -96,17 +98,6 @@ def _heal_thin_nav_history(code: str, local_points: int) -> dict | None:
                 tmp.unlink()
         except OSError:
             pass
-    try:
-        from src.fetch_missing_nav import _build_doc, _fetch
-        resp = _fetch(code)
-        if resp is not None:
-            cand = _build_doc(code, resp)
-            if len(cand.get("history") or []) > local_points:
-                NAV_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
-                path.write_text(json.dumps(cand), encoding="utf-8")
-                return cand
-    except Exception:
-        pass
     return None
 
 
@@ -2572,12 +2563,13 @@ class WebDB:
                           tx_navs: dict[str, float] | None = None
                           ) -> tuple[dict[str, float], str] | None:
         """({iso_date: nav}, source) for one scheme referenced by a
-        transaction record — the NAV-SOURCE LADDER, slightest deviation first:
+        transaction record — the NAV-SOURCE LADDER, slightest deviation first
+        [DATA-POLICY: AMFI/AMC/NSE only — no third-party mirrors]:
 
-        1. ``amfi_history``  local file / R2 object (actual AMFI NAVs)
-        2. ``mfapi_history`` mfapi full-history mirror, fetched once and
-           persisted (actual AMFI NAVs; zero deviation, one network call)
-        3. ``statement_tx``  the NAVs embedded in the CAS transactions
+        1. ``amfi_history``  local file / R2 object (actual AMFI NAVs; codes
+           missing locally arrive via the scheduled fills or the download
+           script — never a third-party mirror)
+        2. ``statement_tx``  the NAVs embedded in the CAS transactions
            themselves (real fund NAVs on tx dates, step-held between)
 
         Direct plan preferred, Regular fallback — same investor-comparable
@@ -2614,27 +2606,6 @@ class WebDB:
                     got = _map(doc)
                     if got:
                         return got, "amfi_history"
-        # mfapi mirror tier (persisted, so the request path pays once ever)
-        if amfi_code:
-            try:
-                from src.fetch_missing_nav import _build_doc, _fetch
-                resp = _fetch(amfi_code)
-                if resp is not None:
-                    doc = _build_doc(amfi_code, resp)
-                    history = doc.get("history") or []
-                    if history:
-                        NAV_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
-                        (NAV_HISTORY_DIR / f"{amfi_code}.json").write_text(
-                            json.dumps(doc), encoding="utf-8")
-                        got = {}
-                        for hrow in history:
-                            pd = parse_nav_date(hrow.get("date"))
-                            if pd and hrow.get("nav"):
-                                got[pd.isoformat()] = hrow["nav"]
-                        if got:
-                            return got, "mfapi_history"
-            except Exception:
-                pass
         if tx_navs:
             return dict(tx_navs), "statement_tx"
         return None
@@ -2771,6 +2742,11 @@ class WebDB:
             better = _heal_thin_nav_history(code, len(history))
             if better is not None:
                 doc, history = better, better.get("history") or []
+        # Legacy-format guard: 97 Aug-21-era files carry `history` as a list
+        # of ISO date STRINGS with no NAV values (unusable for valuation).
+        # Skip non-dict entries honestly; the heal above may have replaced
+        # the file with a proper copy already.
+        history = [h for h in history if isinstance(h, dict) and h.get("date")]
         if not history:
             return None
         # History files are stored in lexicographic 'DD-Mon-YYYY' order (all

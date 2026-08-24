@@ -78,28 +78,24 @@ _job_runner_started = False
 
 
 def _amfi_job() -> dict:
+    """Monthly holdings refresh.
+
+    [DATA-POLICY 2026-08-24: AMFI/AMC/NSE only] the third-party holdings
+    aggregator (mfdata.in) is retired — this job no longer pulls it. Holdings
+    arrive via the AMC-website PDF pipeline (workstation, `python main.py
+    run`) and the AMFI-disclosure archive already on file. The AMFI-registry
+    verification piggyback stays (AMFI is an allowed source)."""
     from src.refresh_log import track
     with track("amfi_fetch") as _meta:
-        try:
-            from webapp.amfi_fetch import fetch_mfdata, save
-        except Exception as e:  # missing dep must surface, not vanish [S2e]
-            log.warning("amfi_fetch unavailable: %s", e,
-                        extra={"path": "/job/amfi_fetch", "status": 0})
-            _meta["error"] = f"import failed: {e}"
-            return {"error": str(e)[:120]}
-        data = fetch_mfdata()
-        paths = save(data, "latest") if data else []
-        _meta.update(amcs=len(data), files=len(paths))
-        # Piggyback: verify the AMC registry against AMFI's official
-        # portfolio-disclosure directory (monthly cadence is right for this).
+        _meta["skipped"] = "mfdata retired from data-source policy"
         try:
             from webapp.amfi_portal import refresh_registry, scrape_members
             rep = refresh_registry(scrape_members())
             _meta.update(directory_verified=rep["portal_members"],
                          directory_filled=rep["filled_empty"])
-        except Exception as e:  # never break the holdings fetch
+        except Exception as e:  # never break the job
             _meta["directory_error"] = str(e)[:120]
-        return {"amcs": len(data), "files": len(paths)}
+        return {"skipped": "mfdata retired", "amcs": 0, "files": 0}
 
 
 def _bond_job() -> dict:

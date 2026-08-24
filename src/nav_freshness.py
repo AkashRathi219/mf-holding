@@ -3,9 +3,10 @@
 Scans the downloaded daily NAV history (``data/nav_history``) and stock price
 history (``data/stock_history``) and reports any scheme/stock whose latest value
 is older than ``max_age_days``. With ``backfill=True`` it re-pulls the history
-for every stale scheme (from ``api.mfapi.in``, which returns the full daily
-history up to today) so the gap between the last known value and the current
-date is closed. Stock backfill delegates to ``src.stock_price``.
+for every stale scheme from the official AMFI portal (chunked windows, full
+daily history up to today) so the gap between the last known value and the
+current date is closed. Stock backfill delegates to ``src.stock_price``.
+[DATA-POLICY: AMFI/AMC/NSE only — no third-party mirrors.]
 
 Run::
 
@@ -272,27 +273,17 @@ def check_stocks(max_age_days: int = 10) -> list[dict]:
 
 
 def backfill_navs(codes: list[str]) -> dict:
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    from .fetch_missing_nav import _build_doc, _fetch
-
-    def work(code: str) -> tuple[str, bool]:
-        resp = _fetch(code)
-        if resp is None:
-            return code, False
-        doc = _build_doc(code, resp)
-        if not doc["history"]:
-            return code, False
-        (NAV_DIR / f"{code}.json").write_text(json.dumps(doc), encoding="utf-8")
-        return code, True
-
-    ok = failed = 0
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        for code, success in pool.map(work, codes):
-            if success:
-                ok += 1
-            else:
-                failed += 1
-    return {"attempted": len(codes), "ok": ok, "failed": failed}
+    """Re-pull FULL AMFI history for the given codes [DATA-POLICY: AMFI/AMC/NSE
+    only — the third-party mirror is retired; the official AMFI portal walk
+    (chunked 90-day windows, one request covers every scheme) is the source]."""
+    from .nav_history import fetch_codes_history
+    if not codes:
+        return {"attempted": 0, "ok": 0, "failed": 0}
+    summary = fetch_codes_history(codes, out_dir=NAV_DIR)
+    written = set(summary.get("codes") or [])
+    ok = sum(1 for c in codes if c in written and
+             (NAV_DIR / f"{c}.json").exists())
+    return {"attempted": len(codes), "ok": ok, "failed": len(codes) - ok}
 
 
 def cas_sample_codes() -> list[str]:

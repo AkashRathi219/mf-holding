@@ -110,7 +110,9 @@ def test_nav_daily_splits_skipped_and_reports_expected(tmp_path, monkeypatch):
     # 333333 is in-universe with no file: seeding must fail both ways
     monkeypatch.setattr("webapp.remote_store.ensure", lambda p: None,
                         raising=False)
-    monkeypatch.setattr(nd, "_full_history_doc", lambda code: None)
+    # [DATA-POLICY] the batch fill walks the AMFI portal — mock it offline
+    monkeypatch.setattr("src.nav_history.fetch_codes_history",
+                        lambda codes, **kw: {"written": 0})
 
     summary = nd._update_latest_navs_impl(days=10, out_dir=tmp_path)
     assert summary["unchanged"] == 1

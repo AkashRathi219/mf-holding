@@ -6,9 +6,35 @@ Living reference for every figure the performance engine emits
 `tests/test_analytics.py`, `tests/test_compare.py`,
 `tests/test_portfolio_analytics.py`.
 
-Methodology version: **`perf-v1.4-2026-08-24`** (stamped into every
+Methodology version: **`perf-v1.4.2-2026-08-25`** (stamped into every
 `compute_series_analytics` payload as `methodology_version`, and into
 proposals).
+
+## 0. Data-source policy (2026-08-25)
+
+**AMFI / AMC / NSE only.** All third-party mirrors are retired from the
+active pipeline:
+
+- `mfapi.in` (NAV mirror) — retired. Full histories come from the official
+  AMFI portal walk (`src.nav_history.fetch_codes_history`: chunked 90-day
+  windows, one request covers every scheme).
+  `src/fetch_missing_nav.py` is dormant (no active imports).
+- `mfdata.in` (holdings aggregator) — retired. The scheduled monthly job no
+  longer pulls it; holdings arrive via the AMC-website PDF pipeline
+  (workstation) and the AMFI-disclosure archive already parsed.
+- The movement NAV-source ladder is therefore: local/R2 AMFI history →
+  statement-embedded NAVs (AMC-published values) → honest exclusion. Every
+  constituent is stamped with its `nav_source` and the movement card shows
+  the column.
+
+**Publication-day rule:** daily returns are reported only on days where at
+least one valued scheme published a new NAV. Days with no publication
+(weekends without Saturday NAVs, holidays, stale stretches) are pure
+forward-fill — value held, return 0 by construction, no information — and
+are skipped from the return chain and the daily-returns chart. The rupee
+value path keeps every day (the step shape is honest). Note: liquid funds
+genuinely publish Saturday NAVs on AMFI — those Saturdays are publication
+days and their returns are real.
 
 ---
 
@@ -251,3 +277,4 @@ self-healing; a thin file lies forever.
 | perf-v1.1-2026-08-24 | 2026-08-24 | Risk/benchmark span guards (≥365d); `*_window` date objects on every metric group; `risk_unavailable` reason block; `methodology_version` stamp; [NAV-STUB] pipeline fixes |
 | perf-v1.2-2026-08-24 | 2026-08-24 | Benchmark selection v2 (index_name + ordered keyword rules — a Nifty 50 ETF now benchmarks NIFTY 50, not NIFTY 500); per-scheme rolling-1Y series + history-completeness badge in the payload; module-level analytics cache; daily stub pre-heal job; data_health stub-shadow component; trigger-mode telemetry labels; scheme-code resolver (human-review CSV) |
 | perf-v1.3-2026-08-24 | 2026-08-24 | [ANA3] Portfolio movement: cash-flow-aware value path (opening deduction, daily grid valuation, flow-adjusted TWR chain, XIRR, linked-index drawdown) attached to portfolio analytics when transactions exist; honest 90-day annualisation floor; CAS transaction ingest + per-portfolio storage + seed demo |
+| perf-v1.4.2-2026-08-25 | 2026-08-25 | Data-source policy: AMFI/AMC/NSE only — mfapi + mfdata retired (fetch_missing_nav dormant; AMFI portal walk is the full-history source; the 4 CAS funds re-fetched from AMFI). Publication-day rule: daily returns reported only on NAV-publication days (weekend/repeat rows no longer plot as zeros); phantom-flow fix (nav-less schemes' cash excluded from flows, reported in data_note); double-sign fix (net invested 1.43cr vs 822cr); switches excluded; series-start rule; NAV-source ladder + per-scheme stamps |

@@ -100,8 +100,6 @@ def test_heal_never_downgrades_local(heal_env, monkeypatch):
         return dest
 
     monkeypatch.setattr(wdb.remote_store, "download_to", fake_download)
-    from src import fetch_missing_nav as fmn
-    monkeypatch.setattr(fmn, "_fetch", lambda code: None)
 
     nav = wdb.get_db().scheme_nav(sid)
     assert nav["direct"]["points"] == 5  # local kept
@@ -110,25 +108,19 @@ def test_heal_never_downgrades_local(heal_env, monkeypatch):
 
 
 def test_heal_attempted_once_per_process(heal_env, monkeypatch):
-    """When no better copy exists, the (network) heal runs at most once."""
+    """When no better copy exists, the (network) heal runs at most once.
+    [DATA-POLICY] the heal is R2-only — no mirror calls exist any more."""
     sid, hist = heal_env
-    calls = {"dl": 0, "mf": 0}
+    calls = {"dl": 0}
 
     def fake_download(relpath, dest):
         calls["dl"] += 1
         return None  # R2: nothing
 
     monkeypatch.setattr(wdb.remote_store, "download_to", fake_download)
-    from src import fetch_missing_nav as fmn
-
-    def fake_fetch(code):
-        calls["mf"] += 1
-        return None  # mirror: nothing
-
-    monkeypatch.setattr(fmn, "_fetch", fake_fetch)
     wdb.get_db().scheme_nav(sid)  # regular + direct loads
     wdb.get_db().scheme_nav(sid)  # second request: guarded
-    assert calls["dl"] == 1 and calls["mf"] == 1
+    assert calls["dl"] == 1
     # the thin file survives (charts keep their 5 points, analytics stays null)
     assert (hist / "700001.json").exists()
 
@@ -149,40 +141,49 @@ def _amfi_window_text(codes=("700001", "999999")):
 
 
 def test_nav_daily_fills_missing_with_full_history_not_stub(tmp_path, monkeypatch):
-    """A universe code with no file gets a FULL history (mfapi mirror here),
-    never a 5-day stub; non-universe codes stay skipped."""
+    """A universe code with no file gets a FULL history (AMFI portal walk,
+    mocked here), never a 5-day stub; non-universe codes stay skipped."""
     from src import nav_daily
-    from src import fetch_missing_nav as fmn
+    from src import nav_history as nh
 
     out_dir = tmp_path / "nav"
     monkeypatch.setattr(nav_daily, "load_universe",
                         lambda: [{"amfi_code": "700001"}])
     monkeypatch.setattr(nav_daily, "_fetch_amfi",
                         lambda frm, tod: _amfi_window_text())
-    mirror = {"meta": {"scheme_name": "Stub Fund"},
-              "data": [{"date": (date(2015, 7, 23) + td(days=i)).strftime("%d-%m-%Y"),
-                        "nav": str(round(100 + i * 0.06, 4))}
-                       for i in range(2744)]}
+    # the AMFI portal walk (fetch_codes_history) must be instant + offline
+    monkeypatch.setattr(nav_daily, "PORTAL_WALK_DELAY", 0)
+
+    def fake_window_fetch(frm, tod):
+        # full history rows across the whole walk (dedupe by date downstream)
+        lines = ["Scheme Code;ISIN Div Payout; ISIN Growth;Scheme Name;Net Asset Value;Date"]
+        for i in range(0, 3800, 7):
+            d = (date(2015, 7, 23) + td(days=i)).strftime("%d-%b-%Y")
+            lines.append(f"700001;Stub Fund;Regular;Growth;ISIN001;ISIN001R;{round(100 + i * 0.06, 4)};{d}")
+        return "\n".join(lines)
+
+    monkeypatch.setattr(nh, "_fetch_amfi", fake_window_fetch)
     seen = []
-    monkeypatch.setattr(fmn, "_fetch", lambda code: (seen.append(code), mirror)[1]
-                        if code == "700001" else None)
+    real_parse = nh._parse_nav_text
+    monkeypatch.setattr(nh, "_parse_nav_text",
+                        lambda text: (seen.append("w"), real_parse(text))[1])
 
     summary = nav_daily._update_latest_navs_impl(days=10, out_dir=out_dir)
     f = out_dir / "700001.json"
     assert f.exists(), "universe code must be filled"
     doc = json.loads(f.read_text(encoding="utf-8"))
-    assert len(doc["history"]) >= 2744  # full history, not a 5-day stub
+    assert len(doc["history"]) >= 500  # full history, not a 5-day stub
     assert doc["history"][0]["date"].endswith("2015")  # starts at inception
     assert not (out_dir / "999999.json").exists()  # non-universe: skipped
     assert summary["created"] == 1
-    assert seen == ["700001"]
+    assert seen, "portal walk must have run"
 
 
 def test_nav_daily_mirror_cap_leaves_file_absent(tmp_path, monkeypatch):
-    """With the mirror capped out, absence beats a stub: the file is simply
+    """With the portal-walk cap out, absence beats a stub: the file is simply
     not written (the read path will fetch the full R2 object later)."""
     from src import nav_daily
-    from src import fetch_missing_nav as fmn
+    from src import nav_history as nh
 
     out_dir = tmp_path / "nav"
     monkeypatch.setattr(nav_daily, "load_universe",
@@ -190,12 +191,14 @@ def test_nav_daily_mirror_cap_leaves_file_absent(tmp_path, monkeypatch):
     monkeypatch.setattr(nav_daily, "_fetch_amfi",
                         lambda frm, tod: _amfi_window_text())
     monkeypatch.setattr(nav_daily, "MAX_FULL_HISTORY_FETCHES_PER_RUN", 0)
+    monkeypatch.setattr(nav_daily, "PORTAL_WALK_DELAY", 0)
     calls = []
-    monkeypatch.setattr(fmn, "_fetch", lambda code: calls.append(code) or None)
+    monkeypatch.setattr(nh, "_fetch_amfi",
+                        lambda frm, tod: calls.append((frm, tod)) or "")
 
     summary = nav_daily._update_latest_navs_impl(days=10, out_dir=out_dir)
     assert not (out_dir / "700001.json").exists()
-    assert calls == []  # cap honoured: no mirror traffic at all
+    assert calls == []  # cap honoured: no portal traffic at all
     assert summary["skipped"] >= 1
     assert summary["created"] == 0
 
@@ -292,8 +295,6 @@ def test_preheal_respects_limit(tmp_path, monkeypatch):
                                            encoding="utf-8")
     monkeypatch.setattr(wdb.remote_store, "download_to",
                         lambda relpath, dest: None)
-    from src import fetch_missing_nav as fmn
-    monkeypatch.setattr(fmn, "_fetch", lambda code: None)
     summary = preheal_nav_stubs(limit=2)
     assert summary["scanned_thin"] == 3
     assert summary["attempted"] == 2

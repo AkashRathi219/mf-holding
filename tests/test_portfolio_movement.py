@@ -381,46 +381,47 @@ def test_sample_invested_reconciles_purch_minus_redeem():
     assert abs(cout - (-402492469.0)) < 50000
 
 
-# ---- NAV-source ladder (file -> R2 -> mfapi -> statement-tx) ----------------------
+# ---- NAV-source ladder (file/R2 -> statement-tx; no third-party mirrors) ----------
 
 
-def test_nav_source_ladder_mfapi_tier(tmp_path, monkeypatch):
-    """No local file + R2 miss -> the mfapi mirror fills in, persists the
-    file, and the source is stamped mfapi_history."""
+def test_nav_source_ladder_no_mirror_no_fetch(tmp_path, monkeypatch):
+    """[DATA-POLICY] the ladder never calls third-party mirrors: with no
+    local file and an R2 miss it falls straight through to the statement-tx
+    tier (or None), making zero network calls."""
     from webapp import db as wdb
-    from src import fetch_missing_nav as fmn
 
     hist = tmp_path / "navhist"
     hist.mkdir(exist_ok=True)
     monkeypatch.setattr(wdb, "NAV_HISTORY_DIR", hist)
     monkeypatch.setattr(wdb.remote_store, "ensure", lambda rel: None)
+    monkeypatch.setattr(wdb.remote_store, "download_to", lambda rel, dest: None)
 
-    mirror = {"meta": {"scheme_name": "Liquid Fund"},
-              "data": [{"date": (date(2020, 2, 9) + td(days=i)).strftime("%d-%m-%Y"),
-                        "nav": str(round(100 + i * 0.01, 4))}
-                       for i in range(120)]}
-    monkeypatch.setattr(fmn, "_fetch", lambda code: mirror if code == "700009" else None)
+    net_calls = []
+
+    class _Guard:
+        def __getattr__(self, name):  # any boto3 touch would land here
+            raise AssertionError("third-party mirror contacted")
 
     w = wdb.WebDB()
-    got = w._movement_nav_map("700009", "")
+    # 1) statement tier resolves without any network
+    tx_navs = {"2026-01-05": 101.0, "2026-02-05": 102.0}
+    got = w._movement_nav_map("700010", "", tx_navs=tx_navs)
     assert got is not None
     navs, source = got
-    assert source == "mfapi_history"
-    assert len(navs) == 120
-    assert (hist / "700009.json").exists()  # persisted for future reads
+    assert source == "statement_tx" and navs == tx_navs
+    # 2) nothing at all -> honest None (no mirror fallback exists any more)
+    assert w._movement_nav_map("700011", "") is None
 
 
 def test_nav_source_ladder_statement_tx_tier(tmp_path, monkeypatch):
-    """When no file/R2/mirror exists, the CAS records' own NAVs are used
+    """When no file/R2 exists, the CAS records' own NAVs are used
     (real fund NAVs on tx dates) and stamped statement_tx."""
     from webapp import db as wdb
-    from src import fetch_missing_nav as fmn
 
     hist = tmp_path / "navhist"
     hist.mkdir(exist_ok=True)
     monkeypatch.setattr(wdb, "NAV_HISTORY_DIR", hist)
     monkeypatch.setattr(wdb.remote_store, "ensure", lambda rel: None)
-    monkeypatch.setattr(fmn, "_fetch", lambda code: None)
 
     w = wdb.WebDB()
     tx_navs = {"2026-01-05": 101.0, "2026-02-05": 102.0}

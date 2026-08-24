@@ -189,7 +189,8 @@ class MonthlyScheduler:
                 f"{bond_cfg.get('minute', 30):02d} IST"
             )
 
-        # ---- Monthly AMFI/mfdata disclosure fetch (tier-1 holdings source) ----
+        # ---- Monthly AMFI-disclosure fetch (registry verification; holdings
+        # arrive via the AMC-website pipeline) [DATA-POLICY: AMFI/AMC/NSE] ----
         amfi_cfg = sched.get("amfi_refresh", {})
         if self.amfi_fn and amfi_cfg.get("enabled", True):
             amfi_trigger = CronTrigger(

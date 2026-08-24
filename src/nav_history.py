@@ -406,6 +406,81 @@ def export_json() -> dict:
     return summary
 
 
+def fetch_codes_history(codes: list[str], out_dir: Path = OUT_DIR,
+                        start: date = START_DATE, delay: float = 1.0,
+                        end: date | None = None) -> dict:
+    """Fetch FULL since-inception AMFI NAV history for specific codes and
+    write standard ``nav_history/<code>.json`` files — the AMFI-native
+    full-history mechanism [DATA-POLICY: AMFI/AMC/NSE only].
+
+    Walks the same 90-day chunked windows as ``backfill`` (one portal request
+    covers every scheme, so the cost is per-WINDOW, not per-code), filters
+    rows to ``codes``, and writes one JSON per code (same schema as the
+    pipeline export). Returns a summary dict."""
+    import datetime as _dt
+
+    wanted = {c.strip() for c in codes if c and c.strip()}
+    if not wanted:
+        return {"codes": [], "windows": 0, "written": 0}
+    end = end or date.today()
+    windows = _chunks(start, end)
+
+    rows_by_code: dict[str, dict] = {c: {} for c in wanted}
+    meta_by_code: dict[str, dict] = {}
+    fetched = 0
+    for wi, (frm, tod) in enumerate(windows, 1):
+        print(f"  [{wi}/{len(windows)}] AMFI window {frm}..{tod} ...",
+              flush=True)
+        try:
+            text = _fetch_amfi(frm, tod)
+        except Exception as e:  # one failed window must not abort the walk
+            print(f"  window {frm}..{tod} failed: {e}")
+            continue
+        fetched += 1
+        kept = 0
+        for code, datestr, nav_f, name, plan, option, isin, isin_re in \
+                _parse_nav_text(text):
+            if code not in wanted:
+                continue
+            kept += 1
+            rows_by_code[code][datestr] = nav_f
+            if name:
+                meta_by_code[code] = {"name": name, "plan": plan,
+                                      "option": option, "isin": isin,
+                                      "isin_re": isin_re}
+        print(f"  [{wi}/{len(windows)}] kept {kept} rows for target codes",
+              flush=True)
+        time.sleep(delay)
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = 0
+    for code in sorted(wanted):
+        hist_map = rows_by_code.get(code) or {}
+        if not hist_map:
+            continue
+        history = [{"date": d, "nav": nav} for d, nav in
+                   sorted(hist_map.items(), key=lambda kv: _date_key(kv[0]))]
+        meta = meta_by_code.get(code, {})
+        doc = {
+            "scheme_code": code,
+            "fund_name": meta.get("name", ""),
+            "category": "",
+            "plan": meta.get("plan", ""),
+            "option": meta.get("option", ""),
+            "isin": meta.get("isin", ""),
+            "isin_reinvestment": meta.get("isin_re", ""),
+            "currency": "INR",
+            "source": "AMFI",
+            "fetched_at": _dt.datetime.now().isoformat(timespec="seconds"),
+            "history": history,
+        }
+        (out_dir / f"{code}.json").write_text(
+            json.dumps(doc), encoding="utf-8")
+        written += 1
+    return {"codes": sorted(wanted), "windows": len(windows),
+            "fetched": fetched, "written": written}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--export", action="store_true",

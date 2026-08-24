@@ -35,7 +35,7 @@ MIN_CAGR_WINDOW_DAYS = 90     # below this, even since-inception CAGR is None:
 MIN_RISK_WINDOW_DAYS = 365    # risk stats need >=1y of observed span, not just
                               # >=30 points: 30 points over 5 weeks must never
                               # masquerade as "3-year" volatility
-METHODOLOGY_VERSION = "perf-v1.4-2026-08-24"  # stamped into proposals [ANA4]
+METHODOLOGY_VERSION = "perf-v1.4.2-2026-08-25"  # stamped into proposals [ANA4]
 
 
 def parse_nav_date(s) -> date | None:
@@ -620,6 +620,13 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
     fl = [flows[d] for d in days]
     # daily TWR, end-of-day flow model: r_i = (V_i - F_i - V_{i-1}) / V_{i-1}
     # (F_i = amounts dated ON this grid day — they are already inside V_i).
+    # PUBLICATION-DAY RULE [perf-v1.4.2]: days where NO valued scheme published
+    # a new NAV (weekends in mirror data, holidays, stale stretches) are pure
+    # forward-fill — the value is held and the return is 0 by construction,
+    # carrying no information. They are skipped from the return chain (the
+    # geometric product is unchanged) and from daily_returns, so the chart
+    # shows only real publication-day moves. The value path itself keeps
+    # every day (the step path is honest for the rupee chart).
     # A diversified mutual-fund portfolio in India has NEVER moved +/-20% in
     # one trading day (worst equity-fund single-day swings ~8%); larger daily
     # moves can only be statement-consistency artifacts (amount/units
@@ -631,10 +638,15 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
     rets: list[float] = []
     ret_days: list[date] = []  # each retained return is dated ITS OWN day
     linked = [1.0]
+    published_days = set()
+    for s in schemes:
+        published_days.update(s["nav_dates"])
     for i in range(1, len(days)):
         v_prev = vals[i - 1]
         if v_prev <= 0:
             continue
+        if days[i] not in published_days:
+            continue  # no NAV published anywhere — held value, no signal
         r = (vals[i] - fl[i] - v_prev) / v_prev
         if abs(r) > ARTIFACT_THRESHOLD:
             artifact_days += 1

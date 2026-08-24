@@ -261,18 +261,21 @@ def apply_approved(db_path: Path = DB_PATH, review_csv: Path = OUT_CSV,
     con.close()
     print(f"applied {applied} approved rows ({len(codes)} distinct codes)")
     if fetch_history and codes:
-        from src import fetch_missing_nav as fmn
-        for code in sorted(codes):
-            if (DATA_DIR / "nav_history" / f"{code}.json").exists():
-                continue
-            resp = fmn._fetch(code)
-            if resp is None:
-                print(f"  no history fetched for {code}")
-                continue
-            doc = fmn._build_doc(code, resp)
-            out = DATA_DIR / "nav_history" / f"{code}.json"
-            out.write_text(json.dumps(doc), encoding="utf-8")
-            print(f"  fetched {len(doc.get('history') or [])} pts -> {out.name}")
+        # [DATA-POLICY: AMFI/AMC/NSE only] full histories via the official
+        # AMFI portal walk (one request covers every code per window).
+        from src.nav_history import fetch_codes_history
+        todo = [c for c in sorted(codes)
+                if not (DATA_DIR / "nav_history" / f"{c}.json").exists()]
+        if todo:
+            summary = fetch_codes_history(todo, out_dir=DATA_DIR / "nav_history")
+            for c in todo:
+                out = DATA_DIR / "nav_history" / f"{c}.json"
+                if out.exists():
+                    n = len(json.loads(out.read_text(encoding="utf-8"))
+                            .get("history") or [])
+                    print(f"  fetched {n} pts -> {out.name}")
+                else:
+                    print(f"  no history fetched for {c}")
     return applied
 
 

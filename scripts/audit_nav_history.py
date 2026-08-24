@@ -10,7 +10,7 @@ This tool:
   1. sweeps every scheme in webapp.db (both plan codes) + every history file;
   2. classifies each as ok / stub / no_file;
   3. with --heal, replaces a stub with a better copy: the R2 object when it
-     has more points, else the mfapi full-history mirror (network).
+     has more points, else the AMFI portal walk (network).
 
 Usage:
     python scripts/audit_nav_history.py               # report only
@@ -90,14 +90,15 @@ def _heal_code(code: str, local_points: int) -> tuple[bool, int, str]:
         except OSError:
             pass
     try:
-        from src.fetch_missing_nav import _build_doc, _fetch
-        resp = _fetch(code)
-        if resp is not None:
-            cand = _build_doc(code, resp)
+        # [DATA-POLICY: AMFI/AMC/NSE only] the AMFI portal walk replaces the
+        # retired third-party mirror as the heal fallback.
+        from src.nav_history import fetch_codes_history
+        summary = fetch_codes_history([code], out_dir=NAV_DIR)
+        if summary.get("written"):
+            cand = json.loads(path.read_text(encoding="utf-8"))
             n = len(cand.get("history") or [])
             if n > local_points:
-                path.write_text(json.dumps(cand), encoding="utf-8")
-                return True, n, "mfapi"
+                return True, n, "amfi"
     except Exception:
         pass
     return False, local_points, "none"
@@ -106,7 +107,7 @@ def _heal_code(code: str, local_points: int) -> tuple[bool, int, str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--heal", action="store_true",
-                    help="replace stubs with better R2/mfapi copies")
+                    help="replace stubs with better R2/AMFI copies")
     ap.add_argument("--limit", type=int, default=0,
                     help="max codes to heal this run (0 = no cap)")
     ap.add_argument("--json", action="store_true", dest="as_json",
@@ -158,7 +159,7 @@ def main() -> int:
         print(f"  ... and {len(stubs) - 25} more")
 
     if not args.heal:
-        print("run with --heal to upgrade stubs from R2/mfapi")
+        print("run with --heal to upgrade stubs from R2/AMFI")
         return 0
 
     healed = failed = 0
@@ -172,7 +173,7 @@ def main() -> int:
         else:
             failed += 1
     print(f"healed {healed}, failed {failed} "
-          f"(failed = no better copy on R2/mfapi; often genuinely young funds)")
+          f"(failed = no better copy on R2/AMFI; often genuinely young funds)")
     return 0
 
 

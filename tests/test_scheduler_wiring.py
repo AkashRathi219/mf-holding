@@ -173,10 +173,14 @@ def test_nav_job_passes_days_through():
     assert "_update_latest_navs_impl(days=days)" in src
 
 
-def test_amfi_job_guarded():  # [S2e]
+def test_amfi_job_guarded():  # [S2e] + [DATA-POLICY 2026-08-25]
+    """The monthly holdings job no longer pulls the retired third-party
+    aggregator at all (AMFI/AMC/NSE-only data policy): main.py must contain
+    NO mfdata import, and the job records the policy skip."""
     src = (ROOT / "webapp" / "main.py").read_text(encoding="utf-8")
-    assert "from webapp.amfi_fetch import fetch_mfdata, save" in src
-    assert "import failed" in src  # guard message inside _amfi_job
+    assert "from webapp.amfi_fetch import fetch_mfdata" not in src, \
+        "mfdata import resurrected — policy violation"
+    assert "mfdata retired" in src  # the policy skip is recorded in telemetry
 
 
 def test_startup_resilient(monkeypatch):  # [S2b]

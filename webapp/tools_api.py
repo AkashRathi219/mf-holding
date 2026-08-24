@@ -917,8 +917,8 @@ def _markdown_report(label: str, kind: str, items: list[dict], pa: dict, metrics
                  f"{', '.join((e.get('name') or e.get('isin') or '') for e in errors)}.")
     L.append("- Each scheme's holdings are normalised to 100% of that scheme's NAV; the scheme's "
              "portfolio weight is then applied to every holding.")
-    L.append("- Sources are matched in priority order: AMFI / mfdata.in → AMC-website monthly "
-             "portfolio → AMC-disclosure archive → benchmark/index.")
+    L.append("- Sources are matched in priority order: AMFI → AMC-website monthly "
+             "portfolio → AMC-disclosure archive → benchmark/index. [Data policy: AMFI/AMC/NSE only]")
     L.append("")
     L.append("---")
     L.append("_Diagnostic tool for factual analysis only; not investment advice. Past performance "

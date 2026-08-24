@@ -17,9 +17,9 @@ How it works
   chronological order).
 * A scheme with NO file yet is never seeded with a thin recent-window stub —
   that stub would shadow the full R2 history forever and starve analytics.
-  Missing files are filled with FULL histories (R2 object, then the mfapi
-  mirror under a per-run cap); codes that can't be filled are left absent so
-  the read path fetches the full file on demand.
+  Missing files are filled with FULL histories (R2 object, then the AMFI
+  portal walk under a per-run cap); codes that can't be filled are left
+  absent so the read path fetches the full file on demand.
 """
 
 from __future__ import annotations
@@ -40,11 +40,13 @@ OUT_DIR = BASE_DIR / "data" / "nav_history"
 # treats an existing local file as authoritative and never re-fetches, so a
 # stub permanently shadows the full R2 history and analytics honestly reports
 # "not enough NAV history" for years. Missing files must be filled with FULL
-# histories only (R2 object first, mfapi mirror as fallback), never seeded
+# histories only (R2 object first, then the AMFI portal walk), never seeded
 # from the short daily window. Cap the per-run full-fetch fan-out so one cold
-# start can't hammer the mirror (the rest are picked up on subsequent runs or
+# start can't hammer the portal (the rest are picked up on subsequent runs or
 # served straight from R2 on first read).
+# [DATA-POLICY: AMFI/AMC/NSE only — the third-party mirror is retired.]
 MAX_FULL_HISTORY_FETCHES_PER_RUN = 100
+PORTAL_WALK_DELAY = 1.0  # seconds between AMFI portal window requests
 
 
 def _load_history(path: Path) -> list[dict]:
@@ -69,13 +71,18 @@ def update_latest_navs(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
         return summary
 
 
-def _full_history_doc(code: str) -> dict | None:
-    """Full since-inception daily history for one code (mfapi AMFI mirror)."""
-    from .fetch_missing_nav import _build_doc, _fetch
-    resp = _fetch(code)
-    if resp is None:
-        return None
-    return _build_doc(code, resp)
+def _full_history_doc(code: str, out_dir: Path = OUT_DIR) -> dict | None:
+    """Full since-inception daily history for one code — AMFI portal only
+    [DATA-POLICY: AMFI/AMC/NSE only; the third-party mirror is retired]."""
+    from .nav_history import fetch_codes_history
+    summary = fetch_codes_history([code], out_dir=out_dir)
+    path = out_dir / f"{code}.json"
+    if summary.get("written") and path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+    return None
 
 
 def _update_latest_navs_impl(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
@@ -92,34 +99,37 @@ def _update_latest_navs_impl(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
 
     universe_codes = {r["amfi_code"] for r in load_universe() if r["amfi_code"]}
 
-    created = updated = unchanged = skipped = 0
-    skipped_nonuniverse = skipped_unfilled = 0
+    # [NAV-STUB] batch-fill missing universe files with FULL AMFI histories
+    # (R2 object first, then the AMFI portal walk under a strict per-run cap)
+    # — never seed a thin recent-window file: it would shadow the full R2
+    # history forever and analytics would honestly report "not enough NAV
+    # history" for years. [DATA-POLICY: AMFI/AMC/NSE only.]
+    missing = [c for c in by_code
+               if c in universe_codes and not (out_dir / f"{c}.json").exists()]
+    seeded_codes: set[str] = set()
     mirror_fetches = 0
+    if missing:
+        try:
+            from webapp import remote_store
+            for c in list(missing):
+                if remote_store.ensure(f"nav_history/{c}.json") is not None:
+                    seeded_codes.add(c)  # R2 served the full file
+        except Exception:
+            seeded_codes = set()
+        still = [c for c in missing if c not in seeded_codes]
+        batch = still[:MAX_FULL_HISTORY_FETCHES_PER_RUN]
+        if batch:
+            from .nav_history import fetch_codes_history
+            summary = fetch_codes_history(batch, out_dir=out_dir,
+                                          delay=PORTAL_WALK_DELAY)
+            mirror_fetches = summary.get("written", 0)
+            seeded_codes.update(batch)
+
+    created = sum(1 for c in missing if (out_dir / f"{c}.json").exists())
+    updated = unchanged = skipped = 0
+    skipped_nonuniverse = skipped_unfilled = 0
     for code, pts in by_code.items():
         path = out_dir / f"{code}.json"
-        if not path.exists() and code in universe_codes:
-            # [NAV-STUB] Never seed a thin recent-window file: it would shadow
-            # the full R2 history forever (ensure() trusts existing files) and
-            # analytics would honestly report "not enough NAV history" for
-            # years. Fill with a FULL history — R2 object first, then the
-            # mfapi mirror under a strict per-run cap — or leave the file
-            # absent so the read path can fetch it from R2 later.
-            seeded = False
-            try:
-                from webapp import remote_store
-                seeded = remote_store.ensure(
-                    f"nav_history/{code}.json") is not None
-            except Exception:
-                seeded = False
-            if not seeded and mirror_fetches < MAX_FULL_HISTORY_FETCHES_PER_RUN:
-                doc = _full_history_doc(code)
-                if doc is not None:
-                    out_dir.mkdir(parents=True, exist_ok=True)
-                    path.write_text(json.dumps(doc), encoding="utf-8")
-                    mirror_fetches += 1
-                    seeded = True
-            if seeded:
-                created += 1
         if path.exists():
             doc, hist = _load_history(path)
             existing_dates = {h.get("date") for h in hist}

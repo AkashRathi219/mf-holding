@@ -40,6 +40,11 @@ def _last_point(path: Path) -> tuple | None:
         return (doc.get("scheme_code") or path.stem, doc.get("fund_name") or "",
                 None, None)
     last = hist[-1]
+    if not isinstance(last, dict):
+        # legacy compact format: history is a list of ISO date strings with
+        # no NAV values — report the date, honestly no NAV
+        return (doc.get("scheme_code") or path.stem, doc.get("fund_name") or "",
+                last, None)
     return (doc.get("scheme_code") or path.stem, doc.get("fund_name") or "",
             last.get("date"), last.get("nav"))
 
