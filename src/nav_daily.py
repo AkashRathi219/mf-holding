@@ -93,6 +93,7 @@ def _update_latest_navs_impl(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
     universe_codes = {r["amfi_code"] for r in load_universe() if r["amfi_code"]}
 
     created = updated = unchanged = skipped = 0
+    skipped_nonuniverse = skipped_unfilled = 0
     mirror_fetches = 0
     for code, pts in by_code.items():
         path = out_dir / f"{code}.json"
@@ -135,14 +136,26 @@ def _update_latest_navs_impl(days: int = 10, out_dir: Path = OUT_DIR) -> dict:
             updated += 1
         else:
             skipped += 1  # no file and none seeded — read path may fetch from R2
+            # [NAV-FRESH] split for honest telemetry: the bulk of AMFI's 8.5k
+            # codes are simply outside our tracked universe.
+            if code not in universe_codes:
+                skipped_nonuniverse += 1
+            else:
+                skipped_unfilled += 1
 
+    from .nav_freshness import expected_latest_nav_date
     return {
         "window": f"{start.isoformat()}..{end.isoformat()}",
+        # The newest NAV AMFI could have published when this run started —
+        # on Monday mornings this is Friday, which is correct, not stale.
+        "expected_latest": expected_latest_nav_date().isoformat(),
         "codes_seen": len(by_code),
         "created": created,
         "updated": updated,
         "unchanged": unchanged,
         "skipped": skipped,
+        "skipped_nonuniverse": skipped_nonuniverse,
+        "skipped_unfilled": skipped_unfilled,
         "mirror_fetches": mirror_fetches,
         "total_nav_points": len(rows),
     }

@@ -112,7 +112,7 @@ def test_app_shell_structure_intact():
                 "screen-secdetail"):
         assert f'id="{sid}"' in html, f"app.html lost screen panel {sid}"
     for needle in ('id="nav"', 'id="drawer"', 'id="toast"', 'id="userBox"',
-                   "js/charts.js?v=4", "js/app.js?v=5"):
+                   "js/charts.js?v=4", "js/app.js?v=6"):
         assert needle in html
 
 
@@ -203,5 +203,5 @@ def test_security_detail_card_layout():
 
 def test_appjs_cache_bumped():
     html = _read(STATIC / "app.html")
-    assert "app.js?v=5" in html, "app.js not cache-busted after detail rework"
+    assert "app.js?v=6" in html, "app.js not cache-busted after detail rework"
     assert "?v=3" not in html

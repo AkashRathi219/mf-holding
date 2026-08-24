@@ -1127,6 +1127,21 @@ def admin_reliance(request: Request):
     return data_health.reliance_metrics(get_db())
 
 
+@app.get("/api/admin/nav-freshness")
+def admin_nav_freshness(request: Request, sample: int = 5, live: int = 0,
+                        stocks: int = 0):
+    """Every scheme's NAV date vs the AMFI publication calendar [NAV-FRESH].
+
+    Buckets: current / lag1 (grace) / stale_recent / stale_deep /
+    dead_suspect / no_history. `live=1` additionally three-way spot-checks
+    `sample` random schemes (history file vs live AMFI vs DB) — slower.
+    """
+    _require_superadmin(request)
+    from src.nav_audit import run_audit
+    return run_audit(sample=max(0, min(sample, 25)), live=bool(live),
+                     csv_out=None, with_stocks=bool(stocks))
+
+
 @app.get("/api/admin/refresh-logs")
 def admin_refresh_logs(request: Request, limit: int = 200):
     _require_superadmin(request)

@@ -18,12 +18,166 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, time as _time, timedelta
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 NAV_DIR = BASE_DIR / "data" / "nav_history"
 STOCK_DIR = BASE_DIR / "data" / "stock_history"
+
+# ---------------------------------------------------------------------------
+# AMFI publication calendar [NAV-FRESH]
+# ---------------------------------------------------------------------------
+# AMFI publishes day-T NAVs late in the evening of T (~23:00 IST, sometimes
+# later); nothing publishes on weekends. On a Monday morning the freshest
+# possible NAV is therefore Friday's — "latest NAV 21-Aug" seen on 24-Aug-2026
+# is CORRECT, not a pipeline failure. The audit measures every scheme against
+# this calendar (publish-day gaps) instead of raw calendar-day gaps.
+#
+# NSE equity holidays 2026. Advisory: verify against the NSE annual circular
+# each January; a wrong/missing entry merely shifts a scheme between
+# `current` and `lag1` (the grace bucket) and never hides a stale scheme.
+# Override/extend per year without code edits via
+# data/reference/nse_holidays_<year>.json ({"<YYYY-MM-DD>": "name", ...}).
+
+NSE_HOLIDAYS_2026 = frozenset({
+    date(2026, 1, 26),   # Republic Day
+    date(2026, 3, 4),    # Holi
+    date(2026, 3, 20),   # Id-Ul-Fitr (approx - verify circular)
+    date(2026, 4, 3),    # Good Friday
+    date(2026, 4, 14),   # Dr. Ambedkar Jayanti
+    date(2026, 5, 1),    # Maharashtra Day
+    date(2026, 5, 27),   # Bakri Id (approx - verify circular)
+    date(2026, 9, 14),   # Ganesh Chaturthi
+    date(2026, 10, 2),   # Gandhi Jayanti
+    date(2026, 11, 9),   # Diwali-Balipratipada
+    date(2026, 11, 24),  # Guru Nanak Jayanti (approx - verify circular)
+    date(2026, 12, 25),  # Christmas
+})
+
+_HOLIDAY_CACHE: dict[int, frozenset] = {}
+
+
+def nse_holidays(year: int) -> frozenset:
+    """Built-in holiday set for `year`, overridable per-year via
+    data/reference/nse_holidays_<year>.json."""
+    if year in _HOLIDAY_CACHE:
+        return _HOLIDAY_CACHE[year]
+    days = NSE_HOLIDAYS_2026 if year == 2026 else frozenset()
+    path = BASE_DIR / "data" / "reference" / f"nse_holidays_{year}.json"
+    if path.exists():
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            days = frozenset(
+                date.fromisoformat(k) for k in (doc.get("holidays") or doc.keys())
+                if isinstance(k, str) and len(k) == 10)
+        except Exception:
+            pass
+    _HOLIDAY_CACHE[year] = days
+    return days
+
+
+def is_publish_day(d: date, year_days: frozenset | None = None) -> bool:
+    if d.weekday() >= 5:
+        return False
+    hol = year_days if year_days is not None else nse_holidays(d.year)
+    return d not in hol
+
+
+def prev_publish_day(d: date) -> date:
+    d = d - timedelta(days=1)
+    while not is_publish_day(d):
+        d -= timedelta(days=1)
+    return d
+
+
+# AMFI's final NAVAll for day T lands ~23:00 IST; before that, "latest" is T-1.
+AMFI_PUBLISH_CUTOFF = _time(23, 0)
+
+
+def expected_latest_nav_date(now: datetime | None = None) -> date:
+    """The newest NAV date that AMFI could have published as of `now` (IST)."""
+    if now is None:
+        from .refresh_log import IST
+        now = datetime.now(IST)
+    today = now.date()
+    cutoff = now.time() >= AMFI_PUBLISH_CUTOFF
+    if cutoff and is_publish_day(today):
+        return today
+    return prev_publish_day(today)
+
+
+def publish_days_between(last: date, expected: date) -> int:
+    """Publish days missed: count of publish days in (last, expected]."""
+    if expected <= last:
+        return 0
+    n, d = 0, last
+    while d < expected:
+        d += timedelta(days=1)
+        if is_publish_day(d):
+            n += 1
+    return n
+
+
+# Buckets by publish-days missed. lag1 = one publish day behind: late-publish
+# AMFs / report lag make this normal; the audit reports it, the UI forgives it.
+BUCKETS = ("current", "lag1", "stale_recent", "stale_deep", "dead_suspect",
+           "no_history")
+
+
+def parse_date_any(s: str) -> date | None:
+    """'21-Aug-2026' / '2026-08-21' / 'Aug 21, 2026' -> date; None if unparseable."""
+    import re
+    d = s or ""
+    txt = str(d).lower()
+    m = re.search(r"(\d{1,2})\s*[- ]\s*([a-z]{3})[a-z]*[- ](\d{4})", txt)
+    if m:
+        y, mon, dd = int(m.group(3)), _MONTHS.get(m.group(2)[:3], 0), int(m.group(1))
+    else:
+        m = re.search(r"(\d{4})-(\d{2})-(\d{2})", txt)
+        if m:
+            y, mon, dd = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        else:
+            m = re.search(r"([a-z]{3})[a-z]*\s+(\d{1,2})[a-z]*,?\s+(\d{4})", txt)
+            if m:
+                y, mon, dd = int(m.group(3)), _MONTHS.get(m.group(1)[:3], 0), int(m.group(2))
+            else:
+                return None
+    if mon < 1 or mon > 12 or dd < 1:
+        return None
+    try:
+        return date(y, mon, dd)
+    except ValueError:
+        return None
+
+
+def classify(last_date_str: str | None, now: datetime | None = None,
+             expected: date | None = None) -> dict:
+    """Bucket one scheme's latest NAV date against the publication calendar."""
+    if not last_date_str:
+        return {"bucket": "no_history", "publish_gap": None, "gap_days": None,
+                "expected": expected.isoformat() if expected else None}
+    exp = expected or expected_latest_nav_date(now)
+    ld = parse_date_any(str(last_date_str))
+    if ld is None:
+        return {"bucket": "no_history", "publish_gap": None, "gap_days": None,
+                "expected": exp.isoformat()}
+    gap = publish_days_between(ld, exp)
+    if gap == 0:
+        bucket = "current"
+    elif gap == 1:
+        bucket = "lag1"
+    elif gap <= 6:
+        bucket = "stale_recent"
+    elif gap < 45:
+        bucket = "stale_deep"
+    else:
+        bucket = "dead_suspect"
+    return {"bucket": bucket, "publish_gap": gap,
+            "gap_days": (exp - ld).days, "expected": exp.isoformat()}
+
+
+# ---------------------------------------------------------------------------
 
 _MONTHS = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
            "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12}

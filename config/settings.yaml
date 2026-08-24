@@ -40,9 +40,11 @@ scheduler:
   # Daily NAV refresh: append the latest AMFI NAV points to data/nav_history/*
   # so the webapp's NAV charts stay current. Runs TWICE a day, 12h apart,
   # so the freshest possible NAV is always <12h old.
+  # [NAV-FRESH] Evening run at 23:30 IST: AMFI publishes day-T NAVs ~23:00,
+  # so the old 20:30 run always missed day T and it only landed next morning.
   nav_refresh:
     enabled: true
-    hour: 20
+    hour: 23
     minute: 30
     hour2: 8              # second run of the day (08:30 IST)
     minute2: 30

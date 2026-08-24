@@ -51,7 +51,20 @@ def _write(entry: dict) -> None:
 # ---- durable per-pipeline state -------------------------------------------
 
 _STATE_FIELDS = ("last_status", "last_ts", "last_started", "last_duration_s",
-                 "last_error", "last_detail")
+                 "last_error", "last_detail", "recent_ok", "recent_err")
+
+
+def _prune_recent(p: dict) -> None:
+    """Keep only success/error timestamps inside the trailing 24h window."""
+    cutoff = datetime.now(timezone.utc).timestamp() - 24 * 3600
+    for key in ("recent_ok", "recent_err"):
+        ts_list = p.get(key) or []
+        if not isinstance(ts_list, list):
+            p[key] = []
+            continue
+        p[key] = [t for t in ts_list
+                  if (dt := parse_ts(t)) is not None
+                  and dt.timestamp() >= cutoff]
 
 
 def _restore_state() -> None:
@@ -95,7 +108,8 @@ def _apply_event(pipes: dict, e: dict) -> None:
     name = e.get("pipeline") or "?"
     p = pipes.setdefault(name, {"last_status": None, "last_ts": None,
                                 "last_started": None, "last_duration_s": None,
-                                "last_error": None, "last_detail": {}})
+                                "last_error": None, "last_detail": {},
+                                "recent_ok": [], "recent_err": []})
     status = e.get("status")
     detail = {k: v for k, v in e.items()
               if k not in ("ts", "pipeline", "status", "duration_s")}
@@ -106,12 +120,16 @@ def _apply_event(pipes: dict, e: dict) -> None:
         # 'alive' = scheduler heartbeat [S2f]; treated as success so liveness
         # flows into the standard last-fetched rollup + 24h counters.
         p["last_status"], p["last_ts"] = status, e.get("ts")
+        p.setdefault("recent_ok", []).append(e.get("ts"))
+        _prune_recent(p)
     elif status == "error":
         # newest failure wins unless a newer success was already recorded
         if p.get("last_status") != "success":
             p["last_status"], p["last_ts"] = "error", e.get("ts")
         else:
             return
+        p.setdefault("recent_err", []).append(e.get("ts"))
+        _prune_recent(p)
     else:
         return
     p["last_duration_s"] = e.get("duration_s")
@@ -251,6 +269,7 @@ def summary() -> dict:
         p = pipes.setdefault(name, {
             "last_status": None, "last_ts": None, "last_duration_s": None,
             "last_error": None, "last_detail": {}, "ok_24h": 0, "err_24h": 0,
+            "recent_ok": [], "recent_err": [],
         })
         s_dt, j_dt = parse_ts(sp.get("last_ts")), parse_ts(p.get("last_ts"))
         if s_dt and (j_dt is None or s_dt > j_dt):
@@ -258,7 +277,18 @@ def summary() -> dict:
                 if sp.get(k) is not None:
                     p[k] = sp[k]
         elif p.get("last_started") is None and sp.get("last_started"):
-            p["last_started"] = sp["last_started"]
+            p["last_started"] = sp.get("last_started")
+
+    # [NAV-FRESH] Durable 24h counters: the JSONL log is ephemeral on container
+    # deployments, so after a redeploy it would report "0 ok" despite a healthy
+    # schedule. The state file (R2-synced) keeps trailing-24h success/error
+    # timestamps; the freshest of the two sources wins.
+    for p in pipes.values():
+        _prune_recent(p)
+        if len(p.get("recent_ok") or []) > (p.get("ok_24h") or 0):
+            p["ok_24h"] = len(p["recent_ok"])
+        if len(p.get("recent_err") or []) > (p.get("err_24h") or 0):
+            p["err_24h"] = len(p["recent_err"])
 
     return {"pipelines": pipes, "generated_at": _now_ist(),
             "log_file": str(LOG_PATH), "state_file": str(STATE_PATH)}

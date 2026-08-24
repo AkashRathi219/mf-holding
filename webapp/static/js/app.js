@@ -2725,6 +2725,11 @@ function initAdmin() {
       <div class="page-sub">Per-scheme confidence (source trust − staleness + holdings quality) across the whole catalogue</div>
       <div id="relBody" style="margin-top:10px"><span class="spin"></span> Loading…</div>
     </div>
+    <div id="freshCard" class="card" style="margin-bottom:16px">
+      <h3 style="margin-bottom:4px">NAV freshness <span id="nfBadge" class="badge grey">…</span></h3>
+      <div class="page-sub">Every scheme's latest NAV vs the AMFI publication calendar (day-T NAVs publish ~23:00 IST; nothing on weekends/holidays) · expected latest <b id="nfExpected">…</b> <button class="btn btn-outline btn-sm" style="margin-left:10px" onclick="refreshFreshnessData(true)">Live sample</button></div>
+      <div id="nfBody" style="margin-top:10px"><span class="spin"></span> Loading…</div>
+    </div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <h3 style="margin:0">Refresh pipelines <span id="admSched" class="badge grey"></span></h3>
       <button class="btn btn-outline btn-sm" onclick="initAdmin()">Reload</button>
@@ -2847,6 +2852,77 @@ async function refreshRelianceData() {
   }
 }
 
+const NF_BUCKET_META = {
+  current:      { label: "Current",       tone: "green" },
+  lag1:         { label: "1 day behind",  tone: "green" },
+  stale_recent: { label: "Stale 2-6d",    tone: "amber" },
+  stale_deep:   { label: "Stale 7-44d",   tone: "amber" },
+  dead_suspect: { label: "Dead suspect",  tone: "red" },
+  no_history:   { label: "No history",    tone: "grey" },
+};
+
+async function refreshFreshnessData(liveSample = false) {
+  const body = document.getElementById("nfBody");
+  if (!body) return;
+  try {
+    const r = await App.api(`/admin/nav-freshness?live=${liveSample ? 5 : 0}`);
+    const badge = document.getElementById("nfBadge");
+    if (badge) {
+      badge.className = "badge " + (r.healthy_pct >= 99 ? "green" : r.healthy_pct >= 95 ? "amber" : "red");
+      badge.textContent = `${r.healthy_pct}% within grace · ${App.formatNum(r.files_scanned)} files`;
+    }
+    const exp = document.getElementById("nfExpected");
+    if (exp) exp.textContent = r.expected_latest || "—";
+
+    const total = Math.max(1, r.files_scanned);
+    const bars = Object.entries(NF_BUCKET_META).map(([b, meta]) => {
+      const n = (r.buckets || {})[b] || 0;
+      if (!n) return "";
+      return `<div style="flex:1;min-width:86px;text-align:center">
+        <div style="background:var(--surface-2);border-radius:4px;height:8px;overflow:hidden">
+          <div style="width:${Math.round(n / total * 100)}%;height:100%;background:${dhBucketColor(b)}"></div>
+        </div>
+        <div style="font-size:.72rem;margin-top:3px"><b style="color:${dhBucketColor(b)}">${meta.label}</b> ${App.formatNum(n)}</div>
+      </div>`;
+    }).join("");
+
+    let sampleHtml = "";
+    if (r.sample && r.sample.sample_size > 0) {
+      const s = r.sample;
+      sampleHtml = `<div class="page-sub" style="margin:8px 0 0">Correctness sample: ${s.live_checked}/${s.sample_size} verified against live AMFI` +
+        (s.live_checked ? ` · date current ${s.date_current}/${s.live_checked} · NAV match ${s.nav_match}/${s.live_checked} · DB match ${s.db_nav_match}/${s.sample_size}` : "") +
+        (s.live_error ? ` · <span style="color:var(--red)">live fetch failed: ${App.esc(s.live_error)}</span>` : "") +
+        `</div>`;
+    }
+
+    const offRows = (r.offenders || []).map(o => `<tr>
+        <td class="mono">${App.esc(o.code)}</td>
+        <td>${App.esc(o.fund || "—")}</td>
+        <td class="mono">${App.esc(o.last_date || "—")}</td>
+        <td class="num">${o.publish_gap != null ? o.publish_gap + " pub days" : "—"}</td>
+        <td><span class="badge ${NF_BUCKET_META[o.bucket] ? NF_BUCKET_META[o.bucket].tone : "grey"}">${App.esc(o.bucket)}</span></td>
+      </tr>`).join("") || `<tr><td colspan="5" class="empty">No offenders — every scheme is within grace of the publication calendar.</td></tr>`;
+
+    body.innerHTML = `
+      <div style="display:flex;gap:14px;margin-bottom:10px;flex-wrap:wrap">${bars}</div>
+      ${sampleHtml}
+      <div class="table-wrap" style="max-height:240px;overflow:auto;margin-top:10px">
+        <table class="data"><thead><tr><th>Code</th><th>Scheme</th><th>Last NAV</th><th class="r">Gap</th><th>Bucket</th></tr></thead>
+        <tbody>${offRows}</tbody></table>
+      </div>`;
+  } catch (e) {
+    const badge = document.getElementById("nfBadge");
+    if (badge) { badge.className = "badge grey"; badge.textContent = "N/A"; }
+    body.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
+  }
+}
+
+function dhBucketColor(bucket) {
+  const tone = (NF_BUCKET_META[bucket] || {}).tone;
+  return { green: "var(--success)", amber: "var(--warning)",
+           red: "var(--destructive)", grey: "var(--text-3)" }[tone] || "var(--text-3)";
+}
+
 function admBadge(status) {
   if (status === "success") return '<span class="badge green">success</span>';
   if (status === "error") return '<span class="badge red">error</span>';
@@ -2865,6 +2941,7 @@ function admDetail(d, err) {
 async function refreshAdminData() {
   try {
     refreshHealthData();
+    refreshFreshnessData();
     const [sum, logs] = await Promise.all([
       App.api("/admin/refresh-summary"),
       App.api("/admin/refresh-logs?limit=200"),
