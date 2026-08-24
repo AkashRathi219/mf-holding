@@ -420,7 +420,7 @@ async def run_pipeline(
                 idx_l = link.year * 12 + link.month
                 return idx_t - 2 <= idx_l <= idx_t
 
-            doc_links = [l for l in doc_links if _within_recency(l)]
+            doc_links = [link for link in doc_links if _within_recency(link)]
 
             if not doc_links:
                 # Fall back to the most recent document dated within the
@@ -471,11 +471,12 @@ async def run_pipeline(
             )
 
             jobs = []
+            amc_cached: list[str] = []  # [BUG-C2] per-AMC cache-hit docs (was undefined -> NameError)
             for doc_path in downloaded:
                 out_json = _parsed_json_path(doc_path, amc_name, actual_year,
                                              actual_month, parsed_dir)
                 if not force_parse and _parse_cache_fresh(doc_path, out_json):
-                    results_cached.append(doc_path.name)
+                    amc_cached.append(doc_path.name)
                     report_entry["documents"].append(doc_path.name)
                     try:
                         cached = json.loads(out_json.read_text(encoding="utf-8"))
@@ -513,8 +514,8 @@ async def run_pipeline(
             report_entry["status"] = "success"
             report_entry["schemes"] = sorted(set(report_entry["schemes"]))
             results["success"].append(amc_name)
-            if results_cached:
-                results["cached"].append(f"{amc_name} ({len(results_cached)} docs)")
+            if amc_cached:
+                results["cached"].append(f"{amc_name} ({len(amc_cached)} docs)")
 
         except Exception as e:
             logger.error(f"  Error processing {amc_name}: {e}")
@@ -810,7 +811,6 @@ def parse_batch(amc, year, month, workers, force):
     parsed_dir = BASE_DIR / config["paths"]["parsed_dir"]
     pdfs_dir = BASE_DIR / config["paths"]["pdfs_dir"]
 
-    now = datetime.now()
     targets: list[tuple[str, Path, int, int]] = []
     for amc_dir in sorted(pdfs_dir.iterdir()):
         if not amc_dir.is_dir():
@@ -1120,7 +1120,7 @@ def stock_status(as_json):
     if as_json:
         click.echo(json.dumps(r, indent=2))
         return
-    click.echo(f"Stock backfill status:")
+    click.echo("Stock backfill status:")
     click.echo(f"  Universe: {r['total_stocks']} confirmed-equity stocks "
                f"({r['with_symbol']} with NSE symbols)")
     click.echo(f"  Price history: {r['price_done']}/{r['total_stocks']} "
@@ -1271,7 +1271,6 @@ def bond_refresh_daily() -> dict:
     """Daily job: pull the latest NSE debt bulk reports and rebuild the
     catalog (used by the scheduler; never raises)."""
     from src.bonds import build_catalog, fetch_day
-    from datetime import timedelta
     d = datetime.now().date()
     files = fetch_day(d)
     catalog = build_catalog()

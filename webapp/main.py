@@ -12,10 +12,10 @@ import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from . import auth, db
 from .log import get_logger, request_logging_middleware
@@ -30,8 +30,10 @@ STATIC_DIR = BASE_DIR / "static"
 
 log = get_logger("main")
 
-SUPERADMIN_EMAILS = {e.strip().lower() for e in os.environ.get(
-    "SUPERADMIN_EMAILS", "akash@aracharatventures.com").split(",") if e.strip()}
+# [BUG-H2] single source of truth in auth: NO hardcoded default — an unset
+# SUPERADMIN_EMAILS means nobody is superadmin (fail-closed), with a loud
+# startup warning instead of a claimable default account.
+SUPERADMIN_EMAILS = auth._superadmin_emails()
 
 app = FastAPI(title="FundPulse", docs_url="/api/docs", openapi_url="/api/openapi.json")
 app.include_router(tools_router)
@@ -232,6 +234,11 @@ def _on_startup() -> None:
     except auth.SecretNotConfiguredError as e:
         log.critical("SECRET_KEY NOT CONFIGURED: %s — login/register will "
                      "return 503 until the env var is set", e)
+    if not auth.superadmin_configured():
+        # [BUG-H2] fail-closed visibility: admin panels exist but nobody can
+        # reach them until SUPERADMIN_EMAILS is provisioned.
+        log.warning("SUPERADMIN_EMAILS is not set — no superadmin exists. "
+                    "Set it (comma-separated emails) to enable admin tooling.")
 
 
 @app.middleware("http")
@@ -615,11 +622,19 @@ def api_feedback(request: Request, body: dict):
     message = (body.get("message") or "").strip()
     if not message:
         raise HTTPException(status_code=400, detail="Feedback message is required.")
+    # [BUG-M6] bound feedback payloads: unbounded text + whole-file rewrite
+    # (and an R2 re-upload per submission) was a trivial disk/egress
+    # amplification vector for any registered user.
+    if len(message) > 4000:
+        raise HTTPException(status_code=400, detail="Feedback message too long (max 4000 characters).")
+    context = str(body.get("context") or "")
+    if len(context) > 2000:
+        raise HTTPException(status_code=400, detail="Feedback context too long (max 2000 characters).")
     entry = {
         "at": datetime.now().isoformat(timespec="seconds"),
         "user": (user.get("email") or user.get("name") or ""),
         "message": message,
-        "context": body.get("context") or "",
+        "context": context,
     }
     with _feedback_lock:
         records = _load_feedback()
@@ -736,8 +751,18 @@ def api_proposal(request: Request, body: dict):
         ids = body.get("scheme_ids") or []
         if len(ids) < 1:
             raise HTTPException(status_code=400, detail="Provide portfolio items (or at least one scheme).")
+        try:
+            ids = [int(x) for x in ids]
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400,
+                                detail="scheme_ids must be whole numbers.")
         n = len(ids)
-        items = [{"type": "scheme", "id": int(x), "weight": round(100.0 / n, 2)} for x in ids]
+        w = round(100.0 / n, 2)
+        # [BUG-L6] equal-weight split must sum to exactly 100: the last line
+        # absorbs the rounding remainder (3 x 33.33 alone sums to 99.99).
+        items = [{"type": "scheme", "id": i,
+                  "weight": round(100.0 - w * (n - 1), 2) if k == n - 1 else w}
+                 for k, i in enumerate(ids)]
     if len(items) > 50:
         raise HTTPException(status_code=400, detail="At most 50 items per proposal.")
     return build_proposal(get_db(), items, body.get("replacements") or {},

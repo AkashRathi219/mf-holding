@@ -88,14 +88,27 @@ def refresh_actions(isin: str, ident: dict) -> dict:
     name = ident.get("name") or ""
     if not symbol:
         return {"isin": isin, "status": "no_symbol"}
+    path = ACTIONS_DIR / f"{isin}.json"
+    prev = load_json(path)
     dividends, splits = _fetch_yahoo_events(symbol)
-    announcements = _fetch_nse_announcements(symbol) if dividends else []
+    yahoo_ok = bool(dividends or splits)
+    if yahoo_ok:
+        announcements = _fetch_nse_announcements(symbol)
+    else:
+        # [BUG-H5] an empty Yahoo response is indistinguishable from a source
+        # failure; overwriting would silently destroy stored dividend/split
+        # history (and split-correction for future price re-backfills). Keep
+        # the previously curated data instead of shrinking it.
+        dividends = prev.get("dividends") or []
+        splits = prev.get("splits") or []
+        announcements = prev.get("announcements") or []
     doc = {"isin": isin, "symbol": symbol, "name": name,
            "fetched_at": now_iso(),
            "dividends": dividends, "splits": splits,
            "announcements": announcements}
-    save_json(ACTIONS_DIR / f"{isin}.json", doc)
-    return {"isin": isin, "symbol": symbol, "status": "ok",
+    save_json(path, doc)
+    return {"isin": isin, "symbol": symbol,
+            "status": "ok" if yahoo_ok else "kept_previous",
             "dividends": len(dividends), "splits": len(splits)}
 
 

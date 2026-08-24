@@ -1,7 +1,12 @@
 "use strict";
 
+// [BUG-L5] localStorage access throws when site data is blocked; a top-level
+// throw here killed the whole SPA. Every read must be guarded.
+let __token = "";
+try { __token = localStorage.getItem("fea_token") || ""; } catch (e) {}
+
 const App = {
-  token: localStorage.getItem("fea_token") || "",
+  token: __token,
   user: null,
 };
 
@@ -13,15 +18,31 @@ App.api = async function (path, opts = {}) {
   if (!raw) headers["Content-Type"] = "application/json";
   const res = await fetch("/api" + path, { ...opts, headers });
   if (res.status === 401) {
-    localStorage.removeItem("fea_token");
+    try { localStorage.removeItem("fea_token"); } catch (e) {}
     if (!location.pathname.includes("login") && !location.pathname.includes("register")) {
       location.href = "/login";
     }
     throw new Error("Session expired");
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || "Request failed");
+  if (!res.ok) throw new Error(App.detailMessage(data.detail));
   return data;
+};
+
+// [BUG-L2] FastAPI validation errors carry detail as an ARRAY of objects —
+// stringifying it directly toasted "[object Object]".
+App.detailMessage = function (detail) {
+  if (!detail) return "Request failed";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map(d =>
+      (d && d.loc && d.loc.length ? d.loc.join(".") + ": " : "") +
+      ((d && d.msg) || JSON.stringify(d))).join("; ");
+  }
+  if (typeof detail === "object") {
+    return detail.msg || detail.message || JSON.stringify(detail);
+  }
+  return String(detail);
 };
 
 App.formatINR = function (v, digits = 2) {

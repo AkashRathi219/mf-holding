@@ -91,6 +91,7 @@ def _completeness(meta: dict) -> tuple[float, dict]:
 def _file_freshness(dirpath: Path) -> tuple[int, int]:
     """(fresh_files, total_files) by latest-entry date <= MAX_AGE_DAYS."""
     from src.nav_freshness import stale_days
+    from .market_value import _dtkey
     fresh = total = 0
     if not dirpath.is_dir():
         return 0, 0
@@ -99,7 +100,10 @@ def _file_freshness(dirpath: Path) -> tuple[int, int]:
         try:
             doc = json.loads(fn.read_text(encoding="utf-8"))
             hist = doc.get("history") or doc.get("prices") or doc.get("data") or []
-            last = hist[-1].get("date") if hist else None
+            # [BUG-C3] files may be misordered on disk: audit the truly-latest
+            # entry, not the physically-last one.
+            last = (max(hist, key=lambda h: _dtkey((h or {}).get("date"))).get("date")
+                    if hist else None)
         except Exception:
             continue
         days = stale_days(str(last)) if last else None
@@ -123,7 +127,11 @@ def _stubs() -> tuple[float | None, dict]:
     from .db import NAV_HISTORY_DIR, NAV_STUB_HEAL_MIN_POINTS
     total = shadowed = 0
     samples: list[str] = []
-    cutoff = date.today().replace(year=date.today().year - 1)
+    today = date.today()
+    try:
+        cutoff = today.replace(year=today.year - 1)
+    except ValueError:  # Feb 29 -> non-leap target year
+        cutoff = date(today.year - 1, 2, 28)
     if NAV_HISTORY_DIR.is_dir():
         for fn in NAV_HISTORY_DIR.glob("*.json"):
             total += 1

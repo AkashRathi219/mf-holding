@@ -14,6 +14,18 @@ MONTH_ABBRS = [
     "jul", "aug", "sep", "oct", "nov", "dec",
 ]
 
+# [BUG-L7] whole-token month matching: the old substring test matched 'mar'
+# inside 'Market'/'Summary', silently stamping documents with the wrong month.
+_MONTH_TOKEN_RE = re.compile(
+    r"(?<![a-z])(january|february|march|april|may|june|july|august|"
+    r"september|october|november|december|jan|feb|mar|apr|jun|jul|aug|"
+    r"sep|sept|oct|nov|dec)(?![a-z])")
+_YEAR_RE = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
+
+
+def _month_index(name: str) -> int:
+    return MONTH_ABBRS.index(name[:3]) + 1
+
 # File extensions we consider valid portfolio documents (PDF or SEBI
 # machine-readable). ZIP archives (per-scheme monthly portfolio bundles) are
 # extracted and parsed member-by-member by src/zip_parser.py.
@@ -32,16 +44,16 @@ class PDFLink:
 
 def month_year_match(text: str, target_month: int, target_year: int) -> bool:
     """Check whether *text* references the given month and year."""
-    text_lower = text.lower()
+    if not text:
+        return False
 
-    for i, name in enumerate(MONTH_NAMES, 1):
-        if i == target_month and name in text_lower:
-            return str(target_year) in text
+    from urllib.parse import unquote
 
-    for i, abbr in enumerate(MONTH_ABBRS, 1):
-        if i == target_month and abbr in text_lower:
-            return str(target_year) in text
-
+    text_lower = unquote(text).lower()
+    for mm in _MONTH_TOKEN_RE.finditer(text_lower):
+        if _month_index(mm.group(1)) == target_month \
+                and str(target_year) in text:
+            return True
     return False
 
 
@@ -50,7 +62,9 @@ def extract_month_year(text: str) -> tuple[int, int] | None:
 
     Returns ``None`` when no month or year can be identified. URL-encoded
     spaces (``%20``) are decoded first so encoded day numbers aren't mistaken
-    for years.
+    for years. Months match as WHOLE tokens only ('Feb' yes, the 'mar' in
+    'Market' no); among candidate years the one ADJACENT to the matched
+    month wins over the first year anywhere in the string.
     """
     if not text:
         return None
@@ -59,24 +73,25 @@ def extract_month_year(text: str) -> tuple[int, int] | None:
 
     text_lower = unquote(text).lower()
 
-    month = None
-    for i, name in enumerate(MONTH_NAMES, 1):
-        if name in text_lower:
-            month = i
+    mm = _MONTH_TOKEN_RE.search(text_lower)
+    if not mm:
+        return None
+    month = _month_index(mm.group(1))
+
+    best: tuple[int, int] | None = None  # (distance, year)
+    for ym in _YEAR_RE.finditer(text_lower):
+        dist = (ym.start() - mm.end()) if ym.start() >= mm.end() \
+            else (mm.start() - ym.end())
+        if dist < 0:
+            dist = -dist
+        if best is None or dist < best[0]:
+            best = (dist, int(ym.group()))
+        if best[0] <= 2:
             break
-    if month is None:
-        for i, abbr in enumerate(MONTH_ABBRS, 1):
-            if abbr in text_lower:
-                month = i
-                break
-    if month is None:
+    if best is None:
         return None
 
-    years = re.findall(r"(?<!\d)(?:19|20)\d{2}(?!\d)", text_lower)
-    if not years:
-        return None
-
-    return (month, int(years[0]))
+    return (month, best[1])
 
 
 class AMCAdapter(abc.ABC):

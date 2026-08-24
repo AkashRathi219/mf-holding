@@ -22,6 +22,9 @@ router = APIRouter(prefix="/api")
 
 REPORTS_DIR = Path(__file__).resolve().parent.parent / "data" / "reports"
 
+# [BUG-M5] hard cap for client-document uploads (CAS PDF/JSON are << this).
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
 
 def _apply_remarks(rules: list[dict], remarks) -> None:
     """Attach per-rule remark / direction notes (aligned by index)."""
@@ -44,6 +47,20 @@ def _user(request: Request) -> dict:
 
 def _uid(user: dict) -> int:
     return int(user.get("id") or 0)
+
+
+def _to_int(value, field: str = "id") -> int:
+    """[BUG-M3] Strict integer coercion for body-supplied ids/params: bad input
+    is a client error (400), never an unhandled ValueError (500); JSON floats
+    like 4.5 are rejected instead of silently truncating to the wrong row."""
+    try:
+        if isinstance(value, bool):
+            raise ValueError
+        n = int(str(value).strip())
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400,
+                            detail=f"'{field}' must be a whole number.")
+    return n
 
 
 # --------------------------------------------------------------------------
@@ -147,6 +164,8 @@ def api_models_get(model_id: int, request: Request):
 @router.put("/models/{model_id}")
 def api_models_update(model_id: int, request: Request, body: dict):
     u = _user(request)
+    if body.get("name") is not None and not str(body["name"]).strip():
+        raise HTTPException(status_code=400, detail="Model name cannot be empty.")
     m = userdata.update_model(_uid(u), model_id, name=body.get("name"),
                               description=body.get("description"),
                               strategy_id=body.get("strategy_id"),
@@ -185,6 +204,8 @@ def api_clients_create(request: Request, body: dict):
 @router.put("/clients/{client_id}")
 def api_clients_update(client_id: int, request: Request, body: dict):
     u = _user(request)
+    if body.get("name") is not None and not str(body["name"]).strip():
+        raise HTTPException(status_code=400, detail="Client name cannot be empty.")
     c = userdata.update_client(_uid(u), client_id, name=body.get("name"),
                                org=body.get("org"), notes=body.get("notes"))
     if not c:
@@ -265,6 +286,13 @@ def parse_cas_transactions(doc) -> list[dict]:
             sign = -1.0
         else:
             continue
+        try:
+            nav = float(r.get("nav"))
+        except (TypeError, ValueError):
+            # [BUG-M4] "N/A"/"—" NAV strings are metadata, not a crash.
+            nav = None
+        if r.get("nav") in (None, ""):
+            nav = None
         out.append({
             "date": date,
             "type": ttype,
@@ -275,7 +303,7 @@ def parse_cas_transactions(doc) -> list[dict]:
             "isin": str(r.get("isin") or "").strip().upper(),
             "amfi_code": str(r.get("amfi_code") or "").strip(),
             "name": str(r.get("scheme_name") or "").strip(),
-            "nav": float(r.get("nav")) if r.get("nav") not in (None, "") else None,
+            "nav": nav,
         })
     out.sort(key=lambda r: (r["date"], r["type"], r["isin"]))
     return out
@@ -335,13 +363,18 @@ async def api_client_documents(client_id: int, request: Request, file: UploadFil
     filename = (file.filename or "document").replace("\\", "/").rsplit("/", 1)[-1]
     ext = Path(filename).suffix.lower()
     data = await file.read()
+    # [BUG-M5] cap uploads before anything touches disk/memory.
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Document too large (10 MB limit).")
     ingest = Path(dbm.DATA_DIR) / "raw" / "manual_ingest" / f"client_{client_id}"
     ingest.mkdir(parents=True, exist_ok=True)
     saved = ingest / f"{int(time.time())}_{filename}"
     saved.write_bytes(data)
 
     doc = {"name": filename, "type": ext or "file", "status": "stored",
-           "path": str(saved), "uploaded_at": datetime.datetime.now().isoformat(timespec="seconds")}
+           # [BUG-L8] filename only — never leak absolute server paths to clients.
+           "file": filename,
+           "uploaded_at": datetime.datetime.now().isoformat(timespec="seconds")}
     items: list[dict] = []
     transactions: list[dict] = []
     if ext == ".json":
@@ -371,8 +404,13 @@ async def api_client_documents(client_id: int, request: Request, file: UploadFil
         cps = userdata.list_client_portfolios(uid)
         cp = next((p for p in cps if p["client_id"] == client_id), None)
         if cp:
-            userdata.update_client_portfolio(uid, cp["id"], items=items,
-                                             transactions=transactions)
+            fields: dict = {"items": items}
+            if transactions:
+                # [BUG-C4] only overwrite stored cash flows when THIS document
+                # actually parsed some — a PDF re-upload must never erase the
+                # CAS history captured earlier.
+                fields["transactions"] = transactions
+            userdata.update_client_portfolio(uid, cp["id"], **fields)
             name = cp["name"]
         else:
             strategies = userdata.list_strategies(uid)
@@ -410,7 +448,7 @@ def api_cp_list(request: Request):
 @router.post("/client-portfolios")
 def api_cp_create(request: Request, body: dict):
     u = _user(request)
-    client_id = int(body.get("client_id") or 0)
+    client_id = _to_int(body.get("client_id") or 0, "client_id")
     if not client_id or not userdata.get_client(_uid(u), client_id):
         raise HTTPException(status_code=400, detail="A valid client is required.")
     model_id = body.get("model_portfolio_id")
@@ -420,7 +458,7 @@ def api_cp_create(request: Request, body: dict):
     kind = body.get("kind") or "model"
     allocations = body.get("allocations")
     if model_id:
-        model = userdata.get_model(_uid(u), int(model_id))
+        model = userdata.get_model(_uid(u), _to_int(model_id, "model_portfolio_id"))
         if model:
             items = items or model["items"]
             allocations = allocations or model.get("allocations") or {}
@@ -436,6 +474,8 @@ def api_cp_create(request: Request, body: dict):
 @router.put("/client-portfolios/{portfolio_id}")
 def api_cp_update(portfolio_id: int, request: Request, body: dict):
     u = _user(request)
+    if body.get("name") is not None and not str(body["name"]).strip():
+        raise HTTPException(status_code=400, detail="Portfolio name cannot be empty.")
     p = userdata.update_client_portfolio(_uid(u), portfolio_id, name=body.get("name"),
                                          kind=body.get("kind"),
                                          strategy_id=body.get("strategy_id"),
@@ -483,13 +523,13 @@ def _deviation(row: dict) -> dict | None:
         return None
     try:
         a = float(str(row["actual"]).rstrip("%").strip())
-        l = float(str(row["limit"]).rstrip("%").strip())
+        limit = float(str(row["limit"]).rstrip("%").strip())
     except (TypeError, ValueError):
         return None
     unit = row.get("unit") or "%"
     if row.get("operator") == "<=":
-        return {"diff": round(a - l, 1), "unit": unit, "kind": "max"}
-    return {"diff": round(l - a, 1), "unit": unit, "kind": "min"}
+        return {"diff": round(a - limit, 1), "unit": unit, "kind": "max"}
+    return {"diff": round(limit - a, 1), "unit": unit, "kind": "min"}
 
 
 def _fmt_deviation(dev: dict) -> str:
@@ -942,7 +982,6 @@ def _analyze(items: list[dict], strategy_id: int | None, uid: int, wdb: dbm.WebD
     # stocks — effective_holdings is sorted by weight, so [0] is the largest.
     eh = pa["effective_holdings"] or []
     top_holding = eh[0] if eh else None
-    stocks_eh = [h for h in eh if h.get("asset_class") == "stocks"]
     metrics = {
         "single_stock_max": top_holding["weight"] if top_holding else 0.0,
         "sector_max": max((s["weight"] for s in pa["sector_table"]), default=0.0),
@@ -1213,7 +1252,7 @@ def api_portfolio_analytics(request: Request, body: dict):
         body) if body.get("transactions") else None
     if not items:
         kind = body.get("portfolio_kind") or "client"
-        pid = int(body.get("portfolio_id") or 0)
+        pid = _to_int(body.get("portfolio_id") or 0, "portfolio_id")
         if kind == "model":
             model = userdata.get_model(uid, pid)
             if not model:
@@ -1245,16 +1284,20 @@ def metrics_serialize(metrics: dict) -> dict:
     return {k: (round(v, 2) if isinstance(v, float) else v) for k, v in metrics.items()}
 
 
-# Seeded demo portfolio names that may carry the CAS sample transactions
-# (backfilled lazily for portfolios created before transactions_json).
-_DEMO_PORTFOLIO_NAMES = ("CAS Sample Portfolio", "Default Portfolio")
+# [BUG-M14] demo portfolios are identified by the durable is_demo flag
+# (userdata migration + seed_samples.mark_demo_portfolios), not by name —
+# name matching injected sample data into users' own same-named portfolios.
+_DEMO_PORTFOLIO_NAMES = ("CAS Sample Portfolio", "Default Portfolio")  # legacy reference only
 
 
 def _ensure_demo_transactions(uid: int, cp: dict) -> list:
     """Persist the CAS sample transactions onto a seeded demo portfolio that
-    predates transaction storage. Returns the list (empty if not applicable)."""
-    name = (cp.get("name") or "")
-    if cp.get("kind") != "actual" or name not in _DEMO_PORTFOLIO_NAMES:
+    predates transaction storage. Returns the list (empty if not applicable).
+
+    [BUG-M14] keyed off the durable ``is_demo`` flag written by seed_samples /
+    migration — NEVER by name matching, which used to inject 907 sample
+    transactions into any user portfolio that happened to share a demo name."""
+    if not cp.get("is_demo"):
         return []
     try:
         from .seed_samples import cas_sample_transactions
@@ -1326,7 +1369,7 @@ def api_nav_freshness(request: Request, body: dict):
     otherwise every stale fund is refreshed."""
     _user(request)
     from src.nav_freshness import backfill_navs, run_freshness
-    max_age = int(body.get("max_age") or 10)
+    max_age = _to_int(body.get("max_age") or 10, "max_age")
     backfill = bool(body.get("backfill"))
     codes = body.get("codes") or []
     isins = [i for i in (body.get("isins") or []) if i]

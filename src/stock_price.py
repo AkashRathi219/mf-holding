@@ -303,10 +303,14 @@ def _fetch_google(symbol: str) -> list[dict] | None:
     try:
         raw = http_get(GOOGLE_QUOTE_URL.format(sym=symbol), timeout=30, retries=1)
         text = raw.decode("utf-8", "replace")
-        m = re.search(r'data-last-price="([\d.]+)"', text) or re.search(r'"l":\["([\d.]+)"', text)
+        # [BUG-L10] NSE quotes ≥ 1000 carry Indian commas ("1,234.56") — the
+        # old [\d.]+ pattern silently skipped every high-priced stock.
+        m = re.search(r'data-last-price="([\d,.]+)"', text) \
+            or re.search(r'"l":\["([\d,.]+)"', text)
         if not m:
             return None
-        return [{"date": date.today().strftime("%d-%b-%Y"), "close": float(m.group(1))}]
+        return [{"date": date.today().strftime("%d-%b-%Y"),
+                 "close": float(m.group(1).replace(",", ""))}]
     except Exception:
         return None
 

@@ -61,16 +61,32 @@ def _get_json(client: httpx.Client, url: str, attempts: int = 3) -> dict | list:
 
 
 def _weight(rec: dict, key: str = "weight_pct") -> float | None:
+    """Parse a holding weight WITHOUT guessing units — fraction-vs-percent is
+    decided once per scheme by _normalize_scheme_scale [BUG-M12]."""
     v = rec.get(key) or rec.get("percent_nav") or rec.get("pct_nav")
     if v is None:
         return None
     try:
-        f = float(v)
+        return round(float(v), 6)
     except (TypeError, ValueError):
         return None
-    if 0 < f < 1:
-        return round(f * 100, 6)  # fraction -> percent
-    return round(f, 6)
+
+
+def _normalize_scheme_scale(schemes: dict[str, dict]) -> None:
+    """[BUG-M12] Decide the %NAV scale ONCE PER SCHEME from batch statistics
+    (mirrors db._normalize_pct_scale). The old per-record '0 < x < 1 => x100'
+    guess inflated every legitimate sub-1% position (0.85% became 85%) and
+    such positions are common in real portfolios."""
+    for sch in schemes.values():
+        hs = sch["holdings"]
+        pcts = [h["percent_nav"] for h in hs
+                if isinstance(h.get("percent_nav"), (int, float))
+                and h["percent_nav"] > 0]
+        if pcts and max(pcts) < 2:
+            for h in hs:
+                v = h.get("percent_nav")
+                if isinstance(v, (int, float)):
+                    h["percent_nav"] = round(v * 100, 6)
 
 
 def fetch_mfdata(month: str | None = None, timeout: int = 60) -> list[dict]:
@@ -113,6 +129,7 @@ def fetch_mfdata(month: str | None = None, timeout: int = 60) -> list[dict]:
                     "section": (h.get("instrument_type") or h.get("asset_class") or "").strip(),
                 })
             if schemes:
+                _normalize_scheme_scale(schemes)
                 out.append({"amc": name, "as_of": month or "", "schemes": schemes})
         return out
 

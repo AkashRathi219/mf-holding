@@ -58,14 +58,21 @@ def test_rate_limit_is_per_ip(client):
     rl.AUTH_LOGIN_LIMITER.check("5.6.7.8")  # different key -> unaffected
 
 
-def test_forwarded_for_honoured():
+def test_forwarded_for_not_trusted_by_default(monkeypatch):
+    """[BUG-H1] the LEFTMOST XFF entry is client-spoofable behind an appending
+    proxy; by default XFF must be ignored entirely (socket peer wins)."""
     from webapp.ratelimit import client_ip
 
     class Req:  # minimal stand-in
         headers = {"X-Forwarded-For": "203.0.113.7, 10.0.0.1"}
-        client = None
+        client = type("Peer", (), {"host": "198.51.100.1"})()
 
-    assert client_ip(Req()) == "203.0.113.7"
+    monkeypatch.delenv("TRUSTED_PROXY_HOPS", raising=False)
+    assert client_ip(Req()) == "198.51.100.1"
+
+    # opting into one trusted proxy hop takes the proxy-APPENDED (rightmost) IP
+    monkeypatch.setenv("TRUSTED_PROXY_HOPS", "1")
+    assert client_ip(Req()) == "10.0.0.1"
 
 
 # ---- H2: token revocation ---------------------------------------------------

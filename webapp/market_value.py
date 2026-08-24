@@ -68,10 +68,13 @@ def scheme_latest_nav(scheme: dict, prefer: str = "regular") -> tuple | None:
             doc = json.loads(f.read_text(encoding="utf-8"))
             hist = doc.get("history") or []
             if hist:
-                d = hist[-1].get("date")
+                # [BUG-C3] history files can be misordered on disk; the latest
+                # point is the max-dated row, not necessarily the last one.
+                latest = max(hist, key=lambda h: _dtkey(h.get("date")))
+                d = latest.get("date")
                 k = _dtkey(d)
                 if k > best_key:  # '>' keeps the preferred plan on date ties
-                    best = (hist[-1].get("nav"), d)
+                    best = (latest.get("nav"), d)
                     best_key = k
         except Exception:
             continue
@@ -110,7 +113,8 @@ def _scan_nav_history(idx: dict) -> None:
         hist = doc.get("history") or []
         if not isin or not hist:
             continue
-        last = hist[-1]
+        # [BUG-C3] files may be stored misordered; pick the truly-latest row.
+        last = max(hist, key=lambda h: _dtkey(h.get("date")))
         nav = _num(last.get("nav"))
         cur = idx.get(isin)
         if nav is not None and (cur is None or _dtkey(last.get("date")) > _dtkey(cur.get("date"))):
@@ -132,7 +136,8 @@ def _scan_stock_prices(idx: dict) -> None:
         except Exception:
             continue
         hist = doc.get("history") or doc.get("prices") or doc.get("data") or []
-        last = hist[-1] if hist else None
+        # [BUG-C3] defensively select the max-dated row, not the file-last row.
+        last = max(hist, key=lambda h: _dtkey(h.get("date"))) if hist else None
         if not last:
             continue
         nav = _num(last.get("close") or last.get("price") or last.get("nav"))

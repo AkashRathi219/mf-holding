@@ -148,6 +148,16 @@ def _init_schema(con: sqlite3.Connection) -> None:
     if "transactions_json" not in cols:
         con.execute("ALTER TABLE client_portfolios "
                     "ADD COLUMN transactions_json TEXT DEFAULT '[]'")
+    # Migrate [BUG-M14]: durable is_demo marker so demo-transaction backfill
+    # can never be triggered by a USER portfolio that merely shares the demo's
+    # name. One-time backfill flags existing same-name seeded rows so legacy
+    # demo portfolios keep working; new user rows default to 0.
+    cols = [r[1] for r in con.execute("PRAGMA table_info(client_portfolios)")]
+    if "is_demo" not in cols:
+        con.execute("ALTER TABLE client_portfolios ADD COLUMN is_demo INTEGER DEFAULT 0")
+        con.execute(
+            "UPDATE client_portfolios SET is_demo=1 WHERE kind='actual' AND name IN "
+            "('CAS Sample Portfolio', 'Default Portfolio')")
     con.commit()
 
 
@@ -223,7 +233,9 @@ def create_strategy(user_id: int, name: str, description: str, rules_text: str) 
 
 def update_strategy(user_id: int, strategy_id: int, **fields) -> dict | None:
     allowed = {"name", "description", "rules_text"}
-    sets = {k: v for k, v in fields.items() if k in allowed}
+    # [BUG-C1] None means "not provided": partial updates must never overwrite
+    # stored values (or NOT NULL columns) with NULL.
+    sets = {k: v for k, v in fields.items() if k in allowed and v is not None}
     if not sets:
         return get_strategy(user_id, strategy_id)
     sets["updated_at"] = _now()
@@ -352,14 +364,15 @@ def update_model(user_id: int, model_id: int, **fields) -> dict | None:
     try:
         sets = []
         vals = []
+        # [BUG-C1] None means "not provided" (partial-update safety).
         for k in ("name", "description", "strategy_id"):
-            if k in fields:
+            if k in fields and fields[k] is not None:
                 sets.append(f"{k}=?")
                 vals.append(fields[k])
-        if "items" in fields:
+        if fields.get("items") is not None:
             sets.append("items_json=?")
             vals.append(_items(fields["items"]))
-        if "allocations" in fields:
+        if fields.get("allocations") is not None:
             sets.append("allocations_json=?")
             vals.append(_alloc_json(fields["allocations"]))
         if not sets:
@@ -460,7 +473,8 @@ def add_client_document(user_id: int, client_id: int, doc: dict) -> dict:
 
 def update_client(user_id: int, client_id: int, **fields) -> dict | None:
     allowed = {"name", "org", "notes"}
-    sets = {k: v for k, v in fields.items() if k in allowed}
+    # [BUG-C1] None means "not provided" (partial-update safety).
+    sets = {k: v for k, v in fields.items() if k in allowed and v is not None}
     con = _conn()
     try:
         if sets:
@@ -547,17 +561,18 @@ def update_client_portfolio(user_id: int, portfolio_id: int, **fields) -> dict |
     con = _conn()
     try:
         sets, vals = [], []
+        # [BUG-C1] None means "not provided" (partial-update safety).
         for k in allowed:
-            if k in fields:
+            if k in fields and fields[k] is not None:
                 sets.append(f"{k}=?")
                 vals.append(fields[k])
-        if "items" in fields:
+        if fields.get("items") is not None:
             sets.append("items_json=?")
             vals.append(_items(fields["items"]))
-        if "allocations" in fields:
+        if fields.get("allocations") is not None:
             sets.append("allocations_json=?")
             vals.append(_alloc_json(fields["allocations"]))
-        if "transactions" in fields:
+        if fields.get("transactions") is not None:
             sets.append("transactions_json=?")
             vals.append(_tx_json(fields["transactions"]))
         if sets:
@@ -569,6 +584,22 @@ def update_client_portfolio(user_id: int, portfolio_id: int, **fields) -> dict |
     finally:
         con.close()
     return get_client_portfolio(user_id, portfolio_id)
+
+
+def mark_demo_portfolios(user_id: int, names: list[str]) -> None:
+    """[BUG-M14] Flag the given portfolios (by exact name, this user's own
+    rows) as seeded demos so demo-only backfills key off is_demo=1."""
+    if not names:
+        return
+    con = _conn()
+    try:
+        con.execute(
+            f"UPDATE client_portfolios SET is_demo=1 WHERE user_id=? AND "
+            f"name IN ({', '.join('?' for _ in names)})",
+            (user_id, *names))
+        con.commit()
+    finally:
+        con.close()
 
 
 def delete_client_portfolio(user_id: int, portfolio_id: int) -> None:

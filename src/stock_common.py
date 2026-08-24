@@ -9,6 +9,7 @@ from __future__ import annotations
 import gzip
 import http.cookiejar
 import json
+import os
 import re
 import ssl
 import time
@@ -138,5 +139,18 @@ def load_json(path: Path, default=None):
 
 
 def save_json(path: Path, data) -> None:
+    """[BUG-M10] atomic write (tmp + os.replace): a crash mid-write used to
+    leave a truncated JSON that load_json() then reported as {} — which made
+    callers treat curated history as empty and overwrite it for good."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp = path.with_suffix(path.suffix + f".tmp{os.getpid()}")
+    try:
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False),
+                       encoding="utf-8")
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except OSError:
+                pass

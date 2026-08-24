@@ -163,7 +163,6 @@ def strip_plan(name: str) -> str:
         m = re.search(r"[\(\[]([^)\]]+)[\)\]]\s*$", s)
         if m:
             inner = m.group(1).strip()
-            inner_norm = re.sub(r"[^A-Za-z]+", "", inner).lower()
             is_plan = bool(_PLAN_TOKENS.intersection(re.split(r"[^A-Za-z]+", inner.lower())))
             # long/multi-word parentheticals are descriptive, not plan options
             is_descriptive = len(inner) > 24 or ("." in inner) or (len(inner.split()) > 4)
@@ -1647,7 +1646,6 @@ _AMC_ALIASES = {
     "hsbc": "HSBC Mutual Fund",
     "jio": "Jio BlackRock Mutual Fund",
     "jioblackrock": "Jio BlackRock Mutual Fund",
-    "invesco": "Invesco Mutual Fund",
 }
 
 
@@ -2116,15 +2114,20 @@ class WebDB:
             where.append("amc LIKE ? ESCAPE '\\'")
             args.append(f"%{_like(amc)}%")
         if category:
-            where.append("category=?"); args.append(category)
+            where.append("category=?")
+            args.append(category)
         if source:
-            where.append("source=?"); args.append(source)
+            where.append("source=?")
+            args.append(source)
         if coverage:
-            where.append("coverage=?"); args.append(coverage)
+            where.append("coverage=?")
+            args.append(coverage)
         if is_index is not None:
-            where.append("is_index=?"); args.append(1 if is_index else 0)
+            where.append("is_index=?")
+            args.append(1 if is_index else 0)
         if is_etf is not None:
-            where.append("is_etf=?"); args.append(1 if is_etf else 0)
+            where.append("is_etf=?")
+            args.append(1 if is_etf else 0)
         if search:
             where.append("(fund_name LIKE ? ESCAPE '\\' OR amc LIKE ? ESCAPE '\\' "
                          "OR key LIKE ?)")
@@ -2174,7 +2177,8 @@ class WebDB:
              "WHERE h.scheme_id=? ORDER BY h.percent_nav DESC NULLS LAST, h.company")
         args: list = [scheme_id]
         if limit:
-            q += " LIMIT ?"; args.append(limit)
+            q += " LIMIT ?"
+            args.append(limit)
         rows = [dict(r) for r in self.con.execute(q, args).fetchall()]
         eq_isins = self._equity_isin_set()
         for r in rows:
@@ -2905,11 +2909,14 @@ class WebDB:
                          "OR aliases LIKE ? ESCAPE '\\')")
             args += [f"%{_like(q)}%", f"%{_like(q.upper())}%", f"%{_like(q)}%"]
         if confirmed_equity is not None:
-            where.append("confirmed_equity=?"); args.append(confirmed_equity)
+            where.append("confirmed_equity=?")
+            args.append(confirmed_equity)
         if cap:
-            where.append("cap=?"); args.append(cap)
+            where.append("cap=?")
+            args.append(cap)
         if sector:
-            where.append("sector=?"); args.append(sector)
+            where.append("sector=?")
+            args.append(sector)
         w = (" WHERE " + " AND ".join(where)) if where else ""
         total = self.con.execute(f"SELECT COUNT(*) FROM securities{w}", args).fetchone()[0]
         rows = self.con.execute(
@@ -3835,7 +3842,6 @@ class WebDB:
 
     # ---- mapping search ----
     def mapping(self, q: str, limit=50) -> list[dict]:
-        nq = norm_name(q)
         out = []
         if not q:
             return out

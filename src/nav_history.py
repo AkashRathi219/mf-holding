@@ -174,11 +174,17 @@ def _chunks(start: date, end: date) -> list[tuple[date, date]]:
 
 
 def _fetch_amfi(frm: date, tod: date) -> str:
-    """Download one AMFI NAV-history window. Returns the raw text."""
+    """Download one AMFI NAV-history window.
+
+    Returns the raw NAV text, ``""`` for a verified response with no usable
+    payload, and raises after hard network failures. HTML pages (throttle /
+    error) get their own short backoff-and-retry cycle first [BUG-H4]: they
+    must NOT be mistaken for a genuinely empty window."""
     url = (f"{AMFI_URL}?tp=1&frmdt={frm.strftime('%d-%b-%Y')}"
            f"&todt={tod.strftime('%d-%b-%Y')}")
     ctx = _ssl_ctx()
     last_err: Exception | None = None
+    html_tries = 0
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             req = urllib.request.Request(
@@ -192,9 +198,14 @@ def _fetch_amfi(frm: date, tod: date) -> str:
                     raw = gzip.decompress(raw)
             text = raw.decode("utf-8", "replace")
             if not text.lstrip().startswith("Scheme Code"):
-                # AMFI returns an HTML error page when there is no data / error.
+                # AMFI returns an HTML page when throttling us or on error;
+                # occasionally also when the window holds no data at all.
                 if text.lstrip().lower().startswith(("<!doctype", "<html")):
-                    return ""  # no data in this window
+                    html_tries += 1
+                    if html_tries <= 2:
+                        time.sleep(20 * html_tries)  # throttle backoff
+                        continue
+                    return ""
                 raise RuntimeError("unexpected response (not NAV format)")
             return text
         except Exception as e:  # noqa: BLE001
@@ -251,11 +262,39 @@ def backfill(target_codes: set[str], worker_id: int = 0, num_workers: int = 1) -
           f"todo {len(todo)}", flush=True)
 
     total_inserted = 0
+    # [BUG-H4] an HTML/throttle page is NOT proof a window is empty: never
+    # mark it done on the first unknown outcome. After repeated unknowns,
+    # give up permanently so legitimately-empty windows converge.
+    MAX_UNKNOWN_ATTEMPTS = 5
     for j, (frm, tod) in enumerate(todo, 1):
         key = f"{frm.isoformat()}|{tod.isoformat()}"
+        fail_key = f"chunkfail:{key}"
         text = _fetch_amfi(frm, tod)
+        if not text:
+            try:
+                fails = int((cur.execute(
+                    "SELECT value FROM meta WHERE key=?", (fail_key,)).fetchone()
+                    or ("0",))[0] or 0) + 1
+            except ValueError:
+                fails = 1
+            cur.execute("INSERT OR REPLACE INTO meta VALUES (?,?)",
+                        (fail_key, str(fails)))
+            con.commit()
+            if fails >= MAX_UNKNOWN_ATTEMPTS:
+                cur.execute("INSERT OR REPLACE INTO meta VALUES (?, '1')",
+                            (f"chunk:{key}",))
+                con.commit()
+                print(f"  W{worker_id} [{j}/{len(todo)}] {frm}..{tod}: empty/"
+                      f"unreachable x{fails} -> marked done", flush=True)
+            else:
+                print(f"  W{worker_id} [{j}/{len(todo)}] {frm}..{tod}: EMPTY/"
+                      f"throttled (attempt {fails}/{MAX_UNKNOWN_ATTEMPTS}) "
+                      f"- will retry next run", flush=True)
+            time.sleep(REQUEST_DELAY)
+            continue
         rows = _parse_nav_text(text)
         rows = [r for r in rows if r[0] in target_codes]
+        cur.execute("DELETE FROM meta WHERE key=?", (fail_key,))
         if rows:
             for attempt in range(MAX_RETRIES):
                 try:

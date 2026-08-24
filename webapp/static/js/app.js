@@ -136,20 +136,20 @@ async function loadDashboard() {
   // sector bar chart
   const sectors = Object.entries(m.sector_dist).slice(0, 12);
   const canvas = document.getElementById("chartSector");
-  mountChart(() => Charts._renderBar(canvas, sectors.map(s => s[0]), sectors.map(s => s[1]), { height: 280 }));
+  mountChart(() => Charts._renderBar(canvas, sectors.map(s => s[0]), sectors.map(s => s[1]), { height: 280 }), canvas);
   Charts._renderBar(canvas, sectors.map(s => s[0]), sectors.map(s => s[1]), { height: 280 });
 
   // cap donut
   const caps = Object.entries(m.cap_dist);
   const capCanvas = document.getElementById("chartCap");
-  mountChart(() => Charts._renderDonut(capCanvas, caps.map(c => ({ label: c[0], value: c[1] })), { center: App.formatNum(m.pure_stocks), centerLabel: "pure stocks" }));
+  mountChart(() => Charts._renderDonut(capCanvas, caps.map(c => ({ label: c[0], value: c[1] })), { center: App.formatNum(m.pure_stocks), centerLabel: "pure stocks" }), capCanvas);
   Charts._renderDonut(capCanvas, caps.map(c => ({ label: c[0], value: c[1] })), { center: App.formatNum(m.pure_stocks), centerLabel: "pure stocks" });
   document.getElementById("capLegend").innerHTML = caps.map((c, i) =>
     `<span><i style="background:${["var(--chart-1)","var(--chart-5)","var(--chart-4)","var(--chart-6)","var(--chart-8)","var(--chart-7)"][i % 6]}"></i>${c[0]}: ${App.formatNum(c[1])}</span>`).join("");
 
   // ISIN gauge
   const isinCanvas = document.getElementById("chartIsin");
-  mountChart(() => Charts._renderGauge(isinCanvas, m.isin_completeness, 100, { label: "ISIN completeness", color: "@success" }));
+  mountChart(() => Charts._renderGauge(isinCanvas, m.isin_completeness, 100, { label: "ISIN completeness", color: "@success" }), isinCanvas);
   Charts._renderGauge(isinCanvas, m.isin_completeness, 100, { label: "ISIN completeness", color: "@success" });
 
   // coverage bars
@@ -182,6 +182,17 @@ async function loadDashboard() {
 const wiredScreens = new Set();
 function wireOnce(key, fn) {
   if (!wiredScreens.has(key)) { wiredScreens.add(key); fn(); }
+}
+
+// [BUG-M15] double-submit guard for mutating actions: re-entrant calls while
+// a request is in flight are dropped, so double-clicks can no longer create
+// duplicate clients/portfolios/strategies or stack racing analyses.
+const _inflight = new Set();
+async function onceAtATime(key, fn) {
+  if (_inflight.has(key)) return;
+  _inflight.add(key);
+  try { await fn(); }
+  finally { _inflight.delete(key); }
 }
 
 const schemeState = { offset: 0, limit: 50 };
@@ -268,12 +279,14 @@ async function renderSchemeDetail(id, container, titleEl) {
   // NAV pane stays blank for every subsequent visit.
   navControllers = {};
   navCache = null;
+  const reqHash = `#scheme/${id}`;   // [BUG-M15] staleness token
   container.innerHTML = `<div class="empty"><span class="spin"></span> Loading…</div>`;
   try {
     const [s, nav] = await Promise.all([
       App.api(`/schemes/${id}?holdings=1`),
       App.api(`/schemes/${id}/nav`).catch(() => null),
     ]);
+    if (location.hash !== reqHash) return;  // a newer view took over
     navCache = nav;
     const h = s.holdings || [];
 
@@ -883,6 +896,7 @@ async function openBondDetail(isin) {
 
 
 async function renderSecurityDetail(isin, container, titleEl) {
+  const reqHash = `#security/${isin}`;   // [BUG-M15] staleness token
   container.innerHTML = `<div class="empty"><span class="spin"></span> Loading…</div>`;
   navControllers = {};
   try {
@@ -892,6 +906,7 @@ async function renderSecurityDetail(isin, container, titleEl) {
       App.api(`/securities/${encodeURIComponent(isin)}/actions`).catch(() => null),
       App.api(`/securities/${encodeURIComponent(isin)}/reports`).catch(() => null),
     ]);
+    if (location.hash !== reqHash) return;  // a newer view took over
     const type = s.confirmed_equity === 1 ? "Pure listed stock" : s.confirmed_equity === 0.5 ? "Mixed (REIT/InvIT/preference/convertible)" : "Non-equity (bond/CP/ETF/fund)";
     const typeTone = s.confirmed_equity === 1 ? "green" : s.confirmed_equity === 0.5 ? "amber" : "grey";
     const rows = s.used_in && s.used_in.length ? s.used_in.map(u => `<tr>
@@ -1305,13 +1320,15 @@ function pfPieFull100(entries, resolvedTotal) {
 }
 
 async function pfRun() {
-  if (!pfState.items.length) { App.toast("Add at least one line.", true); return; }
-  const out = document.getElementById("pfResults");
-  out.innerHTML = `<div class="empty"><span class="spin"></span> Analysing portfolio\u2026</div>`;
-  try {
-    const r = await App.api("/portfolio/analysis", { method: "POST", body: JSON.stringify({ items: pfItemsPayload() }) });
-    pfRenderResults(r);
-  } catch (e) { out.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`; }
+  await onceAtATime("pf-run", async () => {
+    if (!pfState.items.length) { App.toast("Add at least one line.", true); return; }
+    const out = document.getElementById("pfResults");
+    out.innerHTML = `<div class="empty"><span class="spin"></span> Analysing portfolio\u2026</div>`;
+    try {
+      const r = await App.api("/portfolio/analysis", { method: "POST", body: JSON.stringify({ items: pfItemsPayload() }) });
+      pfRenderResults(r);
+    } catch (e) { out.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`; }
+  });
 }
 
 function pfRenderResults(r) {
@@ -1655,14 +1672,16 @@ function renderCompareChips() {
 }
 
 async function runCompare() {
-  const ids = [...compareState.selected.keys()];
-  const out = document.getElementById("compareResults");
-  if (ids.length < 2) { App.toast("Pick at least two schemes to compare.", true); return; }
-  out.innerHTML = `<div class="empty"><span class="spin"></span> Computing comparison…</div>`;
-  try {
-    const r = await App.api("/schemes/compare", { method: "POST", body: JSON.stringify({ scheme_ids: ids }) });
-    renderCompareResults(r);
-  } catch (e) { out.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`; }
+  await onceAtATime("compare-run", async () => {
+    const ids = [...compareState.selected.keys()];
+    const out = document.getElementById("compareResults");
+    if (ids.length < 2) { App.toast("Pick at least two schemes to compare.", true); return; }
+    out.innerHTML = `<div class="empty"><span class="spin"></span> Computing comparison…</div>`;
+    try {
+      const r = await App.api("/schemes/compare", { method: "POST", body: JSON.stringify({ scheme_ids: ids }) });
+      renderCompareResults(r);
+    } catch (e) { out.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`; }
+  });
 }
 
 function renderCompareResults(r) {
@@ -1973,18 +1992,20 @@ function mvStratParse() {
 }
 
 async function mvStratSave() {
-  const name = document.getElementById("mvStratName").value.trim();
-  const rules_text = document.getElementById("mvStratText").value;
-  const remarks = window._mvStratRemarks || [];
-  if (!name) { App.toast("Enter a strategy name.", true); return; }
-  if (modelEditId) {
-    await apiT(`/strategies/${modelEditId}`, { method: "PUT", body: JSON.stringify({ name, rules_text, remarks }) });
-    modelEditId = null;
-  } else {
-    await apiT("/strategies", { method: "POST", body: JSON.stringify({ name, rules_text, remarks }) });
-  }
-  App.toast("Strategy saved.");
-  mvStrategies(document.getElementById("mview-strategies"));
+  await onceAtATime("strat-save", async () => {
+    const name = document.getElementById("mvStratName").value.trim();
+    const rules_text = document.getElementById("mvStratText").value;
+    const remarks = window._mvStratRemarks || [];
+    if (!name) { App.toast("Enter a strategy name.", true); return; }
+    if (modelEditId) {
+      await apiT(`/strategies/${modelEditId}`, { method: "PUT", body: JSON.stringify({ name, rules_text, remarks }) });
+      modelEditId = null;
+    } else {
+      await apiT("/strategies", { method: "POST", body: JSON.stringify({ name, rules_text, remarks }) });
+    }
+    App.toast("Strategy saved.");
+    mvStrategies(document.getElementById("mview-strategies"));
+  });
 }
 
 async function mvStrategyEdit(id) {
@@ -2115,19 +2136,21 @@ function mvClientUpload(clientId) {
 }
 
 async function mvClientSave() {
-  const name = document.getElementById("mvClientName").value.trim();
-  const org = document.getElementById("mvClientOrg").value.trim();
-  const notes = document.getElementById("mvClientNotes").value.trim();
-  if (!name) { App.toast("Enter a client name.", true); return; }
-  const id = window._mvClientEditId;
-  if (id) {
-    await apiT(`/clients/${id}`, { method: "PUT", body: JSON.stringify({ name, org, notes }) });
-    window._mvClientEditId = null;
-  } else {
-    await apiT("/clients", { method: "POST", body: JSON.stringify({ name, org, notes }) });
-  }
-  App.toast("Client saved.");
-  mvClients(document.getElementById("mview-clients"));
+  await onceAtATime("client-save", async () => {
+    const name = document.getElementById("mvClientName").value.trim();
+    const org = document.getElementById("mvClientOrg").value.trim();
+    const notes = document.getElementById("mvClientNotes").value.trim();
+    if (!name) { App.toast("Enter a client name.", true); return; }
+    const id = window._mvClientEditId;
+    if (id) {
+      await apiT(`/clients/${id}`, { method: "PUT", body: JSON.stringify({ name, org, notes }) });
+      window._mvClientEditId = null;
+    } else {
+      await apiT("/clients", { method: "POST", body: JSON.stringify({ name, org, notes }) });
+    }
+    App.toast("Client saved.");
+    mvClients(document.getElementById("mview-clients"));
+  });
 }
 
 async function mvClientEdit(id) {
@@ -2174,7 +2197,7 @@ async function mvClientPortfolios(el) {
       </div>
       <div class="card"><h3>Client portfolios</h3>${rows}</div>
       <div id="mvCpAna"></div>`;
-    document.getElementById("mvDepRun").addEventListener("click", async () => {
+    document.getElementById("mvDepRun").addEventListener("click", () => onceAtATime("cp-create", async () => {
       const name = document.getElementById("mvDepClientName").value.trim();
       const strategy_id = document.getElementById("mvDepStrategy").value;
       if (!name) { App.toast("Enter a client name.", true); return; }
@@ -2188,7 +2211,7 @@ async function mvClientPortfolios(el) {
       await apiT("/client-portfolios", { method: "POST", body: JSON.stringify({ client_id, strategy_id: Number(strategy_id), kind: "actual", name: `${name} portfolio` }) });
       App.toast("Client portfolio created.");
       mvClientPortfolios(el);
-    });
+    }));
   } catch (e) { el.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`; }
 }
 

@@ -3,13 +3,28 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 logger = logging.getLogger(__name__)
+
+# India has no DST: a fixed offset is exact year-round and avoids the
+# Windows tzdata dependency that zoneinfo("Asia/Kolkata") would need.
+IST = timezone(timedelta(hours=5, minutes=30))
+
+# [BUG-M8] APScheduler's defaults drop runs whose scheduled moment is missed
+# by more than misfire_grace_time=1 SECOND, and log-only. On a rebooting or
+# busy host every job was one blocked event loop away from silently skipping
+# a day. Long grace + coalesce makes a late wake-up run the job once.
+_JOB_DEFAULTS = {"misfire_grace_time": 6 * 3600, "coalesce": True,
+                 "max_instances": 1}
+
+
+def ist_now() -> datetime:
+    return datetime.now(IST)
 
 
 class MonthlyScheduler:
@@ -61,6 +76,7 @@ class MonthlyScheduler:
             id="monthly_holdings_fetch",
             name="Monthly MF Holdings Fetch",
             replace_existing=True,
+            **_JOB_DEFAULTS,
         )
 
         # ---- Daily NAV refresh (keeps data/nav_history/*.json current) ----
@@ -80,6 +96,7 @@ class MonthlyScheduler:
                 id="daily_nav_refresh",
                 name="Daily NAV Refresh",
                 replace_existing=True,
+                **_JOB_DEFAULTS,
             )
             logger.info(
                 f"Daily NAV refresh set: {nav_cfg.get('hour', 20):02d}:"
@@ -98,6 +115,7 @@ class MonthlyScheduler:
                     id="daily_nav_refresh_2",
                     name="Daily NAV Refresh (2nd)",
                     replace_existing=True,
+                    **_JOB_DEFAULTS,
                 )
                 logger.info(
                     f"Daily NAV refresh (2nd) set: {nav_cfg.get('hour2'):02d}:"
@@ -122,6 +140,7 @@ class MonthlyScheduler:
                     id="daily_nav_preheal",
                     name="Daily NAV Stub Pre-Heal",
                     replace_existing=True,
+                    **_JOB_DEFAULTS,
                 )
                 logger.info(
                     f"Daily NAV stub pre-heal set: "
@@ -142,6 +161,7 @@ class MonthlyScheduler:
                 id="daily_stock_refresh",
                 name="Daily Stock Refresh",
                 replace_existing=True,
+                **_JOB_DEFAULTS,
             )
             logger.info(
                 f"Daily stock refresh set: {stock_cfg.get('hour', 21):02d}:"
@@ -162,6 +182,7 @@ class MonthlyScheduler:
                 id="daily_bond_refresh",
                 name="Daily Bond/Debt Refresh",
                 replace_existing=True,
+                **_JOB_DEFAULTS,
             )
             logger.info(
                 f"Daily bond refresh set: {bond_cfg.get('hour', 21):02d}:"
@@ -183,6 +204,7 @@ class MonthlyScheduler:
                 id="monthly_amfi_fetch",
                 name="Monthly AMFI Disclosure Fetch",
                 replace_existing=True,
+                **_JOB_DEFAULTS,
             )
             logger.info(
                 f"Monthly AMFI fetch set: days 8-12 at {amfi_cfg.get('hour', 7):02d}:"
@@ -190,7 +212,10 @@ class MonthlyScheduler:
             )
 
     async def _run_pipeline(self):
-        now = datetime.now()
+        # [BUG-M8] IST clock for target month/year AND marker naming: a UTC
+        # host firing the 06:00 IST Aug-1 run at Jul-31 local previously
+        # fetched July and wrote a July marker, skipping August.
+        now = ist_now()
         marker = self.base_dir / "logs" / f"success_{now.year}-{now.month:02d}.marker"
 
         if marker.exists():

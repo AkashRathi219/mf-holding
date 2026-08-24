@@ -829,51 +829,56 @@ def build_catalog(as_of: date | None = None) -> dict:
         used_sources: list[str] = []
     if files:
         cur_date = d
-        for name in sorted(files):
-            path = files[name]
-            if name.startswith("corp_master_"):
-                try:
-                    for rec in parse_corp_master(path):
-                        insert(rec, 1)
-                    used_sources.append(f"CBM security master {cur_date}")
-                except Exception as e:  # noqa: BLE001
-                    print(f"  ! corp master parse: {e}")
-            if name.startswith("wdm_list_"):
-                try:
-                    for rec in parse_wdm(path):
-                        insert(rec, 2)
-                    used_sources.append(f"WDM securities list {cur_date}")
-                except Exception as e:  # noqa: BLE001
-                    print(f"  ! wdm parse: {e}")
-            if name.startswith("cbm_trades_"):
-                try:
-                    for tr in parse_cbm_trades(path):
-                        bond = rows.get(tr["isin"])
-                        if bond is None:
-                            r = {**tr, "name": "", "coupon": None,
-                                 "coupon_freq": "", "issuer": "",
-                                 "segment": "Corporate Bond",
-                                 "face_value": 100.0,
-                                 "status": "", "source": "CBM daily trades"}
-                            # traded-away-from-master rows carry a REPORTED yield
-                            # (and price) — resolve it so they get a YTM too.
-                            _finalize_rec(r)
-                            insert(r, 3)
-                        else:
-                            if tr.get("last_price") and not bond.get("last_price"):
-                                bond["last_price"] = tr["last_price"]
-                            if tr.get("last_yield") and not bond.get("last_yield"):
-                                bond["last_yield"] = tr["last_yield"]
-                            if tr.get("wa_yield") and not bond.get("wa_yield"):
-                                bond["wa_yield"] = tr["wa_yield"]
-                            if tr.get("last_trade_date"):
-                                if not bond.get("last_trade_date") or \
-                                        tr["last_trade_date"] > bond["last_trade_date"]:
-                                    bond["last_trade_date"] = tr["last_trade_date"]
-                            _finalize_rec(bond)
-                    used_sources.append(f"CBM daily trades {cur_date}")
-                except Exception as e:  # noqa: BLE001
-                    print(f"  ! cbm trades parse: {e}")
+        # [BUG-M9] process in EXPLICIT merge order: the security master must
+        # be loaded before trades (which enrich master rows). Alphabetical
+        # 'sorted(files)' ran cbm_trades first, so every trade created a
+        # throwaway stub that corp_master then wholesale-replaced.
+        for prefix in ("corp_master_", "wdm_list_", "cbm_trades_"):
+            for name in sorted(n for n in files if n.startswith(prefix)):
+                path = files[name]
+                if name.startswith("corp_master_"):
+                    try:
+                        for rec in parse_corp_master(path):
+                            insert(rec, 1)
+                        used_sources.append(f"CBM security master {cur_date}")
+                    except Exception as e:  # noqa: BLE001
+                        print(f"  ! corp master parse: {e}")
+                if name.startswith("wdm_list_"):
+                    try:
+                        for rec in parse_wdm(path):
+                            insert(rec, 2)
+                        used_sources.append(f"WDM securities list {cur_date}")
+                    except Exception as e:  # noqa: BLE001
+                        print(f"  ! wdm parse: {e}")
+                if name.startswith("cbm_trades_"):
+                    try:
+                        for tr in parse_cbm_trades(path):
+                            bond = rows.get(tr["isin"])
+                            if bond is None:
+                                r = {**tr, "name": "", "coupon": None,
+                                     "coupon_freq": "", "issuer": "",
+                                     "segment": "Corporate Bond",
+                                     "face_value": 100.0,
+                                     "status": "", "source": "CBM daily trades"}
+                                # traded-away-from-master rows carry a REPORTED yield
+                                # (and price) — resolve it so they get a YTM too.
+                                _finalize_rec(r)
+                                insert(r, 3)
+                            else:
+                                if tr.get("last_price") and not bond.get("last_price"):
+                                    bond["last_price"] = tr["last_price"]
+                                if tr.get("last_yield") and not bond.get("last_yield"):
+                                    bond["last_yield"] = tr["last_yield"]
+                                if tr.get("wa_yield") and not bond.get("wa_yield"):
+                                    bond["wa_yield"] = tr["wa_yield"]
+                                if tr.get("last_trade_date"):
+                                    if not bond.get("last_trade_date") or \
+                                            tr["last_trade_date"] > bond["last_trade_date"]:
+                                        bond["last_trade_date"] = tr["last_trade_date"]
+                                _finalize_rec(bond)
+                        used_sources.append(f"CBM daily trades {cur_date}")
+                    except Exception as e:  # noqa: BLE001
+                        print(f"  ! cbm trades parse: {e}")
 
     # local seeds fill the gaps (G-Secs/SDLs never traded during the window)
     for rec in _seed_records():

@@ -63,11 +63,19 @@ def refresh_reports(isin: str, ident: dict) -> dict:
     name = ident.get("name") or ""
     if not symbol:
         return {"isin": isin, "status": "no_symbol"}
+    path = REPORTS_DIR / f"{isin}.json"
     announcements = _fetch_nse(symbol)
+    nse_ok = bool(announcements)
+    if not nse_ok:
+        # [BUG-H5] empty NSE response (often Akamai) must not wipe the stored
+        # announcement history; keep the previous list instead.
+        announcements = load_json(path).get("announcements") or []
     doc = {"isin": isin, "symbol": symbol, "name": name,
            "fetched_at": now_iso(), "announcements": announcements}
-    save_json(REPORTS_DIR / f"{isin}.json", doc)
-    return {"isin": isin, "symbol": symbol, "status": "ok", "reports": len(announcements)}
+    save_json(path, doc)
+    return {"isin": isin, "symbol": symbol,
+            "status": "ok" if nse_ok else "kept_previous",
+            "reports": len(announcements)}
 
 
 def run(ident: dict | None = None, symbols: list[str] | None = None,

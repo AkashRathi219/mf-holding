@@ -202,6 +202,12 @@ def seed_for_user(uid: int, reset: bool = False) -> dict:
             strategy_id=strategies.get(STRATEGY_NAME))
         created["portfolios"].append(DEFAULT_PORTFOLIO_NAME)
 
+    # [BUG-M14] durable demo marker: backfill/seed logic must key off this
+    # flag, NOT the portfolio name (a user portfolio that merely shares the
+    # demo's name must never receive sample transactions).
+    userdata.mark_demo_portfolios(
+        uid, [PORTFOLIO_NAME, DEFAULT_PORTFOLIO_NAME])
+
     # [ANA3 movement] BOTH seeded 'actual' portfolios demo the movement
     # analytics with the sample's transactions — newly created AND backfilled
     # on re-seed for portfolios made before transactions_json existed.

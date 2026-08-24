@@ -198,6 +198,11 @@ def register_user(email: str, name: str, org: str, password: str) -> dict:
     if not name:
         raise AuthError("Please enter your name.")
     salt = secrets.token_hex(16)
+    # [BUG-M7] bound inputs before they reach storage.
+    if len(password) > 128:
+        raise AuthError("Password must be at most 128 characters.")
+    if len(email) > 254 or len(name) > 120 or len(org) > 200:
+        raise AuthError("Field too long.")
     con = _conn()
     try:
         cur = con.execute("SELECT id FROM users WHERE email=?", (email,))
@@ -209,6 +214,9 @@ def register_user(email: str, name: str, org: str, password: str) -> dict:
             (email, name, org, _hash_password(password, salt), salt, time.time()))
         con.commit()
         uid = con.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()[0]
+    except sqlite3.IntegrityError:
+        # [BUG-L1] concurrent double-register raced past the existence check.
+        raise AuthError("An account with this email already exists.")
     finally:
         con.close()
     token = _make_token(uid, email, name)
@@ -218,9 +226,18 @@ def register_user(email: str, name: str, org: str, password: str) -> dict:
 
 
 def _superadmin_emails() -> set[str]:
+    """[BUG-H2] NO hardcoded default: an unset SUPERADMIN_EMAILS means nobody
+    is superadmin (fail-closed). Provision admins by setting the env var, e.g.
+    SUPERADMIN_EMAILS=owner@example.com,ops@example.com"""
     import os
-    return {e.strip().lower() for e in os.environ.get(
-        "SUPERADMIN_EMAILS", "akash@aracharatventures.com").split(",") if e.strip()}
+    raw = os.environ.get("SUPERADMIN_EMAILS", "")
+    if not raw.strip():
+        return set()
+    return {e.strip().lower() for e in raw.split(",") if e.strip()}
+
+
+def superadmin_configured() -> bool:
+    return bool(_superadmin_emails())
 
 
 def login_user(email: str, password: str) -> dict:
@@ -235,6 +252,9 @@ def login_user(email: str, password: str) -> dict:
     finally:
         con.close()
     if not row:
+        # [BUG-H3] burn one PBKDF2 against a decoy so response timing does not
+        # reveal whether the email is registered (user enumeration).
+        _hash_password(password, "0" * 32)
         raise AuthError("Invalid email or password.")
     uid, db_email, name, org, pw_hash, salt = row
     if not hmac.compare_digest(_hash_password(password, salt), pw_hash):

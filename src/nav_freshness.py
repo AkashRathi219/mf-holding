@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from datetime import date, datetime, time as _time, timedelta
 from pathlib import Path
@@ -24,6 +25,18 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 NAV_DIR = BASE_DIR / "data" / "nav_history"
 STOCK_DIR = BASE_DIR / "data" / "stock_history"
+
+logger = logging.getLogger(__name__)
+
+
+def scheme_nav_files(nav_dir: Path | None = None) -> list[Path]:
+    """[BUG] Real scheme-code files only: sentinel manifests (manifest.json,
+    download_summary.json) share data/nav_history/ and were previously counted
+    as schemes by freshness/audit/backfill --all."""
+    d = nav_dir or NAV_DIR
+    if not d.is_dir():
+        return []
+    return sorted(p for p in d.glob("*.json") if p.stem.isdigit())
 
 # ---------------------------------------------------------------------------
 # AMFI publication calendar [NAV-FRESH]
@@ -56,6 +69,7 @@ NSE_HOLIDAYS_2026 = frozenset({
 })
 
 _HOLIDAY_CACHE: dict[int, frozenset] = {}
+_HOLIDAY_WARNED: set[int] = set()
 
 
 def nse_holidays(year: int) -> frozenset:
@@ -73,6 +87,14 @@ def nse_holidays(year: int) -> frozenset:
                 if isinstance(k, str) and len(k) == 10)
         except Exception:
             pass
+    elif not days and year not in _HOLIDAY_WARNED:
+        # [BUG-L16] a silently-empty calendar misclassifies publish-days from
+        # this year on; say so once, loudly.
+        logger.warning(
+            "No NSE holiday calendar for %d (builtin covers 2026 only). Add "
+            "data/reference/nse_holidays_%d.json or freshness buckets will "
+            "drift.", year, year)
+        _HOLIDAY_WARNED.add(year)
     _HOLIDAY_CACHE[year] = days
     return days
 
@@ -212,9 +234,7 @@ def stale_days(date_str: str) -> int | None:
 
 def check_navs(max_age_days: int = 10) -> list[dict]:
     stale = []
-    if not NAV_DIR.is_dir():
-        return stale
-    for fn in sorted(NAV_DIR.glob("*.json")):
+    for fn in scheme_nav_files():
         code = fn.stem
         try:
             doc = json.loads(fn.read_text(encoding="utf-8"))
@@ -294,14 +314,13 @@ def cas_sample_codes() -> list[str]:
             codes.append(c)
 
     # 1) nav_history files keyed by their own isin field
-    if NAV_DIR.is_dir():
-        for fn in NAV_DIR.glob("*.json"):
-            try:
-                hd = json.loads(fn.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-            if (hd.get("isin") or "").strip().upper() in isins:
-                add(hd.get("scheme_code"))
+    for fn in scheme_nav_files():
+        try:
+            hd = json.loads(fn.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if (hd.get("isin") or "").strip().upper() in isins:
+            add(hd.get("scheme_code"))
     # 2) fall back to the market-value index (which may only hold the universe NAV)
     try:
         from webapp.market_value import latest_nav_index
@@ -379,9 +398,7 @@ def portfolio_stale(items: list[dict], max_age_days: int = 10) -> list[dict]:
 
 
 def all_codes() -> list[str]:
-    if not NAV_DIR.is_dir():
-        return []
-    return sorted(fn.stem for fn in NAV_DIR.glob("*.json"))
+    return sorted(fn.stem for fn in scheme_nav_files())
 
 
 def scheme_history_completeness(code: str) -> dict | None:
@@ -442,7 +459,7 @@ def completeness_report(latest_expected: str | None = None) -> dict:
 
     complete: list[dict] = []
     incomplete: list[dict] = []
-    for fn in sorted(NAV_DIR.glob("*.json")):
+    for fn in scheme_nav_files():
         try:
             doc = json.loads(fn.read_text(encoding="utf-8"))
         except Exception:

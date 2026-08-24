@@ -46,12 +46,10 @@ def _last_point(path: Path) -> tuple | None:
 
 def audit_corpus(expected: date) -> tuple[Counter, list[dict]]:
     """Classify every local nav_history file. Returns (buckets, rows)."""
-    from .nav_freshness import classify
+    from .nav_freshness import scheme_nav_files  # classify imported at module top
     buckets: Counter = Counter()
     rows: list[dict] = []
-    if not NAV_DIR.is_dir():
-        return buckets, rows
-    for fn in sorted(NAV_DIR.glob("*.json")):
+    for fn in scheme_nav_files():
         code, fund, last_date, last_nav = _last_point(fn) or (fn.stem, "", None, None)
         cls = classify(last_date, expected=expected)
         buckets[cls["bucket"]] += 1
@@ -77,7 +75,8 @@ def r2_coverage() -> dict | None:
                 if k.endswith(".json")]
         if not keys:
             return None
-        local = {fn.name for fn in NAV_DIR.glob("*.json")} if NAV_DIR.is_dir() else set()
+        from .nav_freshness import scheme_nav_files
+        local = {fn.name for fn in scheme_nav_files()}
         remote_names = {k.split("/")[-1] for k in keys}
         return {"r2_objects": len(remote_names), "local_files": len(local),
                 "remote_only": len(remote_names - local),
@@ -95,14 +94,18 @@ def _live_nav_rows(expected: date, days: int = 10) -> dict[str, tuple]:
     out: dict[str, tuple] = {}
     for code, datestr, nav, *_ in _parse_nav_text(text):
         prev = out.get(code)
-        if prev is None or datestr > prev[0]:
+        # [BUG-L9] 'DD-Mon-YYYY' strings are NOT lexicographically comparable;
+        # compare chronological keys or 05-Oct beats 18-Aug.
+        from .nav_history import _date_key
+        if prev is None or _date_key(datestr) > _date_key(prev[0]):
             out[code] = (datestr, nav)
     return out
 
 
 def three_way_sample(expected: date, sample: int, live: bool) -> dict:
     """Random-sample correctness check: history vs live AMFI vs schemes DB."""
-    files = sorted(NAV_DIR.glob("*.json")) if NAV_DIR.is_dir() else []
+    from .nav_freshness import scheme_nav_files
+    files = scheme_nav_files()
     with_points = []
     for fn in files:
         pt = _last_point(fn)

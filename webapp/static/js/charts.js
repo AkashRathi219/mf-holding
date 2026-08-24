@@ -592,7 +592,23 @@ const Charts = {
 
 const chartCanvases = [];
 
-function mountChart(fn) { chartCanvases.push(fn); }
-window.addEventListener("resize", () => chartCanvases.forEach(fn => fn()));
-function rerenderCharts() { chartCanvases.forEach(fn => fn()); }
+// [BUG-M15] the registry used to grow forever: every mount pushed a closure
+// retaining its canvas + full series, and each resize re-rendered hundreds of
+// dead detached charts. Entries whose canvas has left the DOM are pruned on
+// every mount/resize; render fns self-identify their canvas via .canvas.
+function _pruneCharts() {
+  for (let i = chartCanvases.length - 1; i >= 0; i--) {
+    const fn = chartCanvases[i];
+    const c = fn.canvas;
+    if (c && !c.isConnected) chartCanvases.splice(i, 1);
+  }
+}
+
+function mountChart(fn, canvas) {
+  _pruneCharts();
+  fn.canvas = canvas || null;   // enables disconnect-based pruning
+  chartCanvases.push(fn);
+}
+window.addEventListener("resize", () => { _pruneCharts(); chartCanvases.forEach(fn => fn()); });
+function rerenderCharts() { _pruneCharts(); chartCanvases.forEach(fn => fn()); }
 document.addEventListener("themechange", () => rerenderCharts());

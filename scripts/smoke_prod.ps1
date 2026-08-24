@@ -26,10 +26,16 @@ $results = foreach ($path in "/api/version", "/api/health", "/api/scope-stats", 
               "--resolve", "${host_}:443:${ip}")
     $out = & curl.exe @args "$BaseUrl$path" 2>$null
     $code = (& curl.exe @args -o NUL -w "%{http_code}" "$BaseUrl$path" 2>$null)
+    # [BUG-L5] explicit expected codes: the old '<500 = pass' gate happily
+    # accepted 404s and 429-storms as a healthy deploy.
+    $expected = switch ($path) {
+        "/login"          { @(200, 302, 307) }
+        default           { @(200) }
+    }
     [pscustomobject]@{
         Path   = $path
         Status = [int]$code
-        Ok     = ($code -ge 200 -and $code -lt 500)
+        Ok     = ($expected -contains [int]$code)
         Peek   = (($out | Out-String).Trim() -replace "\s+", " ")
         Detail = $out
     }
