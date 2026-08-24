@@ -36,11 +36,35 @@ OUT_CSV = DATA_DIR / "reference" / "scheme_code_resolution.csv"
 
 _NONALNUM = re.compile(r"[^a-z0-9]+")
 
+# Known fund-house renames: the DB's amc column already carries the new
+# house, but legacy fund_name strings keep the old brand (IDFC Mutual Fund
+# -> Bandhan Mutual Fund, 2023). Applied to name tokens BEFORE matching so
+# a renamed scheme ranks its true successor above same-named funds at other
+# houses ('IDFC Infrastructure Fund' must resolve to BANDHAN Infrastructure
+# Fund, never the HDFC lookalike). Extend as more houses rename.
+HOUSE_RENAMES = {"idfc": "bandhan"}
+
+# Generic words present in every AMC header ('... Mutual Fund') — stripped
+# before house-token comparison so the same-house boost can't fire on them.
+_AMC_GENERIC_TOKENS = {"mutual", "fund", "the"}
+
+
+def _house_tokens(amc: str) -> set[str]:
+    return set(norm_name(amc).split()) - _AMC_GENERIC_TOKENS
+
+
+def _rename_house_tokens(tokens: list[str]) -> list[str]:
+    return [HOUSE_RENAMES.get(t, t) for t in tokens]
+
 
 def norm_name(name: str) -> str:
     """Lowercase, punctuation -> space, collapse. Keeps plan tokens
-    (direct/regular/growth) so a scheme row matches ITS plan's code."""
-    return _NONALNUM.sub(" ", str(name or "").lower()).strip()
+    (direct/regular/growth) so a scheme row matches ITS plan's code.
+    Normalises the spelled-out ETF category ('exchange traded fund/scheme')
+    to 'etf' so legacy names match their abbreviated renamed successors."""
+    s = str(name or "").lower().replace("exchange traded fund", "etf") \
+        .replace("exchange traded scheme", "etf")
+    return _NONALNUM.sub(" ", s).strip()
 
 
 def load_amfi_directory(path: Path = NAVALL_TXT) -> dict[str, tuple[str, str]]:
@@ -70,12 +94,34 @@ def load_amfi_directory(path: Path = NAVALL_TXT) -> dict[str, tuple[str, str]]:
     return out
 
 
-def candidates(name: str, directory: dict[str, tuple[str, str]], top: int = 3
+def candidates(name: str, directory: dict[str, tuple[str, str]], top: int = 3,
+               scheme_amc: str = "", scheme_plan: str = ""
                ) -> list[tuple[str, str, float, str]]:
-    """Top-(top) (code, amfi_name, ratio, amc) candidates for one scheme name."""
-    target = norm_name(name)
-    if not target:
+    """Top-(top) (code, amfi_name, ratio, amc) candidates for one scheme name.
+
+    Three guards against wrong matches:
+    * house renames (HOUSE_RENAMES) are applied to the target tokens first;
+    * candidates whose navall AMC header matches the scheme's own ``amc``
+      get a +0.15 ratio boost — the DB already knows the correct house;
+    * plan alignment: a Regular-plan scheme prefers 'regular plan' candidates
+      and is penalised 'direct plan' ones (and vice versa)."""
+    target_norm = norm_name(name)
+    if not target_norm:
         return []
+    t_tokens = _rename_house_tokens(target_norm.split())
+    target = " ".join(t_tokens)
+    t_token_set = set(t_tokens)
+    # ETF alignment from the scheme's OWN name (the DB is_etf flag is
+    # unreliable on legacy rows): 'IDFC Nifty Exchange Traded Fund'
+    # normalises to an etf token; 'IDFC Nifty Fund' does not and must never
+    # match an ETF scheme.
+    wants_etf = "etf" in t_token_set
+    amc_tokens = _house_tokens(scheme_amc) if scheme_amc else set()
+    plan = (scheme_plan or "").strip().lower()
+    want_plan = ("direct" if plan.startswith("direct")
+                 else "regular" if plan.startswith("reg") else "")
+    other_plan = ({"direct": "regular", "regular": "direct"}.get(want_plan)
+                  or "")
     exact = directory.get(target)
     scored: list[tuple[float, str, str, str]] = []
     if exact is not None:
@@ -84,9 +130,24 @@ def candidates(name: str, directory: dict[str, tuple[str, str]], top: int = 3
         if norm == target:
             continue
         # cheap pre-filter: require some token overlap before the expensive ratio
-        if not set(target.split()) & set(norm.split()):
+        if not t_token_set & set(norm.split()):
             continue
         ratio = difflib.SequenceMatcher(None, target, norm).ratio()
+        if amc_tokens and amc_tokens & _house_tokens(amc):
+            ratio = min(1.0, ratio + 0.15)  # same fund house as the scheme row
+        c_tokens = set(norm.split())
+        if "etf" in c_tokens:
+            if wants_etf:
+                ratio = min(1.0, ratio + 0.05)
+            else:
+                # structural mismatch: a non-ETF scheme never maps to an ETF
+                # scheme (different instrument/ISIN), however similar the name
+                ratio = max(0.0, ratio - 0.3)
+        if want_plan:
+            if want_plan in norm:
+                ratio = min(1.0, ratio + 0.05)
+            elif other_plan in norm:
+                ratio = max(0.0, ratio - 0.05)
         if ratio >= 0.55:
             scored.append((ratio, code, norm, amc))
     scored.sort(key=lambda t: -t[0])
@@ -117,7 +178,9 @@ def build_review_csv(db_path: Path = DB_PATH,
     out = []
     for r in rows:
         for code, norm, ratio, amc in candidates(r["fund_name"], directory,
-                                                 top=top):
+                                                 top=top,
+                                                 scheme_amc=r["amc"] or "",
+                                                 scheme_plan=r["plan"] or ""):
             out.append({"scheme_id": r["id"], "fund_name": r["fund_name"],
                         "scheme_amc": r["amc"] or "", "plan": r["plan"] or "",
                         "source": r["source"], "proposed_code": code,
@@ -133,6 +196,21 @@ def build_review_csv(db_path: Path = DB_PATH,
         writer.writerows(out)
     print(f"{len(rows)} code-less schemes -> {len(out)} candidate rows "
           f"in {out_csv}")
+    # One AMFI code serves exactly one scheme — flag top-1 duplicates so the
+    # reviewer doesn't approve two schemes onto the same fund by accident.
+    top1: dict[str, int] = {}
+    for r in out:
+        if r["ratio"] >= 0.55:
+            top1.setdefault(r["proposed_code"], 0)
+            top1[r["proposed_code"]] += 1
+    dupes = {c: n for c, n in top1.items() if n > 1}
+    if dupes:
+        print(f"  !! {len(dupes)} codes proposed for MULTIPLE schemes — "
+              f"approve at most one row per code:")
+        for c, n in sorted(dupes.items(), key=lambda kv: -kv[1])[:10]:
+            names = [r["fund_name"] for r in out
+                     if r["proposed_code"] == c and r["ratio"] >= 0.55]
+            print(f"     {c}: {n} schemes -> {', '.join(names[:4])}")
     print("review: set approved=yes on the rows you accept, then run --apply")
     return len(out)
 

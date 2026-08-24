@@ -340,6 +340,37 @@ def test_analytics_cache_hits_on_same_data(tmp_path, monkeypatch):
     assert a2 == a1 and a2 is not a1  # equal content, defensive copy
 
 
+def test_resolver_renamed_house_beats_wrong_house_lookalike(tmp_path):
+    """IDFC -> Bandhan rename: 'IDFC Infrastructure Fund' must rank the
+    BANDHAN Infrastructure Fund above the HDFC same-named lookalike, and the
+    scheme's own (already-renamed) AMC boosts that ranking further."""
+    from scripts.resolve_scheme_codes import candidates, load_amfi_directory
+    p = tmp_path / "navall.txt"
+    p.write_text(
+        "Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;"
+        "Scheme Name;Net Asset Value;Date\n"
+        "HDFC Mutual Fund\n"
+        "107525;INE540H01027;;HDFC Infrastructure Fund-IDCW Plan;42.0;21-Aug-2026\n"
+        "Bandhan Mutual Fund\n"
+        "114476;INF194K01BY9;;BANDHAN Infrastructure Fund - Regular Plan - Growth;"
+        "88.0;21-Aug-2026\n"
+        "118469;INF194K01X46;;BANDHAN Infrastructure Fund-Direct Plan-Growth;"
+        "90.0;21-Aug-2026\n",
+        encoding="utf-8")
+    d = load_amfi_directory(p)
+    got = candidates("IDFC Infrastructure Fund", d,
+                     scheme_amc="Bandhan Mutual Fund", scheme_plan="Regular")
+    assert got, "no candidates"
+    assert got[0][0] == "114476"  # the Regular-plan Bandhan successor, not
+    # HDFC 107525 and not the Direct-plan sibling 118469
+    assert "bandhan" in got[0][1] and "hdfc" not in got[0][1]
+    assert "regular" in got[0][1]
+    # plan alignment: a Direct-plan scheme flips to the Direct sibling
+    got_d = candidates("IDFC Infrastructure Fund", d,
+                       scheme_amc="Bandhan Mutual Fund", scheme_plan="Direct")
+    assert got_d[0][0] == "118469"
+
+
 def test_resolver_apply_writes_only_approved(tmp_path, monkeypatch):
     import sqlite3
     from conftest import WEBAPP_DB
