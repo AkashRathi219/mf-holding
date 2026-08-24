@@ -2269,12 +2269,17 @@ function renderPortfolioMovementBlock(container, a) {
   const ddSub = mv.drawdown_unavailable
     ? `unavailable: ${App.esc(mv.drawdown_unavailable.reason || "")} · ${App.formatNum(mv.drawdown_unavailable.artifact_days)} inconsistent statement days`
     : "on flow-adjusted path";
+  const startNote = (mv.data_note && mv.data_note.partial_statement)
+    ? " · partial statement — opening deduced to earliest NAV"
+    : (mv.data_note && mv.data_note.switches_skipped
+       ? ` · ${App.formatNum(mv.data_note.switches_skipped)} internal switch(es) excluded`
+       : "");
   host.innerHTML = `<h3>Portfolio movement <span class="page-sub">actual cash flows · ${App.esc(a.movement_source || "")}</span></h3>
-    <div class="page-sub">Reconstructed ${App.formatDate(mv.start)} → ${App.formatDate(mv.end)} · ${App.formatNum(mv.days)} days · marked daily at scheme NAVs, flow-adjusted daily returns.</div>
+    <div class="page-sub">Reconstructed ${App.formatDate(mv.start)} → ${App.formatDate(mv.end)} · ${App.formatNum(mv.days)} days · marked daily at scheme NAVs, flow-adjusted daily returns.${startNote}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
       ${cell("Opening value", App.formatINR(mv.opening_value, 2), App.formatDate(mv.start) + " · deduced at statement start")}
       ${cell("Terminal value", App.formatINR(mv.terminal_value, 2), App.formatDate(mv.end))}
-      ${cell("Total invested", "₹" + App.formatNum(Math.abs(mv.total_net_flow), 2), "net purchases minus redemptions")}
+      ${cell("Net invested", "₹" + App.formatNum(Math.abs(mv.total_net_flow), 2), "purchases ₹" + App.formatNum(mv.cash_in || 0, 0) + " − redemptions ₹" + App.formatNum(Math.abs(mv.cash_out || 0), 0) + " · switches excluded")}
       ${cell("TWR till date", mv.total_twr_pct != null ? App.formatNum(mv.total_twr_pct, 2) + "%" : "—", "unannualised · flow-adjusted")}
       ${cell("TWR ann. till date", mv.annualized_twr_pct != null ? App.formatNum(mv.annualized_twr_pct, 2) + "%" : "—", (mv.annualized_window ? fmtWinRange(mv.annualized_window) : "—") + annNote)}
       ${cell("XIRR (money-weighted)", mv.xirr_pct != null ? App.formatNum(mv.xirr_pct, 2) + "%" : "—", annNote || "annualised, 365.25 basis")}

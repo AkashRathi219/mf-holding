@@ -6,7 +6,7 @@ Living reference for every figure the performance engine emits
 `tests/test_analytics.py`, `tests/test_compare.py`,
 `tests/test_portfolio_analytics.py`.
 
-Methodology version: **`perf-v1.3-2026-08-24`** (stamped into every
+Methodology version: **`perf-v1.4-2026-08-24`** (stamped into every
 `compute_series_analytics` payload as `methodology_version`, and into
 proposals).
 
@@ -175,6 +175,18 @@ ACTUAL money path from the statement's purchases/redemptions
 7. Constituents report opening/end units, tx counts and first/last tx dates;
    schemes without NAV history are honestly omitted (`nav_missing` class).
    No transactions → `movement: null` (weight-blend block always still runs).
+
+**Cash semantics (perf-v1.4):** `parse_cas_transactions` signs every amount
+by type — the engine consumes them as-is (no double signing). SWITCH_IN /
+SWITCH_OUT are internal transfers: excluded from units, flows and invested
+(reported in `data_note.switches_skipped`). `total_net_flow` = real-cash
+purchases − redemptions; `cash_in` / `cash_out` expose the gross pair;
+`recon` echoes opening value at series start, opening units, flow sum and
+terminal so every figure reconciles. Series-start rule: a full-history
+statement (deduced opening ≈ 0) begins at the FIRST PURCHASE date; a partial
+statement (positive deduced opening) keeps the earliest valuable NAV date
+and sets `data_note.partial_statement` — the live card flags this honestly
+instead of silently minting a fabricated start.
 
 **Known limitation (documented, honest):** for statements whose transaction
 list is PARTIAL — the deduction `opening = end − Σtx` then assigns the

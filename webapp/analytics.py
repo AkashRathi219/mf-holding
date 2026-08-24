@@ -35,7 +35,7 @@ MIN_CAGR_WINDOW_DAYS = 90     # below this, even since-inception CAGR is None:
 MIN_RISK_WINDOW_DAYS = 365    # risk stats need >=1y of observed span, not just
                               # >=30 points: 30 points over 5 weeks must never
                               # masquerade as "3-year" volatility
-METHODOLOGY_VERSION = "perf-v1.3-2026-08-24"  # stamped into proposals [ANA4]
+METHODOLOGY_VERSION = "perf-v1.4-2026-08-24"  # stamped into proposals [ANA4]
 
 
 def parse_nav_date(s) -> date | None:
@@ -476,10 +476,17 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
     if not transactions:
         return None
     parsed: list[dict] = []
+    switches_skipped = 0
     for t in transactions:
         d = parse_nav_date(t.get("date") or "")
+        # [perf-v1.4] SWITCH_IN/SWITCH_OUT are INTERNAL transfers, not cash:
+        # excluded everywhere (units, flows, invested) per product decision.
+        if (t.get("type") or "").upper() in ("SWITCH_IN", "SWITCH_OUT"):
+            if d is not None:
+                switches_skipped += 1
+            continue
         units = float(t.get("cum_units") or 0.0)
-        amt = float(t.get("amount") or 0.0) * (t.get("sign") or 0.0)
+        amt = float(t.get("amount") or 0.0)  # parse already signs by type
         if d is None or (units == 0.0 and amt == 0.0):
             continue
         code, isin = _tx_key(t)
@@ -532,8 +539,17 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
         return {"error": "no NAV history for any scheme with transactions"}
 
     nav_dates = sorted({dd for s in schemes for dd in s["nav"].keys()})
-    start = min(parsed[0]["d"], nav_dates[0]) if nav_dates else parsed[0]["d"]
     tx_dates = sorted({t["d"] for t in parsed})
+    total_opening_units = sum(s["opening_units"] for s in schemes)
+    # [perf-v1.4] series-start rule: a full-history statement (deduced opening
+    # ~0) begins at the FIRST PURCHASE date — before that the account held
+    # nothing; a partial statement (positive deduced opening) keeps the
+    # earliest valuable NAV date and is flagged.
+    partial_statement = total_opening_units >= 1.0
+    if partial_statement:
+        start = min(parsed[0]["d"], nav_dates[0]) if nav_dates else parsed[0]["d"]
+    else:
+        start = parsed[0]["d"]
     end = max([t["d"] for t in parsed] + (nav_dates or []))
     grid = sorted({d for d in nav_dates if start <= d <= end} | set(tx_dates))
     if len(grid) < 2:
@@ -622,6 +638,8 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
                         for s in schemes if _nav_at(s, days[0]))
     terminal_value = vals[-1]
     total_net_flow = sum(t["amt"] for t in parsed)
+    cash_in = sum(t["amt"] for t in parsed if t["amt"] > 0)
+    cash_out = sum(t["amt"] for t in parsed if t["amt"] < 0)
 
     out: dict = {
         "start": days[0].isoformat(),
@@ -630,6 +648,8 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
         "opening_value": round(opening_value, 2),
         "terminal_value": round(terminal_value, 2),
         "total_net_flow": round(total_net_flow, 2),
+        "cash_in": round(cash_in, 2),
+        "cash_out": round(cash_out, 2),
         "total_twr_pct": round(total_twr * 100.0, 2),
         "daily_returns": {"dates": [d.isoformat() for d in days[1:]],
                           "values": [round(r * 100.0, 4) for r in rets]},
@@ -639,6 +659,16 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
             "days": len(days),
             "artifact_days": artifact_days,
             "artifacts": artifact_days > 0,
+            "switches_skipped": switches_skipped,
+            "partial_statement": partial_statement,
+            "start_reason": ("first_purchase" if not partial_statement
+                             else "earliest_nav_partial_statement"),
+        },
+        "recon": {
+            "opening_value_at_start": round(opening_value, 2),
+            "opening_units_total": round(total_opening_units, 4),
+            "flows_sum": round(total_net_flow, 2),
+            "terminal_value": round(terminal_value, 2),
         },
         "max_drawdown_pct": (None if artifact_days
                              else _pct_or_none(max_drawdown(linked))),

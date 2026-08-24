@@ -34,11 +34,14 @@ def _lookup(nav: dict):
 def _tx(day: str, units: float, amount: float, ttype: str = "PURCHASE",
         isin: str = "INF000000101", code: str = "700001",
         name: str = "Test Fund") -> dict:
-    return {"date": day, "type": ttype, "sign": (1.0 if ttype in
-            ("PURCHASE", "BUY", "SWITCH_IN", "REINVESTMENT") else -1.0),
-            "units": units, "amount": amount, "cum_units": units * (1.0 if
-            ttype in ("PURCHASE", "BUY", "SWITCH_IN", "REINVESTMENT")
-            else -1.0), "isin": isin, "amfi_code": code, "name": name,
+    """Canonical record mirroring parse_cas_transactions: amount and
+    cum_units are SIGNED by type (PURCHASE +, REDEEM/SWITCH_OUT -)."""
+    is_in = ttype in ("PURCHASE", "BUY", "SWITCH_IN", "REINVESTMENT")
+    sign = 1.0 if is_in else -1.0
+    return {"date": day, "type": ttype, "sign": sign,
+            "units": units, "amount": round(amount * sign, 4),
+            "cum_units": round(units * sign, 4),
+            "isin": isin, "amfi_code": code, "name": name,
             "nav": None}
 
 
@@ -236,6 +239,109 @@ def test_drawdown_present_without_artifacts():
     assert got["data_note"]["artifacts"] is False
     assert got["max_drawdown_pct"] == pytest.approx(-10.0, abs=0.01)
     assert got["drawdown_unavailable"] is None
+
+
+# ---- regressions: signed-parse contract, switches, invested, start rule ----------
+
+
+def test_parse_output_engine_contract_no_double_sign():
+    """Engine consumes parse_cas_transactions output as-is (already signed).
+    A REDEEM day must NOT double-cancel: net flow = purch - redeem."""
+    d0 = date(2026, 1, 1)
+    nav = {}
+    v = 100.0
+    for i in range(40):
+        if i:
+            v = round(v * 1.001, 4)
+        nav[(d0 + td(days=i)).isoformat()] = v
+    doc = {"transactions": [
+        {"date": d0.isoformat(), "transaction_type": "PURCHASE", "units": "100",
+         "amount": "10000", "isin": "INF000000101", "amfi_code": "700001",
+         "scheme_name": "Test Fund"},
+        {"date": (d0 + td(days=20)).isoformat(), "transaction_type": "REDEEM",
+         "units": "40", "amount": "4080.40", "isin": "INF000000101",
+         "amfi_code": "700001", "scheme_name": "Test Fund"}]}
+    txs = parse_cas_transactions(doc)
+    items = [{"isin": "INF000000101", "name": "Test Fund", "units": 60.0,
+              "amfi_code": "700001"}]
+    got = portfolio_movement_series(items, txs, _lookup(nav))
+    assert got is not None and "error" not in got
+    # net invested = 10000 - 4080.40 = 5919.60 (REDEEM signed negative)
+    assert got["total_net_flow"] == pytest.approx(5919.60, abs=0.02)
+    assert got["cash_in"] == pytest.approx(10000.0, abs=0.02)
+    assert got["cash_out"] == pytest.approx(-4080.40, abs=0.02)
+    # clean TWR around both flows (~0.1%/day drift, no artifacts from signs)
+    assert got["data_note"]["artifacts"] is False
+
+
+def test_switch_in_excluded_from_everywhere():
+    """SWITCH_IN is internal: excluded from units, flows, invested."""
+    d0 = date(2026, 1, 1)
+    nav = {}
+    v = 100.0
+    for i in range(40):
+        if i:
+            v = round(v * 1.001, 4)
+        nav[(d0 + td(days=i)).isoformat()] = v
+    doc = {"transactions": [
+        {"date": d0.isoformat(), "transaction_type": "PURCHASE", "units": "50",
+         "amount": "5000", "isin": "INF000000101", "amfi_code": "700001",
+         "scheme_name": "Test Fund"},
+        {"date": (d0 + td(days=10)).isoformat(), "transaction_type": "SWITCH_IN",
+         "units": "30", "amount": "3030", "isin": "INF000000101",
+         "amfi_code": "700001", "scheme_name": "Test Fund"}]}
+    txs = parse_cas_transactions(doc)
+    items = [{"isin": "INF000000101", "name": "Test Fund", "units": 80.0,
+              "amfi_code": "700001"}]
+    got = portfolio_movement_series(items, txs, _lookup(nav))
+    assert got is not None and "error" not in got
+    assert got["data_note"]["switches_skipped"] == 1
+    # invested excludes the switch: net = 5000 only; opening = 80-50 = 30u
+    assert got["total_net_flow"] == pytest.approx(5000.0, abs=0.02)
+    assert got["cash_in"] == pytest.approx(5000.0, abs=0.02)
+    c = got["constituents"][0]
+    assert c["opening_units"] == pytest.approx(30.0, abs=1e-6)
+    assert c["tx_count"] == 1  # switch not counted
+
+
+def test_start_rule_full_history_begins_at_first_purchase():
+    """Full-history (opening ~0) series must start at the FIRST PURCHASE date,
+    never at the earliest NAV date."""
+    d0 = date(2026, 1, 1)
+    nav = {}
+    v = 100.0
+    for i in range(60):
+        if i:
+            v = round(v * 1.001, 4)
+        nav[(d0 + td(days=i)).isoformat()] = v
+    items = [{"isin": "INF000000101", "name": "Test Fund", "units": 300.0,
+              "amfi_code": "700001"}]
+    txs = [parse_cas_transactions({"transactions": [
+        {"date": (d0 + td(days=15)).isoformat(), "transaction_type": "PURCHASE",
+         "units": "300", "amount": "30000", "isin": "INF000000101",
+         "amfi_code": "700001", "scheme_name": "Test Fund"}]})[0]]
+    got = portfolio_movement_series(items, txs, _lookup(nav))
+    assert got is not None and "error" not in got
+    # opening = 300 - 300 = 0 -> full history -> start = purchase date (d0+15)
+    assert got["data_note"]["start_reason"] == "first_purchase"
+    assert got["start"] == (d0 + td(days=15)).isoformat()
+    assert got["opening_value"] == pytest.approx(0.0, abs=0.001)
+    # value path begins at the purchase day with a material value
+    assert got["value_series"]["values"][0] >= 100.0
+
+
+def test_sample_invested_reconciles_purch_minus_redeem():
+    """Real sample: net invested = PURCHASE - REDEEM (switches excluded) —
+    the live card must show ~1.43cr, not 822cr."""
+    from webapp.seed_samples import cas_sample_transactions
+    tx = cas_sample_transactions()
+    real = [t for t in tx if t.get("type") not in ("SWITCH_IN", "SWITCH_OUT")]
+    net = sum(t["amount"] for t in real)
+    cin = sum(t["amount"] for t in real if t["amount"] > 0)
+    cout = sum(t["amount"] for t in real if t["amount"] < 0)
+    assert abs(net - 14298394.0) < 50000
+    assert abs(cin - 416790864.0) < 50000
+    assert abs(cout - (-402492469.0)) < 50000
 
 
 # ---- T5: full exit ---------------------------------------------------------------
