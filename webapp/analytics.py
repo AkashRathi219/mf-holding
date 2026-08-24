@@ -620,13 +620,11 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
     fl = [flows[d] for d in days]
     # daily TWR, end-of-day flow model: r_i = (V_i - F_i - V_{i-1}) / V_{i-1}
     # (F_i = amounts dated ON this grid day — they are already inside V_i).
-    # PUBLICATION-DAY RULE [perf-v1.4.2]: days where NO valued scheme published
-    # a new NAV (weekends in mirror data, holidays, stale stretches) are pure
-    # forward-fill — the value is held and the return is 0 by construction,
-    # carrying no information. They are skipped from the return chain (the
-    # geometric product is unchanged) and from daily_returns, so the chart
-    # shows only real publication-day moves. The value path itself keeps
-    # every day (the step path is honest for the rupee chart).
+    # NO-INFORMATION RULE [perf-v1.4.2]: a day where the value did not move
+    # AND no flow occurred (r == 0, F == 0 — weekends repeating Friday's NAV,
+    # holidays, all-funds-unchanged days) carries no signal and is skipped
+    # from the chain and from daily_returns; the geometric product is
+    # mathematically unchanged. The rupee value path keeps every day.
     # A diversified mutual-fund portfolio in India has NEVER moved +/-20% in
     # one trading day (worst equity-fund single-day swings ~8%); larger daily
     # moves can only be statement-consistency artifacts (amount/units
@@ -635,19 +633,18 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
     # drawdown is nulled if any exist, never a fabricated -100%.
     ARTIFACT_THRESHOLD = 0.20  # 20% portfolio-level daily move bound
     artifact_days = 0
+    zero_info_days = 0
     rets: list[float] = []
     ret_days: list[date] = []  # each retained return is dated ITS OWN day
     linked = [1.0]
-    published_days = set()
-    for s in schemes:
-        published_days.update(s["nav_dates"])
     for i in range(1, len(days)):
         v_prev = vals[i - 1]
         if v_prev <= 0:
             continue
-        if days[i] not in published_days:
-            continue  # no NAV published anywhere — held value, no signal
         r = (vals[i] - fl[i] - v_prev) / v_prev
+        if r == 0.0 and fl[i] == 0.0:
+            zero_info_days += 1
+            continue
         if abs(r) > ARTIFACT_THRESHOLD:
             artifact_days += 1
             continue
@@ -684,6 +681,7 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
                          "values": [round(v, 2) for v in vals]},
         "data_note": {
             "days": len(days),
+            "zero_info_days": zero_info_days,
             "artifact_days": artifact_days,
             "artifacts": artifact_days > 0,
             "switches_skipped": switches_skipped,
