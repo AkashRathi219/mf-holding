@@ -2400,13 +2400,20 @@ class WebDB:
                 m[pd.isoformat()] = v
         return plan, m
 
-    def portfolio_analytics(self, items: list[dict]) -> dict:
+    def portfolio_analytics(self, items: list[dict],
+                            transactions: list[dict] | None = None) -> dict:
         """Performance/risk suite over a weighted scheme basket [ANA3].
 
         The client-portfolio NAV series is reconstructed as the
         weight-blended growth of its schemes on their common window
         (each scheme rebased to 100 at the window start), then run through
-        the same metric engine as single schemes."""
+        the same metric engine as single schemes.
+
+        When ``transactions`` (canonical, from
+        ``tools_api.parse_cas_transactions``) accompany the items, the
+        response additionally carries ``movement`` — the portfolio's ACTUAL
+        cash-flow-aware value path (TWR daily chain + XIRR) [ANA3 movement].
+        No transactions -> ``movement: None`` (honest, never fabricated)."""
         from .analytics import DEFAULT_RF_PCT, compute_series_analytics
 
         entries: list[tuple[int, float]] = []
@@ -2495,7 +2502,57 @@ class WebDB:
             "growth_100": {"dates": dates_out, "values": values_out} if values_out else None,
             "disclaimer": "Past performance is not indicative of future returns.",
         })
+        # [ANA3 movement] cash-flow-aware value path from real transactions.
+        if transactions:
+            from .analytics import portfolio_movement_series
+            mv = portfolio_movement_series(items, transactions,
+                                           self._movement_nav_map)
+            out["movement"] = mv
+            out["movement_source"] = "cas_transactions"
+        else:
+            out["movement"] = None
+            out["movement_source"] = None
         return out
+
+    def _movement_nav_map(self, amfi_code: str, isin: str) -> dict[str, float] | None:
+        """{iso_date: nav} for one scheme referenced by a transaction record.
+
+        Uses the record's AMFI code when present (fast path), else the
+        statement ISIN -> schemes table -> plan codes. Direct plan preferred,
+        Regular fallback — same investor-comparable convention as elsewhere.
+        """
+        from .analytics import parse_nav_date
+
+        def _map(doc) -> dict[str, float] | None:
+            if not doc or not doc["dates"]:
+                return None
+            out = {}
+            for d, v in zip(doc["dates"], doc["navs"]):
+                pd = parse_nav_date(d)
+                if pd:
+                    out[pd.isoformat()] = v
+            return out or None
+
+        for code in (amfi_code,):
+            if code:
+                doc = self._load_nav_plan(code)
+                got = _map(doc)
+                if got:
+                    return got
+        if isin:
+            row = self.con.execute(
+                "SELECT amfi_regular, amfi_direct FROM schemes "
+                "WHERE isin_regular=? OR isin_direct=?",
+                (isin.upper(), isin.upper())).fetchone()
+            if row:
+                for code in (row["amfi_direct"], row["amfi_regular"]):
+                    if not code:
+                        continue
+                    doc = self._load_nav_plan(code)
+                    got = _map(doc)
+                    if got:
+                        return got
+        return None
 
     def compare_schemes(self, scheme_ids: list[int]) -> dict:
         """Side-by-side analytics for 2-12 schemes [ANA2].

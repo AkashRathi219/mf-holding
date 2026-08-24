@@ -6,7 +6,7 @@ Living reference for every figure the performance engine emits
 `tests/test_analytics.py`, `tests/test_compare.py`,
 `tests/test_portfolio_analytics.py`.
 
-Methodology version: **`perf-v1.2-2026-08-24`** (stamped into every
+Methodology version: **`perf-v1.3-2026-08-24`** (stamped into every
 `compute_series_analytics` payload as `methodology_version`, and into
 proposals).
 
@@ -146,6 +146,50 @@ Only dates present in **both** return maps count.
 - `compare_schemes`: same common-window rule; per-scheme metrics computed on
   each scheme's own full record (never truncated to a bad common window).
 
+### Portfolio movement (`movement`, [ANA3]) — cash-flow-aware
+Distinct from the weight-blended index: this reconstructs the investor's
+ACTUAL money path from the statement's purchases/redemptions
+(`tools_api.parse_cas_transactions`; stored per client portfolio in
+`transactions_json`).
+1. **Opening deduction**: `opening_units = end_units − ΣPURCH + ΣREDEEM` per
+   scheme; start = earliest transaction date; end = max(last tx date, last
+   framed NAV). End units come from the statement's allocations
+   (`net_units` on the items).
+2. **Daily valuation grid** = union of scheme NAV dates and tx dates; units
+   step function (`opening + Σ signed tx units ≤ t`), value = units × NAV
+   (gaps forward-filled); `V_t = Σ scheme values`; days with no valued
+   constituent are skipped.
+3. **Daily TWR (flow-adjusted)**: `r_t = (V_t − V_{t−1} − F_t) / V_{t−1}`
+   where `F_t` = signed amounts dated since the previous grid day
+   (PURCHASE/SWITCH_IN +, REDEEM/SWITCH_OUT −; source amounts are unsigned,
+   the TYPE decides the sign, and `total_net_flow` is the signed sum).
+4. **Till-date numbers**: `total_twr_pct = Π(1+r_t) − 1` (always shown);
+   `annualized_twr_pct` and `xirr_pct` are only emitted when the observed
+   span ≥ `MIN_CAGR_WINDOW_DAYS` (90) — below that, honest nulls plus
+   `annualized_unavailable {span_days, required_span_days, window}` — the
+   same honest-nulls rule as single-scheme CAGRs.
+5. **XIRR** (money-weighted): bisection on dated flows
+   `[−opening_value@start, ±tx amounts, +terminal_value@end]`, 365.25 basis.
+6. `max_drawdown_pct` is computed on the flow-adjusted linked index, not the
+   raw value path (cash flows would otherwise manufacture drawdowns).
+7. Constituents report opening/end units, tx counts and first/last tx dates;
+   schemes without NAV history are honestly omitted (`nav_missing` class).
+   No transactions → `movement: null` (weight-blend block always still runs).
+
+**Known limitation (documented, honest):** for statements whose transaction
+list is PARTIAL — the deduction `opening = end − Σtx` then assigns the
+remainder to the EARLIEST available NAV date (often the fund's inception),
+not the account's true first-holding date. Full-history statements (the seed
+sample) produce opening ≈ 0 and a clean path; partial uploads can show an
+inflated outset value and a correspondingly noisy XIRR. Individual daily
+returns exceeding total loss (statement inconsistencies) are clamped to
+−99.9% and the annualised figure is nulled with reason
+`compound_base_non_positive` when the compounded base is non-positive —
+never a fabricated number.
+
+Example: TWR annualised of a 10.5-year 907-transaction sample (Client 1
+seeded portfolio) is computed once till date — no 1Y/3Y/5Y slices.
+
 ### Debt duration `[DBT5]`
 `bullet_modified_duration`: zero-coupon closed form (`ModDur = T/(1+y)`);
 coupon-bearing via periodic PV schedule + bisection YTM solve. Hand-computed
@@ -194,3 +238,4 @@ self-healing; a thin file lies forever.
 | perf-v1.0-2026-08-23 | 2026-08-23 | Initial engine [ANA1]: CAGRs, risk block, rolling-1Y, benchmark stats, duration [DBT5] |
 | perf-v1.1-2026-08-24 | 2026-08-24 | Risk/benchmark span guards (≥365d); `*_window` date objects on every metric group; `risk_unavailable` reason block; `methodology_version` stamp; [NAV-STUB] pipeline fixes |
 | perf-v1.2-2026-08-24 | 2026-08-24 | Benchmark selection v2 (index_name + ordered keyword rules — a Nifty 50 ETF now benchmarks NIFTY 50, not NIFTY 500); per-scheme rolling-1Y series + history-completeness badge in the payload; module-level analytics cache; daily stub pre-heal job; data_health stub-shadow component; trigger-mode telemetry labels; scheme-code resolver (human-review CSV) |
+| perf-v1.3-2026-08-24 | 2026-08-24 | [ANA3] Portfolio movement: cash-flow-aware value path (opening deduction, daily grid valuation, flow-adjusted TWR chain, XIRR, linked-index drawdown) attached to portfolio analytics when transactions exist; honest 90-day annualisation floor; CAS transaction ingest + per-portfolio storage + seed demo |

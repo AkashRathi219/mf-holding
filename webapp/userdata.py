@@ -29,7 +29,7 @@ def _conn() -> sqlite3.Connection:
     return con
 
 
-_SCHEMA_VERSION = 2  # 1 = initial · 2 = [DBT1/DBT6] cascade deletes + indexes
+_SCHEMA_VERSION = 3  # 2 = [DBT1/DBT6] cascades+indexes · 3 = [ANA3] transactions_json
 
 
 def _upgrade_once(con: sqlite3.Connection) -> None:
@@ -142,6 +142,12 @@ def _init_schema(con: sqlite3.Connection) -> None:
     cols = [r[1] for r in con.execute("PRAGMA table_info(clients)")]
     if "documents_json" not in cols:
         con.execute("ALTER TABLE clients ADD COLUMN documents_json TEXT DEFAULT '[]'")
+    # Migrate [ANA3]: per-portfolio CAS transaction history (purchases/redemptions)
+    # powering the cash-flow-aware portfolio movement analytics.
+    cols = [r[1] for r in con.execute("PRAGMA table_info(client_portfolios)")]
+    if "transactions_json" not in cols:
+        con.execute("ALTER TABLE client_portfolios "
+                    "ADD COLUMN transactions_json TEXT DEFAULT '[]'")
     con.commit()
 
 
@@ -165,6 +171,17 @@ def _load_alloc(raw) -> dict:
         return json.loads(raw or "{}") or {}
     except Exception:
         return {}
+
+
+def _tx_json(transactions) -> str:
+    return json.dumps(transactions or [], ensure_ascii=False)
+
+
+def _load_tx(raw) -> list:
+    try:
+        return json.loads(raw or "[]") or []
+    except Exception:
+        return []
 
 
 # --------------------------------------------------------------------------
@@ -485,6 +502,7 @@ def list_client_portfolios(user_id: int) -> list[dict]:
             d = dict(r)
             d["items"] = _load_items(d.pop("items_json"))
             d["allocations"] = _load_alloc(d.pop("allocations_json"))
+            d["transactions"] = _load_tx(d.pop("transactions_json"))
             out.append(d)
         return out
     finally:
@@ -501,6 +519,7 @@ def get_client_portfolio(user_id: int, portfolio_id: int) -> dict | None:
         d = dict(r)
         d["items"] = _load_items(d.pop("items_json"))
         d["allocations"] = _load_alloc(d.pop("allocations_json"))
+        d["transactions"] = _load_tx(d.pop("transactions_json"))
         return d
     finally:
         con.close()
@@ -538,6 +557,9 @@ def update_client_portfolio(user_id: int, portfolio_id: int, **fields) -> dict |
         if "allocations" in fields:
             sets.append("allocations_json=?")
             vals.append(_alloc_json(fields["allocations"]))
+        if "transactions" in fields:
+            sets.append("transactions_json=?")
+            vals.append(_tx_json(fields["transactions"]))
         if sets:
             sets.append("updated_at=?")
             vals.append(_now())

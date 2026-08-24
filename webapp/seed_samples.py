@@ -82,6 +82,19 @@ def cas_transaction_index() -> dict[str, dict]:
     return idx
 
 
+def cas_sample_transactions() -> list[dict]:
+    """Canonical CAS transactions (907 records) for the sample account.
+
+    Reuses the same normalisation as the manual-ingest path so the seeded
+    portfolio demonstrates the movement analytics with real cash flows."""
+    try:
+        doc = json.loads(CAS_TRANSACTIONS_TXT.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    from .tools_api import parse_cas_transactions
+    return parse_cas_transactions(doc)
+
+
 def cas_sample_items() -> list[dict]:
     """Portfolio items from the CAS sample statement (market-value weights).
 
@@ -164,6 +177,7 @@ def seed_for_user(uid: int, reset: bool = False) -> dict:
 
     # ---- 1 model + 2 client portfolios from the CAS statement ----
     cas_items = cas_sample_items()
+    cas_tx = cas_sample_transactions()
     models = {m["name"]: m["id"] for m in userdata.list_models(uid)}
     if cas_items and MODEL_NAME not in models:
         mdl = userdata.create_model(uid, MODEL_NAME,
@@ -186,6 +200,13 @@ def seed_for_user(uid: int, reset: bool = False) -> dict:
             "actual", cas_items,
             model_portfolio_id=models.get(MODEL_NAME),
             strategy_id=strategies.get(STRATEGY_NAME))
+        # [ANA3] movement analytics needs the actual cash-flow history: the
+        # seeded Client 1 portfolio carries the sample's 907 transactions.
+        cps = userdata.list_client_portfolios(uid)
+        cp = next((p for p in cps if p["name"] == DEFAULT_PORTFOLIO_NAME), None)
+        if cp and cas_tx:
+            userdata.update_client_portfolio(uid, cp["id"],
+                                             transactions=cas_tx)
         created["portfolios"].append(DEFAULT_PORTFOLIO_NAME)
 
     _heal_model_links(uid, models)

@@ -21,6 +21,7 @@ render the standard "past performance" disclaimer beside them.
 """
 from __future__ import annotations
 
+from bisect import bisect_left
 from datetime import date, datetime, timedelta
 
 # Conventions (documented on the methodology page):
@@ -34,7 +35,7 @@ MIN_CAGR_WINDOW_DAYS = 90     # below this, even since-inception CAGR is None:
 MIN_RISK_WINDOW_DAYS = 365    # risk stats need >=1y of observed span, not just
                               # >=30 points: 30 points over 5 weeks must never
                               # masquerade as "3-year" volatility
-METHODOLOGY_VERSION = "perf-v1.2-2026-08-24"  # stamped into proposals [ANA4]
+METHODOLOGY_VERSION = "perf-v1.3-2026-08-24"  # stamped into proposals [ANA4]
 
 
 def parse_nav_date(s) -> date | None:
@@ -411,3 +412,258 @@ def bullet_modified_duration(*, coupon_pct: float | None, years: float,
     return {"modified_duration": round(mac_years / (1.0 + y_period), 4),
             "macaulay_duration": round(mac_years, 4),
             "ytm_pct": round(y_annual_eff * 100.0, 4)}
+
+
+# ---- [ANA3] cash-flow-aware portfolio movement ---------------------------------
+
+
+def _tx_key(t: dict) -> tuple[str, str]:
+    """Group key for a transaction record: amfi_code preferred, ISIN fallback."""
+    code = (t.get("amfi_code") or "").strip()
+    isin = (t.get("isin") or "").strip().upper()
+    return (code, isin)
+
+
+def _xirr(flows: list[tuple[date, float]]) -> float | None:
+    """Money-weighted annualised return (365.25 basis) from dated cash flows.
+
+    ``flows`` = [(date, signed amount)]; external cash out is negative,
+    the terminal value is a positive amount at the end. Bisection on the
+    NPV bracket [-0.99, +10.0] annual; None when no sign change."""
+    if len(flows) < 2:
+        return None
+
+    def npv(r: float) -> float:
+        d0 = flows[0][0]
+        return sum(a / (1.0 + r) ** ((d - d0).days / DAYS_PER_YEAR)
+                   for d, a in flows)
+
+    lo, hi = -0.99, 10.0  # -99% / +1000% annual — beyond any real bracket
+    if not npv(lo) * npv(hi) <= 0:
+        return None
+    for _ in range(200):
+        mid = (lo + hi) / 2.0
+        if npv(mid) * npv(lo) > 0:
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo < 1e-10:
+            break
+    return (lo + hi) / 2.0
+
+
+def portfolio_movement_series(items: list[dict], transactions: list[dict],
+                              nav_lookup) -> dict | None:
+    """Reconstruct the portfolio's ACTUAL value path from its cash flows.
+
+    ``items``: statement-end holdings ``[{isin, name, units, amfi_code?}]``.
+    ``transactions``: canonical records from ``parse_cas_transactions``
+    (signed units/amount by type; PURCHASE +, REDEEM -, SWITCH_IN/OUT ±).
+    ``nav_lookup``: ``(amfi_code, isin) -> {iso_date: nav} | None``.
+
+    Method [PLAN_PORTFOLIO_MOVEMENT]:
+    1. opening_units = end_units - Σ signed tx units  (deduced, per scheme)
+    2. start = earliest tx date; end = max(last tx date, last framed NAV)
+    3. daily grid = union of scheme NAV dates and tx dates within [start, end];
+       units_t = opening + Σ tx units <= t (step function); value = units x
+       NAV (forward-filled on gaps); V_t = Σ scheme values
+    4. F_t = Σ signed tx amounts since the previous grid day
+    5. daily TWR r_t = (V_t - V_{t-1} - F_t) / V_{t-1}; total = Π(1+r)-1
+    6. annualised once, till date (365.25 exponent) — ONLY when the observed
+       span is >= MIN_CAGR_WINDOW_DAYS; otherwise honest null + reason
+    7. XIRR from dated flows [-opening@start, ±tx amounts, +terminal@end]
+    """
+    if not transactions:
+        return None
+    parsed: list[dict] = []
+    for t in transactions:
+        d = parse_nav_date(t.get("date") or "")
+        units = float(t.get("cum_units") or 0.0)
+        amt = float(t.get("amount") or 0.0) * (t.get("sign") or 0.0)
+        if d is None or (units == 0.0 and amt == 0.0):
+            continue
+        code, isin = _tx_key(t)
+        parsed.append({"amfi_code": code, "isin": isin, "d": d,
+                       "units": units, "amt": amt,
+                       "name": t.get("name") or ""})
+    if not parsed:
+        return None
+    parsed.sort(key=lambda t: t["d"])
+
+    # end units per scheme key (from the statement's current holdings)
+    end_units: dict[tuple[str, str], float] = {}
+    for it in items or []:
+        u = it.get("units")
+        try:
+            u = float(u)
+        except (TypeError, ValueError):
+            continue
+        if u > 0:
+            key = ((it.get("amfi_code") or "").strip(),
+                   (it.get("isin") or "").strip().upper())
+            end_units[key] = end_units.get(key, 0.0) + u
+
+    by_key: dict[tuple[str, str], list[dict]] = {}
+    for t in parsed:
+        by_key.setdefault((t["amfi_code"], t["isin"]), []).append(t)
+
+    schemes: list[dict] = []
+    for key, txs in by_key.items():
+        nav_map = nav_lookup(key[0], key[1]) if nav_lookup else None
+        if not nav_map:
+            continue  # honest skip — no history for this scheme
+        # normalise nav keys to date objects (lookup may return ISO strings)
+        normalised: dict[date, float] = {}
+        for k, v in nav_map.items():
+            d = parse_nav_date(k)
+            if d:
+                normalised[d] = v
+        if not normalised:
+            continue
+        signed_units = sum(t["units"] for t in txs)
+        opening = end_units.get(key, 0.0) - signed_units
+        if opening < 0:  # CAMS rounding/partial statements — never negative
+            opening = 0.0
+        schemes.append({"key": key, "txs": txs, "nav": normalised,
+                        "end_units": end_units.get(key, 0.0),
+                        "opening_units": opening,
+                        "name": (txs[0].get("name") or "Scheme")})
+    if not schemes:
+        return {"error": "no NAV history for any scheme with transactions"}
+
+    nav_dates = sorted({dd for s in schemes for dd in s["nav"].keys()})
+    start = min(parsed[0]["d"], nav_dates[0]) if nav_dates else parsed[0]["d"]
+    tx_dates = sorted({t["d"] for t in parsed})
+    end = max([t["d"] for t in parsed] + (nav_dates or []))
+    grid = sorted({d for d in nav_dates if start <= d <= end} | set(tx_dates))
+    if len(grid) < 2:
+        return {"error": "insufficient dated NAV/transaction points"}
+
+    # per-scheme sorted nav keys for forward-fill via bisect
+    for s in schemes:
+        s["nav_seq"] = sorted(s["nav"].items())
+        s["nav_dates"] = [dd for dd, _ in s["nav_seq"]]
+
+    tx_by_date: dict[date, list[tuple[tuple[str, str], dict]]] = {}
+    for t in parsed:
+        tx_by_date.setdefault(t["d"], []).append(((t["amfi_code"], t["isin"]), t))
+
+    values: dict[date, float] = {}
+    flows: dict[date, float] = {}
+    units_t: dict[tuple[str, str], float] = {}
+    for d in grid:
+        f = 0.0
+        for k, t in tx_by_date.get(d, []):
+            units_t[k] = units_t.get(k, 0.0) + t["units"]
+            f += t["amt"]
+        any_nav = False
+        v = 0.0
+        for s in schemes:
+            i = bisect_left(s["nav_dates"], d)
+            if i < len(s["nav_dates"]) and s["nav_dates"][i] == d:
+                nav = s["nav_seq"][i][1]
+            else:
+                nav = s["nav_seq"][i - 1][1] if i > 0 else None
+            if not nav or nav <= 0:
+                continue
+            any_nav = True
+            u = units_t.get(s["key"], 0.0) + s["opening_units"]
+            v += u * nav
+        if not any_nav:
+            continue  # nothing valued yet — no NAV data prior for any scheme
+        values[d] = v  # zero-valued days KEPT: a full exit must show 0
+        flows[d] = f
+
+    if not any(values):
+        return {"error": "insufficient dated value points"}
+    # series spans the holding period: from the first non-zero value through
+    # the later of the last non-zero value / the final transaction date
+    non_zero = sorted(d for d in values if values[d] != 0.0)
+    lo = non_zero[0]
+    hi = max(non_zero[-1], max(tx_dates))
+    days = sorted(d for d in values if lo <= d <= hi)
+    if len(days) < 2:
+        return {"error": "insufficient dated value points"}
+
+    days = sorted(values)
+    vals = [values[d] for d in days]
+    fl = [flows[d] for d in days]
+    # daily TWR, end-of-day flow model: r_i = (V_i - F_i - V_{i-1}) / V_{i-1}
+    # (F_i = amounts dated ON this grid day — they are already inside V_i)
+    rets: list[float] = []
+    linked = [1.0]
+    for i in range(1, len(days)):
+        v_prev = vals[i - 1]
+        if v_prev <= 0:
+            continue
+        r = (vals[i] - fl[i] - v_prev) / v_prev
+        if r < -0.999:  # data-consistency guard: a statement-implied loss
+            r = -0.999  # beyond total loss is a tracking artifact, not math
+        rets.append(r)
+        linked.append(linked[-1] * (1.0 + r))
+    if not rets:
+        return {"error": "no usable return observations"}
+    total_twr = 1.0
+    for r in rets:
+        total_twr *= (1.0 + r)
+    total_twr -= 1.0
+    span_days = (days[-1] - days[0]).days
+    opening_value = sum(s["opening_units"] * _nav_at(s, days[0])
+                        for s in schemes if _nav_at(s, days[0]))
+    terminal_value = vals[-1]
+    total_net_flow = sum(t["amt"] for t in parsed)
+
+    out: dict = {
+        "start": days[0].isoformat(),
+        "end": days[-1].isoformat(),
+        "days": span_days,
+        "opening_value": round(opening_value, 2),
+        "terminal_value": round(terminal_value, 2),
+        "total_net_flow": round(total_net_flow, 2),
+        "total_twr_pct": round(total_twr * 100.0, 2),
+        "daily_returns": {"dates": [d.isoformat() for d in days[1:]],
+                          "values": [round(r * 100.0, 4) for r in rets]},
+        "value_series": {"dates": [d.isoformat() for d in days],
+                         "values": [round(v, 2) for v in vals]},
+        "max_drawdown_pct": _pct_or_none(max_drawdown(linked)),
+        "constituents": [
+            {"name": s["name"], "amfi_code": s["key"][0],
+             "isin": s["key"][1], "tx_count": len(s["txs"]),
+             "opening_units": round(s["opening_units"], 4),
+             "end_units": round(s["end_units"], 4),
+             "first_tx": s["txs"][0]["d"].isoformat(),
+             "last_tx": s["txs"][-1]["d"].isoformat()}
+            for s in schemes],
+        "methodology_version": METHODOLOGY_VERSION,
+        "disclaimer": "Past performance is not indicative of future returns.",
+    }
+    xirr = _xirr([(days[0], -opening_value)] +
+                 [(t["d"], -t["amt"]) for t in parsed] +
+                 [(days[-1], terminal_value)])
+    if span_days >= MIN_CAGR_WINDOW_DAYS and 1.0 + total_twr > 0:
+        out["annualized_twr_pct"] = round(
+            ((1.0 + total_twr) ** (DAYS_PER_YEAR / span_days) - 1.0) * 100.0, 2)
+        out["xirr_pct"] = round(xirr * 100.0, 2) if xirr is not None else None
+        out["annualized_window"] = {"start": days[0].isoformat(),
+                                    "end": days[-1].isoformat(),
+                                    "days": span_days}
+    else:
+        out["annualized_twr_pct"] = None
+        out["xirr_pct"] = None
+        out["annualized_unavailable"] = {
+            "reason": ("insufficient_history" if span_days < MIN_CAGR_WINDOW_DAYS
+                       else "compound_base_non_positive"),
+            "required_span_days": MIN_CAGR_WINDOW_DAYS,
+            "window_start": days[0].isoformat(),
+            "window_end": days[-1].isoformat(),
+            "span_days": span_days,
+        }
+    return out
+
+
+def _nav_at(scheme: dict, d: date) -> float | None:
+    nav = scheme["nav"].get(d)
+    if nav is not None:
+        return nav
+    prev = [n for dd, n in scheme["nav_seq"] if dd < d]
+    return prev[-1] if prev else None

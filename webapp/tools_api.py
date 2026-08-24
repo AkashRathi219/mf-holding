@@ -216,6 +216,71 @@ def _cas_json_to_items(doc: dict) -> list[dict]:
     return items
 
 
+# CAS transaction types -> flow direction [ANA3 movement analytics]:
+# unsigned amounts in the source; the TYPE decides the sign.
+_TX_IN = {"PURCHASE", "BUY", "SWITCH_IN", "ADDITIONAL_PURCHASE",
+          "SYSTEMATIC_INVESTMENT", "REINVESTMENT"}
+_TX_OUT = {"REDEEM", "SELL", "SWITCH_OUT", "REDEMPTION",
+           "SYSTEMATIC_WITHDRAWAL"}
+
+
+def parse_cas_transactions(doc) -> list[dict]:
+    """Normalise a CAS transaction set to canonical records.
+
+    Accepts either a CAS JSON doc carrying a ``transactions`` array, or the
+    standalone extraction envelope (same schema — the sample
+    CAS_sample_extracted_transactions.txt IS a JSON envelope). Each record is
+    signed by type (PURCHASE/SWITCH_IN +, REDEEM/SWITCH_OUT -), normalised to
+    ISO dates and floats; records without a date, or with zero units AND zero
+    amount, are dropped. Kept records are sorted by date."""
+    raw = doc.get("transactions") if isinstance(doc, dict) else None
+    if raw is None:
+        try:  # standalone TXT/JSON envelope
+            raw = json.loads(doc)["transactions"]
+        except Exception:
+            raw = None
+    out: list[dict] = []
+    for r in raw or []:
+        if not isinstance(r, dict):
+            continue
+        date = str(r.get("date") or "").strip()[:10]
+        if not date:
+            continue
+        ttype = str(r.get("transaction_type") or "").strip().upper()
+        units = r.get("units")
+        amount = r.get("amount")
+        try:
+            units = float(units) if units not in (None, "") else 0.0
+        except (TypeError, ValueError):
+            units = 0.0
+        try:
+            amount = float(amount) if amount not in (None, "") else 0.0
+        except (TypeError, ValueError):
+            amount = 0.0
+        if units == 0.0 and amount == 0.0:
+            continue
+        if ttype in _TX_IN:
+            sign = 1.0
+        elif ttype in _TX_OUT:
+            sign = -1.0
+        else:
+            continue
+        out.append({
+            "date": date,
+            "type": ttype,
+            "sign": sign,
+            "units": units,
+            "amount": abs(amount) * sign,
+            "cum_units": units * sign,
+            "isin": str(r.get("isin") or "").strip().upper(),
+            "amfi_code": str(r.get("amfi_code") or "").strip(),
+            "name": str(r.get("scheme_name") or "").strip(),
+            "nav": float(r.get("nav")) if r.get("nav") not in (None, "") else None,
+        })
+    out.sort(key=lambda r: (r["date"], r["type"], r["isin"]))
+    return out
+
+
 _ISIN_RE = re.compile(r"^IN[EW][A-Z0-9]{10}$")
 
 
@@ -278,11 +343,14 @@ async def api_client_documents(client_id: int, request: Request, file: UploadFil
     doc = {"name": filename, "type": ext or "file", "status": "stored",
            "path": str(saved), "uploaded_at": datetime.datetime.now().isoformat(timespec="seconds")}
     items: list[dict] = []
+    transactions: list[dict] = []
     if ext == ".json":
         try:
             parsed = json.loads(data.decode("utf-8"))
             items = _cas_json_to_items(parsed)
+            transactions = parse_cas_transactions(parsed)
             doc["status"] = "parsed" if items else "no_holdings"
+            doc["transactions"] = len(transactions)
         except Exception as e:  # noqa: BLE001
             doc["status"] = "error"
             doc["error"] = str(e)
@@ -303,7 +371,8 @@ async def api_client_documents(client_id: int, request: Request, file: UploadFil
         cps = userdata.list_client_portfolios(uid)
         cp = next((p for p in cps if p["client_id"] == client_id), None)
         if cp:
-            userdata.update_client_portfolio(uid, cp["id"], items=items)
+            userdata.update_client_portfolio(uid, cp["id"], items=items,
+                                             transactions=transactions)
             name = cp["name"]
         else:
             strategies = userdata.list_strategies(uid)
@@ -311,6 +380,12 @@ async def api_client_documents(client_id: int, request: Request, file: UploadFil
             name = f"{client['name']} portfolio"
             userdata.create_client_portfolio(uid, client_id, name, "actual",
                                              items, strategy_id=strat_id)
+            if transactions:
+                cps = userdata.list_client_portfolios(uid)
+                cp = next((p for p in cps if p["client_id"] == client_id), None)
+                if cp:
+                    userdata.update_client_portfolio(uid, cp["id"],
+                                                     transactions=transactions)
         doc["portfolio"] = name
         doc["holdings"] = len(items)
 
@@ -1134,6 +1209,8 @@ def api_portfolio_analytics(request: Request, body: dict):
     uid = _uid(u)
     wdb = dbm.get_db()
     items = body.get("items")
+    transactions = parse_cas_transactions(
+        body) if body.get("transactions") else None
     if not items:
         kind = body.get("portfolio_kind") or "client"
         pid = int(body.get("portfolio_id") or 0)
@@ -1147,7 +1224,12 @@ def api_portfolio_analytics(request: Request, body: dict):
             if not cp:
                 raise HTTPException(status_code=404, detail="Client portfolio not found.")
             items = cp["items"]
-    out = wdb.portfolio_analytics(items)
+            if transactions is None:
+                # [ANA3 movement] use THIS portfolio's stored cash-flow history
+                # (loaded by ingest / seed); a model-kind portfolio simply has none.
+                stored = cp.get("transactions") or []
+                transactions = stored if stored else None
+    out = wdb.portfolio_analytics(items, transactions=transactions)
     out["label"] = body.get("label") or ""
     return out
 

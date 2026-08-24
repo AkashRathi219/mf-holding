@@ -12,6 +12,7 @@ from webapp.seed_samples import (
     DEFAULT_PORTFOLIO_NAME,
     MODEL_NAME,
     cas_sample_items,
+    cas_sample_transactions,
     cas_transaction_index,
     seed_for_user,
 )
@@ -64,6 +65,12 @@ def test_seed_creates_client1_default_portfolio():
     assert dp["client_id"] == clients[CLIENT1_NAME]["id"]
     assert dp["model_portfolio_id"] == models[MODEL_NAME]
     assert len(dp["items"]) == len(cas_sample_items())
+    # [ANA3 movement] the seeded portfolio carries the sample's transactions
+    assert len(dp["transactions"]) == len(cas_sample_transactions())
+    assert len(dp["transactions"]) > 800
+    # and the OTHER (non-client1) portfolio gets none, honesty preserved
+    other = next(p for p in portfolios.values() if p["name"] != DEFAULT_PORTFOLIO_NAME)
+    assert not other["transactions"]
 
 
 def test_seed_is_idempotent():

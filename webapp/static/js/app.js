@@ -2236,8 +2236,72 @@ async function renderPortfolioAnalyticsBlock(container, portfolioId) {
            dates: a.growth_100.dates, values: a.growth_100.values }],
         { formatValue: v => "₹" + App.formatNum(v, 0) });
     }
+    renderPortfolioMovementBlock(container, a);
   } catch (e) {
     host.querySelector(".pa-body").innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
+  }
+}
+
+// [ANA3 movement] cash-flow-aware portfolio value path below Performance & risk.
+function renderPortfolioMovementBlock(container, a) {
+  const mv = a.movement;
+  const host = document.createElement("div");
+  host.id = "mvCpMovement";
+  host.className = "card";
+  host.style.marginTop = "14px";
+  container.appendChild(host);
+  if (!mv) {
+    host.innerHTML = `<h3>Portfolio movement</h3>
+      <div class="page-sub">No transaction history — movement analytics needs the actual purchases/redemptions from a CAS/actual-holdings statement. The weight-blended reconstruction above is the weighted index, not cash flows.</div>`;
+    return;
+  }
+  if (mv.error) {
+    host.innerHTML = `<h3>Portfolio movement</h3><div class="empty">${App.esc(mv.error)}</div>`;
+    return;
+  }
+  const annNote = mv.annualized_unavailable
+    ? ` · span ${App.formatNum(mv.days)}d &lt; ${App.formatNum(mv.annualized_unavailable.required_span_days)}d floor — not annualised`
+    : "";
+  const cell = (label, v, sub) => `<div style="flex:1;min-width:130px;text-align:center;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
+      <div style="font-size:10.5px;color:var(--text-2);text-transform:uppercase;letter-spacing:.04em">${label}</div>
+      <div style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px">${v != null ? v : "—"}</div>
+      ${sub ? `<div class="metric-dates">${sub}</div>` : ""}</div>`;
+  host.innerHTML = `<h3>Portfolio movement <span class="page-sub">actual cash flows · ${App.esc(a.movement_source || "")}</span></h3>
+    <div class="page-sub">Reconstructed ${App.formatDate(mv.start)} → ${App.formatDate(mv.end)} · ${App.formatNum(mv.days)} days · marked daily at scheme NAVs, flow-adjusted daily returns.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+      ${cell("Opening value", App.formatINR(mv.opening_value, 2), App.formatDate(mv.start))}
+      ${cell("Terminal value", App.formatINR(mv.terminal_value, 2), App.formatDate(mv.end))}
+      ${cell("Total invested", "₹" + App.formatNum(Math.abs(mv.total_net_flow), 2), "net purchases minus redemptions")}
+      ${cell("TWR till date", mv.total_twr_pct != null ? App.formatNum(mv.total_twr_pct, 2) + "%" : "—", "unannualised · flow-adjusted")}
+      ${cell("TWR ann. till date", mv.annualized_twr_pct != null ? App.formatNum(mv.annualized_twr_pct, 2) + "%" : "—", (mv.annualized_window ? fmtWinRange(mv.annualized_window) : "—") + annNote)}
+      ${cell("XIRR (money-weighted)", mv.xirr_pct != null ? App.formatNum(mv.xirr_pct, 2) + "%" : "—", annNote || "annualised, 365.25 basis")}
+      ${cell("Max drawdown", mv.max_drawdown_pct != null ? App.formatNum(mv.max_drawdown_pct, 2) + "%" : "—", "on flow-adjusted path")}
+    </div>
+    <div id="mvValueChart" style="margin-top:10px"></div>
+    <div id="mvReturnChart" style="margin-top:14px"></div>
+    <div class="table-wrap" style="max-height:26vh;overflow:auto;margin-top:14px">
+      <table class="data"><thead><tr><th>Scheme</th><th class="r">Tx</th><th class="r">Opening units</th><th class="r">End units</th><th>First tx</th><th>Last tx</th></tr></thead>
+      <tbody>${(mv.constituents || []).map(x => `<tr>
+        <td>${App.esc(x.name)}</td><td class="num">${App.formatNum(x.tx_count)}</td>
+        <td class="num">${x.opening_units != null ? App.formatNum(x.opening_units, 2) : "—"}</td>
+        <td class="num">${x.end_units != null ? App.formatNum(x.end_units, 2) : "—"}</td>
+        <td class="mono">${App.formatDate(x.first_tx)}</td><td class="mono">${App.formatDate(x.last_tx)}</td></tr>`).join("") || `<tr><td colspan="6" class="empty">\u2014</td></tr>`}</tbody></table>
+    </div>
+    <div class="page-sub" style="margin-top:8px"><b>${App.esc(mv.disclaimer)}</b> Money-weighted view of the investor's own income — purchases/redemptions included, unlike the weight-blended index above.</div>`;
+  const vs = mv.value_series || {};
+  if (vs.dates && vs.dates.length > 1) {
+    Charts.mountMultiLine(document.getElementById("mvValueChart"),
+      [{ name: "Portfolio value", color: "@primary", dates: vs.dates, values: vs.values }],
+      { formatValue: v => "₹" + App.formatNum(v, 0) });
+  }
+  const dr = mv.daily_returns || {};
+  if (dr.dates && dr.dates.length > 1) {
+    // downsample for drawability when > ~800 daily points (weekly step)
+    let idx = dr.dates.map((_, i) => i).filter(i => i % 7 === 0 || i === dr.dates.length - 1);
+    Charts.mountMultiLine(document.getElementById("mvReturnChart"),
+      [{ name: "Daily return", color: "#c94f4f",
+         dates: idx.map(i => dr.dates[i]), values: idx.map(i => dr.values[i]) }],
+      { formatValue: v => App.formatNum(v, 2) + "%" });
   }
 }
 
