@@ -2265,7 +2265,13 @@ class WebDB:
     @staticmethod
     def _load_tr_index(index_name: str) -> list[tuple[str, float]] | None:
         """Total-return series [(ISO date, index level)] for a Nifty index."""
-        path = NIFTY_TR_DIR / (index_name.strip().upper().replace(" ", "_") + ".csv")
+        fname = index_name.strip().upper().replace(" ", "_") + ".csv"
+        path = NIFTY_TR_DIR / fname
+        if not path.exists():
+            # TR CSVs ship on R2 like nav_history — lazy-fetch on first use,
+            # otherwise a fresh container reports every benchmark as
+            # 'series unavailable' forever.
+            remote_store.ensure(f"nifty/TR/{fname}")
         if not path.exists():
             return None
         try:
