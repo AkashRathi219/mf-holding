@@ -176,6 +176,43 @@ def test_xirr_underdetermined_returns_none():
 # ---- regression: float-dust truncation + artifact-aware drawdown -----------------
 
 
+def test_phantom_flow_from_unvalued_scheme_excluded():
+    """A purchase in a scheme WITHOUT nav history must not enter the flow
+    series: value unchanged, flow uncounted -> no phantom -100% day, and the
+    drawdown stays available. Excluded cash is reported honestly."""
+    d0 = date(2026, 1, 1)
+    nav = {}
+    v = 100.0
+    for i in range(40):
+        if i:
+            v = round(v * 1.001, 4)
+        nav[(d0 + td(days=i)).isoformat()] = v
+    items = [{"isin": "INF000000101", "name": "Test Fund", "units": 300.0,
+              "amfi_code": "700001"},
+             {"isin": "INF000000999", "name": "Ghost Fund", "units": 10.0,
+              "amfi_code": "700009"}]  # no nav history for this code
+    tx = [_tx(d0.isoformat(), 300, 30000.0, isin="INF000000101",
+              code="700001"),
+          _tx((d0 + td(days=10)).isoformat(), 10, 17000000.0,
+              isin="INF000000999", code="700009")]  # phantom ₹1.7cr purchase
+    # real lookups return None for codes without NAV history
+    got = portfolio_movement_series(items, tx,
+                                    lambda a, i: nav if a == "700001" else None)
+    assert got is not None and "error" not in got
+    # the ghost purchase must NOT distort the valued path: no |r| > 20% day
+    assert all(abs(r) <= 20.0 for r in got["daily_returns"]["values"])
+    # drawdown remains available (no artifacts)
+    assert got["max_drawdown_pct"] is not None
+    assert got["drawdown_unavailable"] is None
+    # the excluded cash is reported, never silently dropped
+    dn = got["data_note"]
+    assert dn["unvalued_schemes"] == 1
+    assert dn["unvalued_tx_count"] == 1
+    assert dn["unvalued_net_flow"] == pytest.approx(17000000.0, abs=0.01)
+    # net invested counts only the valued scheme's cash
+    assert got["total_net_flow"] == pytest.approx(30000.0, abs=0.01)
+
+
 def test_truncation_ignores_float_dust_day():
     """A sub-repairable opening (e.g. 1.42e-14 units leftover) must not extend
     the series back to a scheme's inception as a 0.00-value day."""

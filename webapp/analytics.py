@@ -538,6 +538,17 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
     if not schemes:
         return {"error": "no NAV history for any scheme with transactions"}
 
+    # [phantom-flow fix] Schemes without NAV history are honestly excluded
+    # from valuation — their CASH must be excluded from the flow series too,
+    # or every purchase/redemption in them becomes a phantom flow (value
+    # unchanged, flow counted) that corrupts the daily TWR and the drawdown.
+    # The excluded cash is reported in data_note, never silently dropped.
+    valued_keys = {s["key"] for s in schemes}
+    excluded_tx = [t for t in parsed if (t["amfi_code"], t["isin"]) not in valued_keys]
+    parsed = [t for t in parsed if (t["amfi_code"], t["isin"]) in valued_keys]
+    if not parsed:
+        return {"error": "no NAV history for any scheme with transactions"}
+
     nav_dates = sorted({dd for s in schemes for dd in s["nav"].keys()})
     tx_dates = sorted({t["d"] for t in parsed})
     total_opening_units = sum(s["opening_units"] for s in schemes)
@@ -665,6 +676,10 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
             "partial_statement": partial_statement,
             "start_reason": ("first_purchase" if not partial_statement
                              else "earliest_nav_partial_statement"),
+            "unvalued_schemes": len({(t["amfi_code"], t["isin"])
+                                     for t in excluded_tx}),
+            "unvalued_tx_count": len(excluded_tx),
+            "unvalued_net_flow": round(sum(t["amt"] for t in excluded_tx), 2),
         },
         "recon": {
             "opening_value_at_start": round(opening_value, 2),

@@ -40,6 +40,10 @@ UA = {"User-Agent": "Mozilla/5.0 (FactsheetEngineAI nav backfill)"}
 
 _MONTHS = {f"{i:02d}": m for i, m in enumerate(
     ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)}
+# [BUG-C3] inverse map for _date_key: input months are NAMES ("Aug"), not
+# numbers — the old lookup passed them through and sort keys came out as
+# '2026-Aug-18' (alphabetical month order, not chronological).
+_MONTH_NUM = {v: k for k, v in _MONTHS.items()}
 
 
 def _ssl_ctx() -> ssl.SSLContext:
@@ -100,7 +104,7 @@ def _date_key(datestr: str) -> str:
     """'18-Aug-2026' -> '2026-08-18' for chronological sorting."""
     try:
         day, mon, year = datestr.split("-")
-        return f"{year}-{_MONTHS.get(mon, mon)}-{int(day):02d}"
+        return f"{year}-{_MONTH_NUM.get(mon.title(), _MONTH_NUM.get(mon, mon))}-{int(day):02d}"
     except Exception:
         return datestr
 
