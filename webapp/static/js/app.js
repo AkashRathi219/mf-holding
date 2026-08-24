@@ -145,21 +145,21 @@ async function loadDashboard() {
   mountChart(() => Charts._renderDonut(capCanvas, caps.map(c => ({ label: c[0], value: c[1] })), { center: App.formatNum(m.pure_stocks), centerLabel: "pure stocks" }));
   Charts._renderDonut(capCanvas, caps.map(c => ({ label: c[0], value: c[1] })), { center: App.formatNum(m.pure_stocks), centerLabel: "pure stocks" });
   document.getElementById("capLegend").innerHTML = caps.map((c, i) =>
-    `<span><i style="background:${["#2456d6","#16a085","#e2a03f","#7d5cd6","#d6496b","#5aa7d6"][i % 6]}"></i>${c[0]}: ${App.formatNum(c[1])}</span>`).join("");
+    `<span><i style="background:${["var(--chart-1)","var(--chart-5)","var(--chart-4)","var(--chart-6)","var(--chart-8)","var(--chart-7)"][i % 6]}"></i>${c[0]}: ${App.formatNum(c[1])}</span>`).join("");
 
   // ISIN gauge
   const isinCanvas = document.getElementById("chartIsin");
-  mountChart(() => Charts._renderGauge(isinCanvas, m.isin_completeness, 100, { label: "ISIN completeness", color: "#16a085" }));
-  Charts._renderGauge(isinCanvas, m.isin_completeness, 100, { label: "ISIN completeness", color: "#16a085" });
+  mountChart(() => Charts._renderGauge(isinCanvas, m.isin_completeness, 100, { label: "ISIN completeness", color: "@success" }));
+  Charts._renderGauge(isinCanvas, m.isin_completeness, 100, { label: "ISIN completeness", color: "@success" });
 
   // coverage bars
   const cov = Object.entries(m.coverage_dist).sort((a, b) => b[1] - a[1]);
-  const covColors = { has_holdings: "#16845c", no_disclosure: "#c0392b", discovery_needed: "#b7791f", universe_only: "#8a97a8" };
+  const covColors = { has_holdings: "var(--success)", no_disclosure: "var(--destructive)", discovery_needed: "var(--warning)", universe_only: "var(--text-3)" };
   document.getElementById("coverageBars").innerHTML = cov.map(([k, v]) => {
     const pct = (v / m.schemes * 100);
     return `<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px">
       <span>${App.esc(k.replace(/_/g, " "))}</span><span class="mono">${App.formatNum(v)}</span></div>
-      <div style="height:8px;background:#eef1f5;border-radius:4px"><div style="height:8px;border-radius:4px;width:${pct}%;background:${covColors[k] || "#2456d6"}"></div></div></div>`;
+      <div style="height:8px;background:var(--surface-2);border-radius:4px"><div style="height:8px;border-radius:4px;width:${pct}%;background:${covColors[k] || "var(--primary)"}"></div></div></div>`;
   }).join("");
 
   // category bars
@@ -170,7 +170,7 @@ async function loadDashboard() {
     const pct = (v / m.schemes * 100);
     return `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px">
       <span>${App.esc(k)}</span><span class="mono">${App.formatNum(v)}</span></div>
-      <div style="height:8px;background:#eef1f5;border-radius:4px"><div style="height:8px;border-radius:4px;width:${pct}%;background:#2456d6"></div></div></div>`;
+      <div style="height:8px;background:var(--surface-2);border-radius:4px"><div style="height:8px;border-radius:4px;width:${pct}%;background:var(--primary)"></div></div></div>`;
   }).join("");
 }
 
@@ -191,8 +191,8 @@ function initSchemes() {
 }
 
 function confBadge(cf) {
-  const TIER = {green: ["high", "#3f9d63"], amber: ["medium", "#d09a2f"],
-                red: ["low", "#c94f4f"], grey: ["no data", "#9aa0a6"]};
+  const TIER = {green: ["high", "var(--success)"], amber: ["medium", "var(--warning)"],
+                red: ["low", "var(--destructive)"], grey: ["no data", "var(--text-3)"]};
   const [lbl, col] = TIER[(cf && cf.tier) || "grey"] || TIER.grey;
   const lines = [
     "Data confidence: " + (cf && cf.score != null ? cf.score + " / 100" : "n/a"),
@@ -203,7 +203,7 @@ function confBadge(cf) {
   if (cf && cf.isin_pct != null) lines.push("ISIN coverage: " + cf.isin_pct + "%");
   if (cf && cf.reason) lines.push("Reason: " + cf.reason);
   const staleMark = (cf && cf.stale)
-    ? `<span title="${App.esc("No fresh holdings disclosure in 180+ days")}" style="color:#c94f4f;font-weight:600"> \u00b7 stale</span>` : "";
+    ? `<span title="${App.esc("No fresh holdings disclosure in 180+ days")}" style="color:var(--red);font-weight:600"> \u00b7 stale</span>` : "";
   return `<span title="${App.esc(lines.join("\n"))}" style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:${col};white-space:nowrap;margin-left:6px">
     <span style="width:7px;height:7px;border-radius:50%;background:${col};display:inline-block"></span>${lbl}${staleMark}</span>`;
 }
@@ -261,6 +261,8 @@ async function renderSchemeDetail(id, container, titleEl) {
     navCache = nav;
     const h = s.holdings || [];
 
+    // Shared KPI card — same language as the dashboard strip.
+    const kpi = (label, value, sub) => `<div class="kpi card"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div>${sub ? `<div class="kpi-sub">${sub}</div>` : ""}</div>`;
     const CATS = [
       ["stocks", "Stocks"],
       ["debt", "Debt"],
@@ -288,14 +290,16 @@ async function renderSchemeDetail(id, container, titleEl) {
         <td>${App.badge(x.rating || "—", x.rating ? "green" : "grey")}</td>
         <td class="num">${App.formatPct(x.percent_nav)}</td>
       </tr>`;
-    const debtTotalRow = (items, label, sumMv, sumPct) => `<tr class="total-row">
+    const debtTotalRow = (items, label, sumPct) => `<tr class="total-row">
         <td colspan="6" style="font-weight:700">${App.esc(label)} subtotal (${App.formatNum(items.length)})</td>
         <td class="num" style="font-weight:700">${App.formatPct(sumPct)}</td>
       </tr>`;
 
-    const categoryTables = h.length ? CATS.map(([key, label]) => {
+    // One table per present asset class -> rendered behind segmented tabs.
+    const classTables = [];
+    CATS.forEach(([key, label]) => {
       const items = group(key);
-      if (!items.length) return "";
+      if (!items.length) return;
       const sumPct = items.reduce((a, x) => a + (x.percent_nav || 0), 0);
       const sumMv = items.reduce((a, x) => a + (x.market_value || 0), 0);
       const isDebt = key === "debt";
@@ -304,7 +308,7 @@ async function renderSchemeDetail(id, container, titleEl) {
         : `<th>Company</th><th>ISIN</th><th class="r">Qty</th><th class="r">Market value</th><th class="r">% NAV</th><th>Cap</th><th>Sector</th>`;
       const rows = isDebt ? items.map(debtRow).join("") : items.map(stockRow).join("");
       const subtotal = isDebt
-        ? debtTotalRow(items, label, sumMv, sumPct)
+        ? debtTotalRow(items, label, sumPct)
         : `<tr class="total-row">
             <td colspan="2" style="font-weight:700">${App.esc(label)} subtotal (${App.formatNum(items.length)})</td>
             <td class="num" style="font-weight:700">—</td>
@@ -312,35 +316,18 @@ async function renderSchemeDetail(id, container, titleEl) {
             <td class="num" style="font-weight:700">${App.formatPct(sumPct)}</td>
             <td></td><td></td>
           </tr>`;
-      return `
-        <h3 style="margin-top:18px">${App.esc(label)}
-          <span class="badge blue">${App.formatNum(items.length)}</span>
-          <span class="badge green">${App.formatPct(sumPct)}</span>
-        </h3>
-        <div class="table-wrap" style="max-height:34vh; overflow:auto">
-          <table class="data">
-            <thead><tr>${head}</tr></thead>
-            <tbody>${rows}${subtotal}</tbody>
-          </table>
-        </div>`;
-    }).join("") : "";
+      classTables.push({
+        key, label,
+        count: items.length, pct: sumPct, mv: sumMv,
+        table: `<div class="table-wrap" style="max-height:44vh; overflow:auto">
+            <table class="data"><thead><tr>${head}</tr></thead><tbody>${rows}${subtotal}</tbody></table>
+          </div>`,
+      });
+    });
 
     const allSumPct = h.reduce((a, x) => a + (x.percent_nav || 0), 0);
     const allSumMv = h.reduce((a, x) => a + (x.market_value || 0), 0);
-    const grandTotal = h.length ? `<div class="table-wrap" style="margin-top:18px">
-        <table class="data"><thead><tr><th>Summary</th><th></th><th></th><th></th><th class="r">Qty</th><th class="r">Market value</th><th class="r">% NAV</th></tr></thead>
-        <tbody>${CATS.map(([key, label]) => {
-          const items = group(key);
-          if (!items.length) return "";
-          const sumPct = items.reduce((a, x) => a + (x.percent_nav || 0), 0);
-          const sumMv = items.reduce((a, x) => a + (x.market_value || 0), 0);
-          return `<tr><td>${App.esc(label)}</td><td></td><td></td><td>${App.formatNum(items.length)}</td><td class="num">—</td><td class="num">${App.formatINR(sumMv)}</td><td class="num">${App.formatPct(sumPct)}</td></tr>`;
-        }).join("")}
-        <tr class="total-row"><td>Total</td><td></td><td></td><td>${App.formatNum(h.length)}</td><td class="num">—</td><td class="num">${App.formatINR(allSumMv)}</td><td class="num">${App.formatPct(allSumPct)}</td></tr>
-        </tbody></table></div>` : "";
 
-    const holdingsHtml = h.length ? categoryTables + grandTotal
-      : `<div class="empty">No holdings on record (${App.esc(s.coverage.replace(/_/g, " "))}).</div>`;
     const terReg = s.ter_regular != null ? App.formatPct(s.ter_regular * 100, 3) : "—";
     const terDir = s.ter_direct != null ? App.formatPct(s.ter_direct * 100, 3) : "—";
     const amfiR = s.amfi_regular || "—";
@@ -348,52 +335,87 @@ async function renderSchemeDetail(id, container, titleEl) {
     const isinR = s.isin_regular || "—";
     const isinD = s.isin_direct || "—";
     const isDebtFund = (s.category || "").toLowerCase() === "debt";
-    const debtPanel = isDebtFund ? `
-      <div class="kv" style="margin-bottom:12px">
-        <dt>Yield to Maturity</dt><dd>${s.ytm != null ? App.formatPct(s.ytm * 100, 2) : "—"}</dd>
-        <dt>Duration</dt><dd>${s.duration != null ? App.formatNum(s.duration, 2) + " yrs" : "—"}</dd>
-        <dt>Avg. Maturity</dt><dd>${s.avg_maturity != null ? App.formatNum(s.avg_maturity, 2) + " yrs" : "—"}</dd>
-      </div>` : "";
-    const planTable = `
-      <table class="data plan-table" style="margin-bottom:16px">
-        <thead><tr><th></th><th>Regular</th><th>Direct</th></tr></thead>
-        <tbody>
-          <tr><td>TER</td><td class="num">${terReg}</td><td class="num">${terDir}</td></tr>
-          <tr><td>AMFI code</td><td class="mono">${amfiR}</td><td class="mono">${amfiD}</td></tr>
-          <tr><td>ISIN</td><td class="mono">${isinR}</td><td class="mono">${isinD}</td></tr>
-        </tbody>
-      </table>`;
+
+    const factRow = (label, valueHtml) => `<tr><td style="color:var(--text-2);font-weight:600;width:38%">${label}</td><td>${valueHtml}</td></tr>`;
+    let factsRows = "";
+    factsRows += factRow("Category", App.badge(s.category));
+    factsRows += factRow("Coverage", App.flagBadge(s.coverage));
+    factsRows += factRow("Confidence", confBadge(s.confidence));
+    factsRows += factRow("Holdings as-of", `${App.esc(s.holdings_date ? App.formatDate(s.holdings_date) : "\u2014")} <span class="page-sub">(weekly announcement)</span>`);
+    factsRows += factRow(`AMFI code <span class="page-sub">(reg / dir)</span>`, `<span class="mono">${App.esc(amfiR)} / ${App.esc(amfiD)}</span>`);
+    factsRows += factRow(`ISIN <span class="page-sub">(reg / dir)</span>`, `<span class="mono">${App.esc(isinR)} / ${App.esc(isinD)}</span>`);
+    if (isDebtFund) {
+      factsRows += factRow("Yield to Maturity", s.ytm != null ? App.formatPct(s.ytm * 100, 2) : "—");
+      factsRows += factRow("Duration", s.duration != null ? App.formatNum(s.duration, 2) + " yrs" : "—");
+      factsRows += factRow("Avg. Maturity", s.avg_maturity != null ? App.formatNum(s.avg_maturity, 2) + " yrs" : "—");
+    }
+
     const topHolding = s.top_holding ? `
       <div class="top-holding" style="margin-bottom:12px">
         <span class="top-holding-label">Top holding</span>
         <span class="top-holding-name">${App.esc(s.top_holding)}</span>
         ${s.top_holding_pct ? `<span class="top-holding-pct">${App.formatPct(s.top_holding_pct)}</span>` : ""}
       </div>` : "";
+
     if (titleEl) titleEl.textContent = `${s.fund_name} \u00b7 ${s.amc} \u00b7 ${App.sourceLabel(s.source)}`;
+
+    const holdingsCard = h.length ? `
+      <div class="card" style="margin-bottom:18px">
+        <h3>Holdings by asset class <span class="badge grey">${App.formatNum(h.length)} lines · ${App.formatPct(allSumPct)} of NAV</span></h3>
+        ${classTables.length > 1 ? `<div class="tabs hold-tabs" style="margin-bottom:14px">${classTables.map((t, i) =>
+          `<button type="button" class="tab${i === 0 ? " active" : ""}" data-hold="${t.key}">${App.esc(t.label)}&nbsp;<span class="pill-count">${App.formatNum(t.count)}</span></button>`).join("")}</div>` : ""}
+        ${classTables.map((t, i) => `<div class="tab-panel${i === 0 ? " active" : ""}" data-hold-panel="${t.key}">${t.table}</div>`).join("")}
+      </div>`
+      : `<div class="empty">No holdings on record (${App.esc(s.coverage.replace(/_/g, " "))}).</div>`;
+
     container.innerHTML = `
-      <h2>${App.esc(s.fund_name)}${confBadge(s.confidence)}</h2>
-      <div class="page-sub" style="margin-bottom:14px">${App.esc(s.amc)} · ${App.sourceLabel(s.source)}</div>
-      <div class="kv" style="margin-bottom:6px">
-        <dt>Latest NAV</dt><dd>${s.nav_value != null ? App.esc(s.nav_value) : "\u2014"} <span class="page-sub">as of ${App.esc(s.nav_date ? App.formatDate(s.nav_date) : "\u2014")} \u00b7 daily</span></dd>
-        <dt>Holdings as-of</dt><dd>${App.esc(s.holdings_date ? App.formatDate(s.holdings_date) : "\u2014")} <span class="page-sub">(weekly announcement)</span></dd>
+      <h2 style="margin-bottom:2px">${App.esc(s.fund_name)}${confBadge(s.confidence)}</h2>
+      <div class="page-sub" style="margin-bottom:16px">${App.esc(s.amc)} · ${App.sourceLabel(s.source)} · ${App.badge(s.category)}</div>
+
+      <div class="grid auto" style="margin-bottom:16px">
+        ${kpi("Latest NAV", s.nav_value != null ? App.esc(s.nav_value) : "\u2014", `as of ${App.esc(s.nav_date ? App.formatDate(s.nav_date) : "\u2014")} · daily`)}
+        ${kpi("AUM", s.aum != null ? App.formatINR(s.aum, 1) + " cr" : "\u2014", `holdings ${App.esc(s.holdings_date ? App.formatDate(s.holdings_date) : "\u2014")}`)}
+        ${kpi("Holdings", App.formatNum(h.length), `${App.formatNum(s.n_equity)} equity`)}
+        ${kpi("Expense ratio", `${terReg} → ${terDir}`, "regular → direct")}
       </div>
-      <div class="kv" style="margin-bottom:14px">
-        <dt>Category</dt><dd>${App.badge(s.category)}</dd>
-        <dt>Coverage</dt><dd>${App.flagBadge(s.coverage)}</dd>
-        <dt>Confidence</dt><dd>${confBadge(s.confidence)}</dd>
-        <dt>Holdings</dt><dd>${App.formatNum(h.length)} (${App.formatNum(s.n_equity)} equity)</dd>
-        <dt>AUM</dt><dd>${App.formatINR(s.aum, 1)} cr</dd>
+
+      <div class="grid two" style="margin-bottom:16px">
+        <div class="card">
+          <h3>Scheme facts</h3>
+          <table class="data" style="min-width:0"><tbody>${factsRows}</tbody></table>
+        </div>
+        <div class="card">
+          <h3>Asset mix</h3>
+          ${topHolding}
+          <table class="data" style="min-width:0">
+            <thead><tr><th>Asset class</th><th class="r">Lines</th><th class="r">Market value</th><th class="r">% NAV</th></tr></thead>
+            <tbody>
+              ${classTables.map(t => `<tr class="clickable" data-mix="${t.key}" title="Show ${App.esc(t.label)} holdings">
+                  <td>${App.esc(t.label)}</td><td class="num">${App.formatNum(t.count)}</td>
+                  <td class="num">${App.formatINR(t.mv)}</td><td class="num">${App.formatPct(t.pct)}</td></tr>`).join("")}
+              <tr class="total-row"><td>Total</td><td class="num">${App.formatNum(h.length)}</td>
+                  <td class="num">${App.formatINR(allSumMv)}</td><td class="num">${App.formatPct(allSumPct)}</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-      ${planTable}
-      ${debtPanel}
-      <div id="schemeAnalytics" class="nav-section" style="margin-top:16px">
-        <h3>Performance &amp; risk</h3>
-        <div id="analyticsBody" class="page-sub"><span class="spin"></span> Loading…</div>
-      </div>
-      <h3 style="margin-top:20px">Holdings by asset class</h3>
-      ${topHolding}
-      ${holdingsHtml}
+
+      <div id="schemeAnalytics"></div>
+      ${holdingsCard}
       ${buildNavSection(id, nav)}`;
+
+    // Segmented tabs for asset-class tables; Asset-mix rows jump to the class.
+    const activateHoldTab = (key) => {
+      container.querySelectorAll(".hold-tabs .tab").forEach(b => b.classList.toggle("active", b.dataset.hold === key));
+      container.querySelectorAll("[data-hold-panel]").forEach(p => p.classList.toggle("active", p.dataset.holdPanel === key));
+      const pane = container.querySelector(`[data-hold-panel="${key}"]`);
+      if (pane && pane.classList.contains("active")) pane.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    };
+    container.querySelectorAll(".hold-tabs .tab").forEach(b =>
+      b.addEventListener("click", () => activateHoldTab(b.dataset.hold)));
+    container.querySelectorAll("tr[data-mix]").forEach(tr =>
+      tr.addEventListener("click", () => activateHoldTab(tr.dataset.mix)));
+
     renderSchemeAnalytics(id);
   } catch (e) {
     container.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
@@ -409,54 +431,111 @@ function fmtWinRange(w) {
 }
 
 function renderSchemeAnalytics(id) {
-  const el = document.getElementById("analyticsBody");
+  const el = document.getElementById("schemeAnalytics");
   if (!el) return;
+  el.innerHTML = `<div class="empty"><span class="spin"></span> Loading performance &amp; risk…</div>`;
   App.api(`/schemes/${id}/analytics`).then(a => {
     if (a.error) { el.innerHTML = `<div class="empty">${App.esc(a.error)}</div>`; return; }
     const c = a.cagr_pct || {};
-    const cell = (label, v, sub) => `<div style="flex:1;min-width:96px;text-align:center;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
-      <div style="font-size:10.5px;color:var(--text-2);text-transform:uppercase;letter-spacing:.04em">${label}</div>
-      <div style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px">${v != null ? App.formatNum(v, 2) + "%" : "—"}</div>
-      ${sub ? `<div class="metric-dates">${sub}</div>` : ""}</div>`;
-    // CAGR cells always render — each carries the exact window it spans (or,
-    // when complete=false, the short history that earned the em-dash).
-    let html = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-      ${cell("Since inception", c.since_inception, fmtWinRange(c.since_inception_window) + (c.since_inception_window && !c.since_inception_window.complete ? " · partial" : ""))}
-      ${cell("1Y CAGR", c.y1, fmtWinRange(c.y1_window) + (c.y1_window && !c.y1_window.complete ? " · partial" : ""))}
-      ${cell("3Y CAGR", c.y3, fmtWinRange(c.y3_window) + (c.y3_window && !c.y3_window.complete ? " · partial" : ""))}
-      ${cell("5Y CAGR", c.y5, fmtWinRange(c.y5_window) + (c.y5_window && !c.y5_window.complete ? " · partial" : ""))}
-    </div>`;
+    // Window helpers: returns table shows From / To as separate columns so
+    // every figure carries the exact dates it was computed over.
+    const wStart = (w) => (w && w.start) ? App.formatDate(w.start) : "\u2014";
+    const wEnd = (w) => (w && w.end) ? App.formatDate(w.end) : "\u2014";
+    const partial = (w) => (w && w.complete === false) ? ` <span class="badge amber">partial</span>` : "";
+    const retRow = (label, v, w) => `<tr>
+        <td>${label}</td>
+        <td class="num">${v != null ? App.formatNum(v, 2) + "%" : "\u2014"}</td>
+        <td class="mono">${wStart(w)}</td>
+        <td class="mono">${wEnd(w)}</td>
+        <td>${partial(w)}</td>
+      </tr>`;
+
+    let html = `
+      <div class="card" style="margin-bottom:16px">
+        <h3>Returns <span class="badge grey">CAGR</span></h3>
+        <table class="data" style="min-width:0">
+          <thead><tr><th>Period</th><th class="r">CAGR</th><th>From</th><th>To</th><th></th></tr></thead>
+          <tbody>
+            ${retRow("Since inception", c.since_inception, c.since_inception_window)}
+            ${retRow("1 year", c.y1, c.y1_window)}
+            ${retRow("3 years", c.y3, c.y3_window)}
+            ${retRow("5 years", c.y5, c.y5_window)}
+          </tbody>
+        </table>
+      </div>`;
+
     const r = a.risk || {};
     const roll = a.rolling_1y;
     const b = a.benchmark;
     const hc = a.history_completeness;
+
     if (!a.risk) {
       // Honest dated empty-state: which dates were considered, what was found.
       const ru = a.risk_unavailable || {};
       const detail = ru.window_start
-        ? `Risk stats need ≥ ${ru.required_points ?? 30} NAV points spanning ≥ ${ru.required_span_days ?? 365} days inside ${App.formatDate(ru.window_start)} → ${App.formatDate(ru.window_end)} (3y window). This scheme's history there: ${ru.found_points ?? 0} points${ru.found_start ? ` (${App.formatDate(ru.found_start)} → ${App.formatDate(ru.found_end)})` : ""}.`
+        ? `Risk stats need \u2265 ${ru.required_points ?? 30} NAV points spanning \u2265 ${ru.required_span_days ?? 365} days inside ${App.formatDate(ru.window_start)} \u2192 ${App.formatDate(ru.window_end)} (3y window). This scheme's history there: ${ru.found_points ?? 0} points${ru.found_start ? ` (${App.formatDate(ru.found_start)} \u2192 ${App.formatDate(ru.found_end)})` : ""}.`
         : "";
-      html += `<div class="empty" style="padding:18px">Not enough NAV history for risk analytics yet.${detail ? `<div class="page-sub" style="margin-top:6px">${detail}</div>` : ""}</div>`;
+      html += `
+      <div class="card" style="margin-bottom:16px">
+        <h3>Risk &amp; benchmark</h3>
+        <div class="empty" style="padding:18px">Not enough NAV history for risk analytics yet.${detail ? `<div class="page-sub" style="margin-top:6px">${detail}</div>` : ""}</div>
+      </div>`;
     } else {
-      html += `<div class="kv">
-      <dt>Window (risk)</dt><dd>${fmtWinRange(r)} <span class="page-sub">· ${App.formatNum(r.n_points)} NAV points · 3y</span></dd>
-      <dt>Volatility (ann., 3y)</dt><dd>${r.volatility_pct != null ? App.formatNum(r.volatility_pct, 2) + "%" : "—"}</dd>
-      <dt>Sharpe / Sortino</dt><dd>${r.sharpe != null ? App.formatNum(r.sharpe, 2) : "—"} / ${r.sortino != null ? App.formatNum(r.sortino, 2) : "—"} <span class="page-sub">(rf assumed ${App.formatNum(a.rf_pct_assumption, 1)}%)</span></dd>
-      <dt>Max drawdown (3y)</dt><dd>${r.max_drawdown_pct != null ? `<span style="color:#c94f4f">${App.formatNum(r.max_drawdown_pct, 2)}%</span>` : "—"}</dd>
-      ${roll ? `<dt>Rolling 1Y returns</dt><dd>${App.formatNum(roll.pct_positive, 1)}% positive <span class="page-sub">of ${App.formatNum(roll.n_periods)} daily-step windows · median ${App.formatNum(roll.median_pct, 2)}% · range ${App.formatNum(roll.worst_pct, 2)}% to ${App.formatNum(roll.best_pct, 2)}% · windows ${fmtWinRange({ start: roll.first_window_start, end: roll.last_window_end })}</span></dd>` : ""}
-      ${b ? `<dt>vs ${App.esc(a.benchmark_index || "benchmark")}</dt><dd>beta ${App.formatNum(b.beta, 2)} · alpha ${b.alpha_pct != null ? App.formatNum(b.alpha_pct, 2) + "%" : "—"} · tracking error ${b.tracking_error_pct != null ? App.formatNum(b.tracking_error_pct, 2) + "%" : "—"}${b.information_ratio != null ? ` · IR ${App.formatNum(b.information_ratio, 2)}` : ""} <span class="page-sub">· common days ${fmtWinRange(b)}</span></dd>` : ""}
-    </div>`;
+      const riskRow = (label, valHtml, note) => `<tr>
+          <td style="color:var(--text-2);font-weight:600;width:34%">${label}</td>
+          <td class="num">${valHtml}</td>
+          <td class="page-sub" style="text-align:right">${note || ""}</td>
+        </tr>`;
+      let riskRows = "";
+      riskRows += riskRow("Window (risk)", fmtWinRange(r), `${App.formatNum(r.n_points)} NAV points · 3y`);
+      riskRows += riskRow("Volatility (ann.)", r.volatility_pct != null ? App.formatNum(r.volatility_pct, 2) + "%" : "\u2014", "annualised, 3y");
+      riskRows += riskRow("Sharpe ratio", r.sharpe != null ? App.formatNum(r.sharpe, 2) : "\u2014", `rf assumed ${App.formatNum(a.rf_pct_assumption, 1)}%`);
+      riskRows += riskRow("Sortino ratio", r.sortino != null ? App.formatNum(r.sortino, 2) : "\u2014", "");
+      riskRows += riskRow("Max drawdown", r.max_drawdown_pct != null ? `<span style="color:var(--red)">${App.formatNum(r.max_drawdown_pct, 2)}%</span>` : "\u2014", "3y");
+      if (b) {
+        riskRows += `<tr class="total-row"><td colspan="3">vs ${App.esc(a.benchmark_index || "benchmark")} <span class="page-sub">· common days ${fmtWinRange(b)}</span></td></tr>`;
+        riskRows += riskRow("Beta", b.beta != null ? App.formatNum(b.beta, 2) : "\u2014", "");
+        riskRows += riskRow("Alpha (ann.)", b.alpha_pct != null ? App.formatNum(b.alpha_pct, 2) + "%" : "\u2014", "");
+        riskRows += riskRow("Tracking error", b.tracking_error_pct != null ? App.formatNum(b.tracking_error_pct, 2) + "%" : "\u2014", "");
+        riskRows += riskRow("Information ratio", b.information_ratio != null ? App.formatNum(b.information_ratio, 2) : "\u2014", "");
+      }
+      html += `
+      <div class="card" style="margin-bottom:16px">
+        <h3>Risk &amp; benchmark</h3>
+        <table class="data" style="min-width:0"><tbody>${riskRows}</tbody></table>
+      </div>`;
     }
-    html += `<div class="page-sub" style="margin-top:8px">As of ${App.formatDate(a.as_of)} · computed from AMFI NAV history (${App.formatNum(a.points)} points${a.inception ? `, inception ${App.formatDate(a.inception.date)}` : ""}, ${App.esc(a.plan_used || "")} plan, methodology ${App.esc(a.methodology_version || "")}).${hc ? ` History: ${App.formatNum(hc.points)} pts · max gap ${App.formatNum(hc.max_gap_days)}d${hc.complete ? " · complete" : ""}.` : ""} Percentile-neutral factual figures only.</div>
-    <div class="page-sub" style="margin-top:4px"><b>${App.esc(a.disclaimer)}</b></div>`;
+
     const rollPts = (a.rolling_points || []).filter(p => Array.isArray(p) && p.length === 2);
-    if (rollPts.length > 30) {
-      html += `<div style="margin-top:14px"><div class="page-sub">Rolling 1-year return (%) · ${App.formatDate(rollPts[0][0])} → ${App.formatDate(rollPts[rollPts.length - 1][0])} · daily-history windows stepped weekly</div><div id="schemeRollChart" style="margin-top:8px"></div></div>`;
+    if (roll && rollPts.length > 30) {
+      const statCell = (label, v) => `<div class="kpi card" style="padding:12px 14px">
+          <div class="kpi-label">${label}</div>
+          <div class="kpi-value" style="font-size:19px">${v}</div>
+        </div>`;
+      html += `
+      <div class="card" style="margin-bottom:16px">
+        <h3>Rolling 1-year return
+          <span class="badge grey">${App.formatNum(roll.pct_positive, 1)}% positive</span>
+        </h3>
+        <div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px; margin-bottom:14px">
+          ${statCell("% positive", App.formatNum(roll.pct_positive, 1) + "%")}
+          ${statCell("Median", App.formatNum(roll.median_pct, 2) + "%")}
+          ${statCell("Best", App.formatNum(roll.best_pct, 2) + "%")}
+          ${statCell("Worst", App.formatNum(roll.worst_pct, 2) + "%")}
+        </div>
+        <div class="page-sub">Daily-history windows stepped weekly · windows ${fmtWinRange({ start: roll.first_window_start, end: roll.last_window_end })} · ${App.formatNum(roll.n_periods)} samples</div>
+        <div id="schemeRollChart" style="margin-top:8px"></div>
+      </div>`;
     }
+
+    html += `
+      <div class="page-sub" style="margin-top:2px">As of ${App.formatDate(a.as_of)} · computed from AMFI NAV history (${App.formatNum(a.points)} points${a.inception ? `, inception ${App.formatDate(a.inception.date)}` : ""}, ${App.esc(a.plan_used || "")} plan, methodology ${App.esc(a.methodology_version || "")}).${hc ? ` History: ${App.formatNum(hc.points)} pts · max gap ${App.formatNum(hc.max_gap_days)}d${hc.complete ? " · complete" : ""}.` : ""} Percentile-neutral factual figures only.</div>
+      <div class="page-sub" style="margin-top:4px"><b>${App.esc(a.disclaimer)}</b></div>`;
+
     el.innerHTML = html;
     if (rollPts.length > 30) {
       Charts.mountMultiLine(document.getElementById("schemeRollChart"),
-        [{ name: "Rolling 1Y return", color: "#2456d6",
+        [{ name: "Rolling 1Y return", color: "@primary",
            dates: rollPts.map(p => p[0]), values: rollPts.map(p => p[1]) }],
         { formatValue: v => App.formatNum(v, 1) + "%" });
     }
@@ -520,7 +599,7 @@ function renderNavChart(plan) {
   if (!el || !navCache || !navCache[plan]) return;
   if (!navControllers[plan]) {
     navControllers[plan] = Charts.mountNavChart(el, navCache[plan], {
-      color: plan === "direct" ? "#16a085" : "#2456d6",
+      color: plan === "direct" ? "@success" : "@primary",
       height: 240,
       formatNav: v => App.formatNum(v, 2),
     });
@@ -791,6 +870,7 @@ async function renderSecurityDetail(isin, container, titleEl) {
       App.api(`/securities/${encodeURIComponent(isin)}/reports`).catch(() => null),
     ]);
     const type = s.confirmed_equity === 1 ? "Pure listed stock" : s.confirmed_equity === 0.5 ? "Mixed (REIT/InvIT/preference/convertible)" : "Non-equity (bond/CP/ETF/fund)";
+    const typeTone = s.confirmed_equity === 1 ? "green" : s.confirmed_equity === 0.5 ? "amber" : "grey";
     const rows = s.used_in && s.used_in.length ? s.used_in.map(u => `<tr>
         <td>${App.esc(u.fund_name)}</td>
         <td>${App.esc(u.amc)}</td>
@@ -798,30 +878,46 @@ async function renderSecurityDetail(isin, container, titleEl) {
         <td>${App.formatDate(u.as_of)}</td>
       </tr>`).join("") : `<tr><td colspan="4" class="empty">No weighted holdings reference this security.</td></tr>`;
 
-    const priceSection = buildStockPriceSection(isin, price);
-    const actionsSection = buildStockActionsSection(actions);
-    const reportsSection = buildStockReportsSection(reports);
+    const kpi = (label, value, sub) => `<div class="kpi card"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div>${sub ? `<div class="kpi-sub">${sub}</div>` : ""}</div>`;
+    const hasPrice = !!(price && price.available !== false && price.dates && price.dates.length);
+    const lastDate = hasPrice ? price.dates[price.dates.length - 1] : "\u2014";
+
+    const factRow = (label, valueHtml) => `<tr><td style="color:var(--text-2);font-weight:600;width:38%">${label}</td><td>${valueHtml}</td></tr>`;
+    let factsRows = "";
+    factsRows += factRow("Type", App.badge(type, typeTone));
+    factsRows += factRow("Market cap", App.capBadge(s.cap));
+    factsRows += factRow("Sector", App.esc(s.sector || "\u2014"));
+    factsRows += factRow("Source count", App.formatNum(s.source_count));
+    factsRows += factRow("Aliases", App.esc(s.aliases || "\u2014"));
 
     if (titleEl) titleEl.textContent = `${s.name} \u00b7 ${s.isin}`;
     container.innerHTML = `
-      <h2>${App.esc(s.name)}</h2>
-      <div class="mono" style="color:var(--text-3);margin-bottom:14px">${App.esc(s.isin)}</div>
-      <div class="kv" style="margin-bottom:14px">
-        <dt>Type</dt><dd>${type}</dd>
-        <dt>Market cap</dt><dd>${App.capBadge(s.cap)}</dd>
-        <dt>Sector</dt><dd>${App.esc(s.sector)}</dd>
-        <dt>Source count</dt><dd>${App.formatNum(s.source_count)}</dd>
-        <dt>Aliases</dt><dd>${App.esc(s.aliases || "—")}</dd>
+      <h2 style="margin-bottom:2px">${App.esc(s.name)} ${App.badge(type, typeTone)}</h2>
+      <div class="mono page-sub" style="margin-bottom:16px">${App.esc(s.isin)}</div>
+
+      <div class="grid auto" style="margin-bottom:16px">
+        ${hasPrice ? kpi("Latest close", App.formatNum(price.last_close, 2), App.esc(lastDate)) : ""}
+        ${hasPrice ? kpi("Data points", App.formatNum(price.points), `since ${App.esc(price.inception || "\u2014")}`) : ""}
+        ${kpi("Sources", App.formatNum(s.source_count), "mapping references")}
       </div>
-      ${priceSection}
-      ${actionsSection}
-      ${reportsSection}
-      <h3>Top weighted in schemes</h3>
-      <div class="table-wrap" style="max-height:40vh; overflow:auto">
-        <table class="data">
-          <thead><tr><th>Scheme</th><th>AMC</th><th class="r">% NAV</th><th>As of</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
+
+      <div class="card" style="margin-bottom:16px">
+        <h3>Security facts</h3>
+        <table class="data" style="min-width:0"><tbody>${factsRows}</tbody></table>
+      </div>
+
+      ${buildStockPriceSection(isin, price)}
+      ${buildStockActionsSection(actions)}
+      ${buildStockReportsSection(reports)}
+
+      <div class="card">
+        <h3>Top weighted in schemes <span class="badge grey">${s.used_in ? s.used_in.length : 0}</span></h3>
+        <div class="table-wrap" style="max-height:40vh; overflow:auto">
+          <table class="data">
+            <thead><tr><th>Scheme</th><th>AMC</th><th class="r">% NAV</th><th>As of</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
       </div>`;
     stockPriceCache = price;
     renderStockPriceChart(isin);
@@ -834,16 +930,17 @@ async function renderSecurityDetail(isin, container, titleEl) {
 function buildStockPriceSection(isin, price) {
   if (!price || price.available === false || !price.dates) return "";
   const last = price.dates && price.dates.length ? price.dates[price.dates.length - 1] : "—";
+  const snapRow = (label, val) => `<tr><td style="color:var(--text-2);font-weight:600;width:38%">${label}</td><td>${val}</td></tr>`;
   return `
-    <div class="nav-section" style="margin:0 0 16px">
+    <div class="card" style="margin-bottom:16px">
       <h3>Price history (daily close)</h3>
-      <button class="nav-toggle" data-plan="price" onclick="toggleStockPrice('${isin}')">Price chart <span class="caret">▸</span></button>
+      <table class="data" style="min-width:0"><tbody>
+        ${snapRow("Latest close", `${App.formatNum(price.last_close, 2)} <span class="page-sub">(${App.esc(last)})</span>`)}
+        ${snapRow("Inception", App.esc(price.inception || "—"))}
+        ${snapRow("Data points", App.formatNum(price.points))}
+      </tbody></table>
+      <button class="nav-toggle" data-plan="price" style="margin-top:12px" onclick="toggleStockPrice('${isin}')">Price chart <span class="caret">▸</span></button>
       <div class="nav-pane" id="nav-price" hidden>
-        <div class="kv" style="margin-bottom:10px">
-          <dt>Inception</dt><dd>${App.esc(price.inception || "—")}</dd>
-          <dt>Latest close</dt><dd>${App.formatNum(price.last_close, 2)} (${App.esc(last)})</dd>
-          <dt>Data points</dt><dd>${App.formatNum(price.points)}</dd>
-        </div>
         <div class="nav-chart" id="nav-chart-price"></div>
       </div>
     </div>`;
@@ -871,7 +968,7 @@ function renderStockPriceChart(isin) {
       dates: stockPriceCache.dates,
       navs: stockPriceCache.closes,
     }, {
-      color: "#2456d6", height: 240,
+      color: "@primary", height: 240,
       formatNav: v => App.formatNum(v, 2),
     });
   }
@@ -899,13 +996,32 @@ function buildStockActionsSection(actions) {
   ].sort((a, b) => b.key.localeCompare(a.key)).map(r => r.html).join("");
   if (!rows) return "";
   return `
-    <h3>Corporate actions (dividends & splits)</h3>
-    <div class="table-wrap" style="max-height:34vh; overflow:auto">
-      <table class="data">
-        <thead><tr><th>Date</th><th>Type</th><th class="r">Amount (₹)</th><th class="r">Ratio</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+    <div class="card" style="margin-bottom:16px">
+      <h3>Corporate actions (dividends &amp; splits) <span class="badge grey">${divs.length + splits.length}</span></h3>
+      <button class="nav-toggle" data-sec="actions" onclick="toggleSecPane('actions')">Show actions <span class="caret">▸</span></button>
+      <div class="nav-pane" id="sec-pane-actions" hidden style="margin-top:12px">
+        <div class="table-wrap" style="max-height:34vh; overflow:auto">
+          <table class="data">
+            <thead><tr><th>Date</th><th>Type</th><th class="r">Amount (₹)</th><th class="r">Ratio</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
     </div>`;
+}
+
+function toggleSecPane(name) {
+  const pane = document.getElementById("sec-pane-" + name);
+  const btn = document.querySelector('.nav-toggle[data-sec="' + name + '"]');
+  if (!pane) return;
+  const show = pane.hidden;
+  pane.hidden = !show;
+  if (btn) {
+    btn.classList.toggle("active", show);
+    btn.firstChild.textContent = show ? "Hide " : "Show ";
+    const caret = btn.querySelector(".caret");
+    if (caret) caret.textContent = show ? "▾" : "▸";
+  }
 }
 
 function buildStockReportsSection(reports) {
@@ -918,12 +1034,14 @@ function buildStockReportsSection(reports) {
       <td>${a.url ? `<a href="${App.esc(a.url)}" target="_blank" rel="noopener">PDF</a>` : "—"}</td>
     </tr>`).join("");
   return `
-    <h3>Recent financial reports / announcements (NSE)</h3>
-    <div class="table-wrap" style="max-height:34vh; overflow:auto">
-      <table class="data">
-        <thead><tr><th>Date</th><th>Headline</th><th>Attachment</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+    <div class="card" style="margin-bottom:16px">
+      <h3>Recent financial reports / announcements <span class="badge grey">NSE · ${ann.length}</span></h3>
+      <div class="table-wrap" style="max-height:34vh; overflow:auto">
+        <table class="data">
+          <thead><tr><th>Date</th><th>Headline</th><th>Attachment</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
     </div>`;
 }
 
@@ -990,7 +1108,7 @@ function pfMount(prefix, onRun, autoRun) {
       document.getElementById(prefix + "SchemeHint").textContent = "";
       if (!d.items.length) { box.style.display = "block"; box.innerHTML = `<div class="empty">No schemes found.</div>`; return; }
       box.style.display = "block";
-      box.innerHTML = d.items.map(x => `<div class="chip" style="cursor:pointer;display:flex;border-radius:0;background:#fff;border-bottom:1px solid var(--border);justify-content:space-between;width:100%"
+      box.innerHTML = d.items.map(x => `<div class="chip" style="cursor:pointer;display:flex;border-radius:0;background:var(--surface);border-bottom:1px solid var(--border);justify-content:space-between;width:100%"
         onclick="pfAdd('scheme',{id:${x.id},name:'${App.esc(x.fund_name.replace(/'/g, "\\'"))}'})">
         <span>${App.esc(x.fund_name)}</span><span class="badge blue">${App.esc(x.amc)}</span></div>`).join("");
     } catch (e) { document.getElementById(prefix + "SchemeHint").textContent = e.message; }
@@ -1007,7 +1125,7 @@ function pfMount(prefix, onRun, autoRun) {
       document.getElementById(prefix + "StockHint").textContent = "";
       if (!d.items.length) { box.style.display = "block"; box.innerHTML = `<div class="empty">No stocks found.</div>`; return; }
       box.style.display = "block";
-      box.innerHTML = d.items.map(x => `<div class="chip" style="cursor:pointer;display:flex;border-radius:0;background:#fff;border-bottom:1px solid var(--border);justify-content:space-between;width:100%"
+      box.innerHTML = d.items.map(x => `<div class="chip" style="cursor:pointer;display:flex;border-radius:0;background:var(--surface);border-bottom:1px solid var(--border);justify-content:space-between;width:100%"
         onclick="pfAdd('stock',{isin:'${x.isin}',name:'${App.esc((x.name || "").replace(/'/g, "\\'"))}'})">
         <span>${App.esc(x.name)}</span><span class="mono" style="color:var(--text-3)">${App.esc(x.isin)}</span></div>`).join("");
     } catch (e) { document.getElementById(prefix + "StockHint").textContent = e.message; }
@@ -1360,7 +1478,7 @@ function initOverlap() {
       const box = document.getElementById("overlapSuggest");
       if (!data.items.length) { box.style.display = "block"; box.innerHTML = `<div class="empty">No schemes found.</div>`; return; }
       box.style.display = "block";
-      box.innerHTML = data.items.map(s => `<div class="chip" style="cursor:pointer;display:flex;border-radius:0;background:#fff;border-bottom:1px solid var(--border);justify-content:space-between;width:100%"
+      box.innerHTML = data.items.map(s => `<div class="chip" style="cursor:pointer;display:flex;border-radius:0;background:var(--surface);border-bottom:1px solid var(--border);justify-content:space-between;width:100%"
         onclick="pickOverlap(${s.id}, '${App.esc(s.fund_name.replace(/'/g, "\\'"))}')">
         <span>${App.esc(s.fund_name)}</span><span class="badge blue">${App.esc(s.amc)}</span></div>`).join("");
     } catch (e) { hint.textContent = e.message; }
@@ -1441,9 +1559,9 @@ function renderOverlapResults(r) {
           <table class="data overlap-matrix"><thead><tr>${headers}</tr></thead><tbody>${matrixRows}</tbody></table>
         </div>
         <div class="legend">
-          <span><i style="background:#f2f5fa"></i>0%</span>
-          <span><i style="background:#a7ccff"></i>~50%</span>
-          <span><i style="background:#3f7df0;border-radius:50%"></i>≥80%</span>
+          <span><i style="background:var(--heat-0)"></i>0%</span>
+          <span><i style="background:var(--heat-3)"></i>~50%</span>
+          <span><i style="background:var(--heat-5);border-radius:50%"></i>≥80%</span>
         </div>
       </div>
       <div>
@@ -1463,9 +1581,9 @@ function renderOverlapResults(r) {
 }
 
 // ---------- compare schemes [ANA2] ----------
-const COMPARE_COLORS = ["#2456d6", "#16a085", "#c94f4f", "#d09a2f", "#7d5bd6",
-                        "#2f9fc9", "#b0567a", "#5f7a1e", "#8a5a3c", "#4f5560",
-                        "#a03232", "#1f6f43"];
+const COMPARE_COLORS = ["@chart-1", "@chart-5", "@chart-8", "@chart-4", "@chart-6",
+                        "@chart-7", "@chart-9", "@chart-10", "@chart-2", "@chart-3",
+                        "@success", "@destructive"];
 const compareState = { selected: new Map() };
 
 function initCompare() {
@@ -1481,7 +1599,7 @@ function initCompare() {
       const box = document.getElementById("compareSuggest");
       if (!data.items.length) { box.style.display = "block"; box.innerHTML = `<div class="empty">No schemes found.</div>`; return; }
       box.style.display = "block";
-      box.innerHTML = data.items.map(s => `<div class="chip" style="cursor:pointer;display:flex;border-radius:0;background:#fff;border-bottom:1px solid var(--border);justify-content:space-between;width:100%"
+      box.innerHTML = data.items.map(s => `<div class="chip" style="cursor:pointer;display:flex;border-radius:0;background:var(--surface);border-bottom:1px solid var(--border);justify-content:space-between;width:100%"
         onclick="pickCompare(${s.id}, '${App.esc(s.fund_name.replace(/'/g, "\\'"))}')">
         <span>${App.esc(s.fund_name)}</span><span class="badge blue">${App.esc(s.amc)}</span></div>`).join("");
     } catch (e) { hint.textContent = e.message; }
@@ -2114,7 +2232,7 @@ async function renderPortfolioAnalyticsBlock(container, portfolioId) {
     body.innerHTML = html;
     if (a.growth_100 && a.growth_100.dates.length > 10) {
       Charts.mountMultiLine(document.getElementById("paGrowthChart"),
-        [{ name: a.label || "Portfolio", color: "#2456d6",
+        [{ name: a.label || "Portfolio", color: "@primary",
            dates: a.growth_100.dates, values: a.growth_100.values }],
         { formatValue: v => "₹" + App.formatNum(v, 0) });
     }
@@ -2407,7 +2525,7 @@ function renderCompliance(out, r) {
     </div>` : "";
   const stale = r.stale_holdings || [];
   const staleCard = stale.length ? `
-    <div class="card" style="border-left:3px solid #b7791f">
+    <div class="card" style="border-left:3px solid var(--warning)">
       <h3>Data freshness check <span class="badge amber">${stale.length} stale / missing</span></h3>
       <div class="page-sub">These holdings' latest NAV/price is older than 10 days (or missing). Backfill re-pulls their NAV history from the last known date to today.</div>
       <div class="table-wrap" style="max-height:26vh;overflow:auto">
@@ -2634,7 +2752,7 @@ const DH_LABELS = {
   stocks_bonds: "Stocks & bonds", pipelines: "Refresh pipelines"};
 
 function dhBandColor(band) {
-  return {green: "#3f9d63", amber: "#d09a2f", red: "#c94f4f", grey: "#9aa0a6"}[band] || "#9aa0a6";
+  return {green: "var(--success)", amber: "var(--warning)", red: "var(--destructive)", grey: "var(--text-3)"}[band] || "var(--text-3)";
 }
 
 async function refreshHealthData() {
@@ -2652,11 +2770,11 @@ async function refreshHealthData() {
     wrap.innerHTML = Object.entries(h.components || {}).map(([k, c]) => `
       <div style="display:flex;align-items:center;gap:10px;margin:6px 0">
         <div style="width:170px;font-size:.8rem">${DH_LABELS[k] || k}</div>
-        <div style="flex:1;background:#e8eaed;border-radius:4px;height:8px;overflow:hidden">
+        <div style="flex:1;background:var(--surface-2);border-radius:4px;height:8px;overflow:hidden">
           <div style="width:${Math.max(0, Math.min(100, c.score || 0))}%;height:100%;background:${dhBandColor(h.band)}"></div>
         </div>
         <div class="mono" style="width:52px;text-align:right;font-size:.78rem">${c.score != null ? c.score : "—"}</div>
-        <details style="font-size:.72rem;color:#666"><summary style="cursor:pointer">info</summary>
+        <details style="font-size:.72rem;color:var(--text-2)"><summary style="cursor:pointer">info</summary>
           <pre class="mono" style="white-space:pre-wrap;margin:4px 0 0;font-size:.7rem">${App.esc(JSON.stringify(c.detail || {}, null, 1))}</pre>
         </details>
       </div>`).join("") || `<div class="empty">No components.</div>`;
@@ -2683,7 +2801,7 @@ async function refreshRelianceData() {
     const tiers = Object.entries(r.tiers || {}).map(([t, n]) => {
       const col = dhBandColor(t);
       return `<div style="flex:1;text-align:center">
-        <div style="background:#e8eaed;border-radius:4px;height:8px;overflow:hidden">
+        <div style="background:var(--surface-2);border-radius:4px;height:8px;overflow:hidden">
           <div style="width:${Math.round(n / total * 100)}%;height:100%;background:${col}"></div>
         </div>
         <div style="font-size:.72rem;margin-top:3px"><b style="color:${col}">${REL_TIER_LABELS[t]}</b> ${App.formatNum(n)} (${Math.round(n / total * 100)}%)</div>
@@ -2695,7 +2813,7 @@ async function refreshRelianceData() {
         <td><strong>${App.esc(App.sourceLabel(src))}</strong></td>  <!-- [U4L] raw keys must never render -->
         <td class="num">${App.formatNum(a.count)}</td>
         <td class="num">${a.avg_score != null ? a.avg_score : "—"}</td>
-        <td class="num">${a.stale_gt_45d ? `<span style="color:#c94f4f">${App.formatNum(a.stale_gt_45d)}</span>` : "0"}</td>
+        <td class="num">${a.stale_gt_45d ? `<span style="color:var(--red)">${App.formatNum(a.stale_gt_45d)}</span>` : "0"}</td>
         <td class="num">${a.avg_isin_pct != null ? a.avg_isin_pct + "%" : "—"}</td>
       </tr>`).join("") || `<tr><td colspan="5" class="empty">No sources.</td></tr>`;
 
@@ -2737,7 +2855,7 @@ function admBadge(status) {
 }
 
 function admDetail(d, err) {
-  if (err) return `<span class="mono" style="color:#c94f4f">${App.esc(String(err).slice(0, 160))}</span>`;
+  if (err) return `<span class="mono" style="color:var(--red)">${App.esc(String(err).slice(0, 160))}</span>`;
   const skip = new Set(["ts", "pipeline", "status", "duration_s", "error", "trace"]);
   const parts = Object.entries(d || {}).filter(([, v]) => v !== null && v !== "")
     .map(([k, v]) => `${App.esc(k)}=<b>${App.esc(String(v).slice(0, 40))}</b>`);
@@ -2766,7 +2884,7 @@ async function refreshAdminData() {
           <dt>Last run</dt><dd>${p.last_ts ? App.esc(p.last_ts.replace("T", " ")) : "—"}</dd>
           <dt>Took</dt><dd>${p.last_duration_s != null ? p.last_duration_s + "s" : "—"}</dd>
           <dt>24h</dt><dd><span class="badge green">${p.ok_24h || 0} ok</span> ${(p.err_24h || 0) ? `<span class="badge red">${p.err_24h} err</span>` : ""}</dd>
-          ${p.last_error ? `<dt>Error</dt><dd class="mono" style="color:#c94f4f;font-size:.75rem">${App.esc(String(p.last_error).slice(0, 140))}</dd>` : ""}
+          ${p.last_error ? `<dt>Error</dt><dd class="mono" style="color:var(--red);font-size:.75rem">${App.esc(String(p.last_error).slice(0, 140))}</dd>` : ""}
           ${!p.last_error && Object.keys(p.last_detail || {}).length ? `<dt>Detail</dt><dd class="page-sub">${admDetail(p.last_detail)}</dd>` : ""}
         </div>
         <button class="btn btn-outline btn-sm" onclick="adminRun('${name}')"

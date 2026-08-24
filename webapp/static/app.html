@@ -4,7 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FundPulse — Analytics</title>
-<link rel="stylesheet" href="/static/css/style.css?v=3">
+<script>
+  (() => { try {
+    const t = localStorage.getItem("fea_theme");
+    if (t === "dark" || (!t && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches))
+      document.documentElement.classList.add("dark");
+  } catch (e) {} })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css?v=4">
 </head>
 <body>
 <div class="app-shell">
@@ -33,7 +43,10 @@
         <div class="page-title" id="pageTitle">Dashboard</div>
         <div class="page-sub" id="pageSub">Dataset as of 14-Aug-2026 · Updated monthly</div>
       </div>
-      <div class="disclaimer">Diagnostic tool for factual analysis only; not investment advice.</div>
+      <div class="topbar-tools">
+        <button id="themeToggle" class="theme-toggle" type="button" aria-label="Toggle dark mode"></button>
+        <div class="disclaimer">Diagnostic tool for factual analysis only; not investment advice.</div>
+      </div>
     </header>
 
     <div class="content">
@@ -455,8 +468,11 @@
 </div>
 <div id="toast"></div>
 
-<script src="/static/js/utils.js?v=3"></script>
-<script src="/static/js/charts.js?v=3"></script>
-<script src="/static/js/app.js?v=3"></script>
+<script src="/static/js/utils.js?v=4"></script>
+<script src="/static/js/charts.js?v=4"></script>
+<script src="/static/js/app.js?v=5"></script>
+<script>
+  App.initThemeToggle("themeToggle");
+</script>
 </body>
 </html>

@@ -1,6 +1,31 @@
-"use strict";
+﻿"use strict";
 
+// Theme-aware canvas palette: colors are read from CSS custom properties at
+// draw time so canvases follow light/dark without reload (welcome-gateway
+// port). Series may pass literal colors or "@token-name" references.
 const Charts = {
+  _c(name, fallback) {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+      return (v && v.trim()) || fallback || "#000";
+    } catch (e) {
+      return fallback || "#000";
+    }
+  },
+
+  // "@primary" -> var(--primary); "@chart-4" -> var(--chart-4); literals pass through.
+  _resolve(c) {
+    if (!c || c === "@primary") return this._c("--primary");
+    if (c.charAt(0) === "@") return this._c("--" + c.slice(1), c);
+    return c;
+  },
+
+  _palette() {
+    const out = [];
+    for (let i = 1; i <= 10; i++) out.push(this._c("--chart-" + i));
+    return out;
+  },
+
   _renderBar(canvas, labels, values, opts = {}) {
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.parentElement.getBoundingClientRect();
@@ -20,8 +45,14 @@ const Charts = {
     const n = labels.length;
     const slot = plotW / n, barW = Math.min(34, slot * 0.62);
     ctx.textBaseline = "middle";
+    const grid = this._c("--chart-grid");
+    const mut = this._c("--text-3");
+    const lblCol = this._c("--text-2");
+    const fg = this._c("--foreground");
+    const track = this._c("--canvas-bg");
+    const defColor = this._c("--primary");
     // grid lines
-    ctx.strokeStyle = "#e8edf4"; ctx.fillStyle = "#8a97a8"; ctx.font = "11px sans-serif";
+    ctx.strokeStyle = grid; ctx.fillStyle = mut; ctx.font = "11px sans-serif";
     for (let g = 0; g <= 4; g++) {
       const y = pad.t + plotH - (plotH * g / 4);
       ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
@@ -30,27 +61,28 @@ const Charts = {
       ctx.fillText(App.formatNum(val, val >= 1000 ? 0 : 1), pad.l - 6, y);
     }
     // bars
-    const colors = opts.colors || Array(n).fill("#2456d6");
+    const colors = opts.colors || Array(n).fill(defColor);
     values.forEach((v, i) => {
       const vn = Number(v);
       const val = isFinite(vn) ? vn : 0;          // null/NaN -> zero-height bar
       const bh = Math.max(2, (val / max) * plotH);
       const x = pad.l + slot * i + (slot - barW) / 2;
       const y = pad.t + plotH - bh;
-      ctx.fillStyle = colors[i] || "#2456d6";
+      const col = this._resolve(colors[i]) || defColor;
+      ctx.fillStyle = col;
       ctx.fillRect(x, y, barW, bh);
-      ctx.fillStyle = "#f8fafc";
+      ctx.fillStyle = track;
       ctx.fillRect(x + 1, y + 1, barW - 2, bh - 2);
-      ctx.fillStyle = colors[i] || "#2456d6";
+      ctx.fillStyle = col;
       ctx.fillRect(x + 1, y + 1, barW - 2, Math.max(2, bh - 2) * 0.85);
-      ctx.fillStyle = "#17202f";
+      ctx.fillStyle = fg;
       ctx.font = "600 11px sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(App.formatNum(v), x + barW / 2, y - 8);
       // label
-      ctx.fillStyle = "#5b6b7f"; ctx.font = "10.5px sans-serif";
+      ctx.fillStyle = lblCol; ctx.font = "10.5px sans-serif";
       ctx.textAlign = "center";
-      const lab = labels[i].length > 16 ? labels[i].slice(0, 15) + "…" : labels[i];
+      const lab = labels[i].length > 16 ? labels[i].slice(0, 15) + "â€¦" : labels[i];
       ctx.save();
       ctx.translate(x + barW / 2, h - 8);
       ctx.rotate(-0.35);
@@ -68,9 +100,7 @@ const Charts = {
     const ctx = canvas.getContext("2d");
     const cx = size / 2, cy = size / 2, r = size / 2 - 22;
     const total = entries.reduce((a, e) => a + (e.value || 0), 0);
-    const palette = ["#2456d6", "#16a085", "#e2a03f", "#7d5cd6", "#d6496b", "#5aa7d6",
-      "#8a97a8", "#4b6a9c", "#3fa574", "#c94f4f", "#9b8c3f", "#6a4fa3", "#2b8cbe",
-      "#c070c8", "#6a9c3f", "#be6a2b", "#3f7dbe", "#be2b6a"];
+    const palette = this._palette();
 
     // Slice geometry (normalized angles in [0, 2PI)).
     const slices = [];
@@ -90,8 +120,11 @@ const Charts = {
     const draw = (hoverIdx) => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, size, size);
+      const hole = Charts._c("--canvas-bg");
+      const mut = Charts._c("--text-3");
+      const fg = Charts._c("--foreground");
       if (!slices.length) {
-        ctx.fillStyle = "#8a97a8"; ctx.font = "13px sans-serif"; ctx.textAlign = "center";
+        ctx.fillStyle = mut; ctx.font = "13px sans-serif"; ctx.textAlign = "center";
         ctx.fillText("No data", cx, cy);
         return;
       }
@@ -103,14 +136,14 @@ const Charts = {
         ctx.closePath();
         ctx.fillStyle = s.color;
         ctx.fill();
-        ctx.strokeStyle = (i === hoverIdx) ? "#fff" : "#fff";
+        ctx.strokeStyle = hole;
         ctx.lineWidth = 2;
         ctx.stroke();
       });
-      ctx.beginPath(); ctx.arc(cx, cy, r * 0.62, 0, Math.PI * 2); ctx.fillStyle = "#fff"; ctx.fill();
-      ctx.fillStyle = "#17202f"; ctx.font = "700 18px sans-serif"; ctx.textAlign = "center";
+      ctx.beginPath(); ctx.arc(cx, cy, r * 0.62, 0, Math.PI * 2); ctx.fillStyle = hole; ctx.fill();
+      ctx.fillStyle = fg; ctx.font = "700 18px sans-serif"; ctx.textAlign = "center";
       ctx.fillText(opts.center || App.formatNum(total), cx, cy + 2);
-      ctx.fillStyle = "#8a97a8"; ctx.font = "11px sans-serif";
+      ctx.fillStyle = mut; ctx.font = "11px sans-serif";
       ctx.fillText(opts.centerLabel || "total", cx, cy + 18);
     };
     draw(-1);
@@ -171,11 +204,14 @@ const Charts = {
     const cx = size / 2, cy = size / 2 + 6, r = size / 2 - 18;
     const frac = Math.max(0, Math.min(1, value / max));
     ctx.lineWidth = 14; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, 0); ctx.strokeStyle = "#e8edf4"; ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, Math.PI + frac * Math.PI); ctx.strokeStyle = opts.color || "#2456d6"; ctx.stroke();
-    ctx.fillStyle = "#17202f"; ctx.font = "700 20px sans-serif"; ctx.textAlign = "center";
+    ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, 0);
+    ctx.strokeStyle = this._c("--chart-grid"); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI, Math.PI + frac * Math.PI);
+    ctx.strokeStyle = this._resolve(opts.color); ctx.stroke();
+    ctx.fillStyle = this._c("--foreground");
+    ctx.font = "700 20px sans-serif"; ctx.textAlign = "center";
     ctx.fillText(App.formatPct(value, 1), cx, cy - 4);
-    ctx.fillStyle = "#8a97a8"; ctx.font = "11px sans-serif";
+    ctx.fillStyle = this._c("--text-3"); ctx.font = "11px sans-serif";
     ctx.fillText(opts.label || "", cx, cy + 18);
   },
 
@@ -190,7 +226,7 @@ const Charts = {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
     if (!dates || dates.length < 2) {
-      ctx.fillStyle = "#8a97a8"; ctx.font = "13px sans-serif"; ctx.textAlign = "center";
+      ctx.fillStyle = this._c("--text-3"); ctx.font = "13px sans-serif"; ctx.textAlign = "center";
       ctx.fillText("Insufficient data", w / 2, h / 2);
       return;
     }
@@ -203,7 +239,8 @@ const Charts = {
     const X = (i) => pad.l + (i / (dates.length - 1)) * plotW;
     const Y = (v) => pad.t + plotH - ((v - loPad) / (hiPad - loPad)) * plotH;
     // grid + y labels
-    ctx.strokeStyle = "#e8edf4"; ctx.fillStyle = "#8a97a8"; ctx.font = "11px sans-serif";
+    ctx.strokeStyle = this._c("--chart-grid");
+    ctx.fillStyle = this._c("--text-3"); ctx.font = "11px sans-serif";
     ctx.textAlign = "right";
     for (let g = 0; g <= 4; g++) {
       const y = pad.t + plotH - (plotH * g / 4);
@@ -212,12 +249,12 @@ const Charts = {
       ctx.fillText(App.formatNum(val, val >= 1000 ? 0 : 1), pad.l - 6, y);
     }
     // x labels (first/middle/last dates)
-    ctx.fillStyle = "#5b6b7f"; ctx.font = "10.5px sans-serif"; ctx.textAlign = "center";
+    ctx.fillStyle = this._c("--text-2"); ctx.font = "10.5px sans-serif"; ctx.textAlign = "center";
     [0, Math.floor((dates.length - 1) / 2), dates.length - 1].forEach(i => {
       ctx.fillText(dates[i], X(i), h - 10);
     });
     // line
-    const stroke = opts.color || "#2456d6";
+    const stroke = this._resolve(opts.color);
     ctx.beginPath();
     ctx.moveTo(X(0), Y(nums[0]));
     for (let i = 1; i < nums.length; i++) ctx.lineTo(X(i), Y(nums[i]));
@@ -262,7 +299,7 @@ const Charts = {
     const plotW = w - pad.l - pad.r, plotH = h - pad.t - pad.b;
     ctx.clearRect(0, 0, w, h);
     if (!dates || dates.length < 2) {
-      ctx.fillStyle = "#8a97a8"; ctx.font = "13px sans-serif"; ctx.textAlign = "center";
+      ctx.fillStyle = Charts._c("--text-3"); ctx.font = "13px sans-serif"; ctx.textAlign = "center";
       ctx.fillText("Insufficient data", w / 2, h / 2);
       return;
     }
@@ -270,7 +307,8 @@ const Charts = {
     const X = (i) => pad.l + (i / (dates.length - 1)) * plotW;
     const Y = (v) => pad.t + plotH - ((v - loPad) / (hiPad - loPad)) * plotH;
     // grid + y labels
-    ctx.strokeStyle = "#e8edf4"; ctx.fillStyle = "#8a97a8"; ctx.font = "11px sans-serif";
+    ctx.strokeStyle = Charts._c("--chart-grid");
+    ctx.fillStyle = Charts._c("--text-3"); ctx.font = "11px sans-serif";
     ctx.textAlign = "right";
     for (let g = 0; g <= 4; g++) {
       const y = pad.t + plotH - (plotH * g / 4);
@@ -279,7 +317,7 @@ const Charts = {
       ctx.fillText(App.formatNum(val, val >= 1000 ? 0 : 1), pad.l - 6, y);
     }
     // x labels (first / middle / last)
-    ctx.fillStyle = "#5b6b7f"; ctx.font = "10.5px sans-serif"; ctx.textAlign = "center";
+    ctx.fillStyle = Charts._c("--text-2"); ctx.font = "10.5px sans-serif"; ctx.textAlign = "center";
     [0, Math.floor((dates.length - 1) / 2), dates.length - 1].forEach(i => {
       ctx.fillText(dates[i], X(i), h - 10);
     });
@@ -303,12 +341,14 @@ const Charts = {
       ctx.beginPath(); ctx.moveTo(hover.x, pad.t); ctx.lineTo(hover.x, pad.t + plotH); ctx.stroke();
       ctx.setLineDash([]);
       ctx.beginPath(); ctx.arc(hover.x, hover.y, 4, 0, Math.PI * 2);
-      ctx.fillStyle = "#fff"; ctx.fill(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = Charts._c("--canvas-bg"); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
     }
   },
 
   // Multi-series line chart for the Compare view [ANA2].
   // series = [{ name, color, dates:[ISO], values:[num] }] on a shared grid.
+  // Colors may be literal or "@token-name"; both resolve per render.
   mountMultiLine(container, series, opts = {}) {
     const height = opts.height || 260;
     const fmt = opts.formatValue || ((v) => App.formatNum(v, 1));
@@ -316,8 +356,8 @@ const Charts = {
     container.innerHTML = `
       <div class="nav-plot"><canvas class="ml-canvas"></canvas><div class="nav-tip" hidden></div></div>
       <div class="ml-legend" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">
-        ${series.map((s, i) => `<span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#5b6b7f">
-          <span style="width:10px;height:10px;border-radius:2px;background:${s.color};display:inline-block"></span>
+        ${series.map((s) => `<span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-2)">
+          <span style="width:10px;height:10px;border-radius:2px;background:${Charts._resolve(s.color)};display:inline-block"></span>
           ${App.esc(s.name)}</span>`).join("")}
       </div>`;
     const canvas = container.querySelector(".ml-canvas");
@@ -335,7 +375,7 @@ const Charts = {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
       if (n < 2) {
-        ctx.fillStyle = "#8a97a8"; ctx.font = "13px sans-serif"; ctx.textAlign = "center";
+        ctx.fillStyle = Charts._c("--text-3"); ctx.font = "13px sans-serif"; ctx.textAlign = "center";
         ctx.fillText("Insufficient data", w / 2, h / 2);
         return;
       }
@@ -348,7 +388,8 @@ const Charts = {
       lo -= span * 0.08; hi += span * 0.08;
       const X = (i) => pad.l + (i / (n - 1)) * plotW;
       const Y = (v) => pad.t + plotH - ((v - lo) / (hi - lo)) * plotH;
-      ctx.strokeStyle = "#e8edf4"; ctx.fillStyle = "#8a97a8"; ctx.font = "11px sans-serif";
+      ctx.strokeStyle = Charts._c("--chart-grid");
+      ctx.fillStyle = Charts._c("--text-3"); ctx.font = "11px sans-serif";
       ctx.textAlign = "right";
       for (let g = 0; g <= 4; g++) {
         const y = pad.t + plotH - (plotH * g / 4);
@@ -357,12 +398,12 @@ const Charts = {
         ctx.fillText(App.formatNum(val, Math.abs(val) >= 1000 ? 0 : 1), pad.l - 6, y);
       }
       const labels = series[0].dates;
-      ctx.fillStyle = "#5b6b7f"; ctx.font = "10.5px sans-serif"; ctx.textAlign = "center";
+      ctx.fillStyle = Charts._c("--text-2"); ctx.font = "10.5px sans-serif"; ctx.textAlign = "center";
       [0, Math.floor((n - 1) / 2), n - 1].forEach(i => ctx.fillText(labels[i], X(i), h - 10));
       series.forEach(s => {
         ctx.beginPath();
         s.values.forEach((v, i) => { if (i === 0) ctx.moveTo(X(0), Y(v)); else ctx.lineTo(X(i), Y(v)); });
-        ctx.strokeStyle = s.color; ctx.lineWidth = 1.8; ctx.stroke();
+        ctx.strokeStyle = Charts._resolve(s.color); ctx.lineWidth = 1.8; ctx.stroke();
       });
       if (hoverI != null) {
         const x = X(hoverI);
@@ -383,7 +424,7 @@ const Charts = {
       tip.hidden = false;
       tip.style.left = (x + 14) + "px";
       tip.innerHTML = `<div class="tip-date">${App.esc(series[0].dates[hoverI])}</div>` +
-        series.map(s => `<div class="tip-nav" style="color:${s.color}">${App.esc(s.name)}: ${fmt(s.values[hoverI])}</div>`).join("");
+        series.map(s => `<div class="tip-nav" style="color:${Charts._resolve(s.color)}">${App.esc(s.name)}: ${fmt(s.values[hoverI])}</div>`).join("");
     });
     canvas.addEventListener("mouseleave", () => { hoverI = null; tip.hidden = true; render(); });
     mountChart(render);
@@ -395,7 +436,6 @@ const Charts = {
   // date-range controls. `data` = { dates:[], navs:[], label } (full series,
   // ascending). Returns a controller with .render() / .setRange(fromKey, toKey).
   mountNavChart(container, data, opts = {}) {
-    const color = opts.color || "#2456d6";
     const height = opts.height || 240;
     const formatNav = opts.formatNav || ((v) => App.formatNum(v, 2));
     const PRESETS = [
@@ -414,7 +454,7 @@ const Charts = {
         </div>
         <div class="nav-dates">
           <input type="date" class="nav-from" aria-label="From">
-          <span class="nav-arrow">→</span>
+          <span class="nav-arrow">â†’</span>
           <input type="date" class="nav-to" aria-label="To">
           <button type="button" class="btn btn-outline btn-sm nav-apply">Apply</button>
         </div>
@@ -468,6 +508,8 @@ const Charts = {
     }
 
     function render() {
+      // Resolve the stroke color at draw time so theme flips repaint correctly.
+      const color = Charts._resolve(opts.color);
       const rect = plot.getBoundingClientRect();
       const w = Math.max(rect.width || 320, 320), h = height;
       canvas.width = w * dpr; canvas.height = h * dpr;
@@ -553,3 +595,4 @@ const chartCanvases = [];
 function mountChart(fn) { chartCanvases.push(fn); }
 window.addEventListener("resize", () => chartCanvases.forEach(fn => fn()));
 function rerenderCharts() { chartCanvases.forEach(fn => fn()); }
+document.addEventListener("themechange", () => rerenderCharts());

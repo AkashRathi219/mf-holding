@@ -3,15 +3,142 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FundPulse</title>
-<link rel="stylesheet" href="/static/css/style.css?v=3">
+<meta name="description" content="FundPulse — portfolio diagnostics, overlap analytics and white-label client proposals for SEBI-registered advisers.">
+<title>FundPulse · Portfolio diagnostics for SEBI Advisers</title>
+<script>
+  (() => { try {
+    const t = localStorage.getItem("fea_theme");
+    if (t === "dark" || (!t && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches))
+      document.documentElement.classList.add("dark");
+  } catch (e) {} })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css?v=4">
 </head>
 <body>
+
+<header class="lp-header">
+  <div class="lp-header-in">
+    <a class="lp-brand" href="/"><span class="logo" aria-hidden="true">∿</span> FundPulse</a>
+    <div class="lp-actions">
+      <button id="themeToggle" class="theme-toggle" type="button" aria-label="Toggle dark mode"></button>
+      <a class="btn btn-outline btn-sm" href="/login">Sign in</a>
+      <a class="btn btn-primary btn-sm" href="/register">Get started</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="lp-hero">
+    <div class="lp-copy">
+      <div class="eyebrow">Portfolio diagnostics · SEBI advisers</div>
+      <h1>Every client portfolio, diagnosed in seconds.</h1>
+      <p class="lp-sub">Query 2,50,000+ mutual-fund holdings across 50+ AMCs. Detect portfolio
+         overlap and concentration risk, screen NSE bonds, and generate white-label
+         client proposals — built for RIAs, RAs &amp; MFDs.</p>
+      <div class="lp-ctas">
+        <a class="btn btn-primary" href="/register">Create adviser workspace</a>
+        <a class="btn btn-outline" href="/login">Sign in to workspace</a>
+      </div>
+      <dl class="lp-stats">
+        <div><dt>Schemes</dt><dd id="lpSchemes">—</dd></div>
+        <div><dt>Holding rows</dt><dd id="lpHoldings">—</dd></div>
+        <div><dt>NSE bonds</dt><dd id="lpBonds">—</dd></div>
+        <div><dt>Listed stocks</dt><dd id="lpStocks">—</dd></div>
+      </dl>
+    </div>
+
+    <aside class="lp-tile" aria-hidden="true">
+      <div>
+        <span class="lp-tile-pill">Live data scope</span>
+        <h2 style="font-size:22px;font-weight:600;margin:14px 0 4px">Coverage at a glance</h2>
+        <p style="margin:0;color:rgba(255,255,255,.72);font-size:13px">Refreshed from official AMC disclosures and AMFI.</p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div>
+          <div class="lp-bar-row"><span id="lpBarSchemesLbl">Schemes covered</span><span id="lpBarSchemesVal">—</span></div>
+          <div class="lp-bar"><i id="lpBarSchemes" style="width:0%"></i></div>
+        </div>
+        <div>
+          <div class="lp-bar-row"><span>ISIN completeness</span><span id="lpBarIsinVal">—</span></div>
+          <div class="lp-bar"><i id="lpBarIsin" style="width:0%"></i></div>
+        </div>
+        <div>
+          <div class="lp-bar-row"><span>Bonds YTM-tagged</span><span id="lpBarYtmVal">—</span></div>
+          <div class="lp-bar"><i id="lpBarYtm" style="width:0%"></i></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="scope-tile"><div class="scope-num" id="lpAmcs">—</div><div class="scope-lbl">AMCs</div></div>
+        <div class="scope-tile"><div class="scope-num" id="lpAsOf">—</div><div class="scope-lbl">data as of</div></div>
+      </div>
+    </aside>
+  </section>
+
+  <section class="lp-features">
+    <div class="lp-features-in">
+      <div class="lp-feature">
+        <div class="ico">☷</div>
+        <h3>Scheme Explorer</h3>
+        <p>Search 2,500+ schemes by AMC, category and coverage. Drill into holdings,
+           sector splits and NAV history.</p>
+      </div>
+      <div class="lp-feature">
+        <div class="ico">∿</div>
+        <h3>Overlap &amp; Compare</h3>
+        <p>Quantify portfolio overlap across up to 12 funds and benchmark CAGR, risk
+           and rolling returns side by side.</p>
+      </div>
+      <div class="lp-feature">
+        <div class="ico">✓</div>
+        <h3>Compliance proposals</h3>
+        <p>Turn IPS rules into editable, white-label client proposals with realignment
+           suggestions in one click.</p>
+      </div>
+      <div class="lp-feature">
+        <div class="ico">⚲</div>
+        <h3>Bond market yields</h3>
+        <p>Screen NSE bonds by rating, maturity and yield-to-maturity — tagged and
+           refreshed daily.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="lp-footer">
+  <div class="lp-footer-in">
+    <span>FundPulse — diagnostic tool for factual analysis only; not investment advice.</span>
+    <span>Built for RIAs · RAs · MFDs</span>
+  </div>
+</footer>
+
+<script src="/static/js/utils.js?v=4"></script>
 <script>
-  // Landing page: route based on session state
-  const token = localStorage.getItem("fea_token");
-  if (token) { location.replace("/app"); }
-  else { location.replace("/login"); }
+  App.initThemeToggle("themeToggle");
+  const fmt = (v) => (v == null ? "—" : Number(v).toLocaleString("en-IN"));
+  const pctTxt = (v) => (v == null ? "—" : v + "%");
+  fetch("/api/health").catch(() => {});
+  fetch("/api/scope-stats").then(r => r.ok ? r.json() : null).then(s => {
+    if (!s) return;
+    document.getElementById("lpSchemes").textContent = fmt(s.schemes);
+    document.getElementById("lpHoldings").textContent = fmt(s.holdings);
+    document.getElementById("lpBonds").textContent = fmt(s.bonds);
+    document.getElementById("lpStocks").textContent = fmt(s.stocks);
+    document.getElementById("lpAmcs").textContent = fmt(s.amcs);
+    document.getElementById("lpAsOf").textContent = s.as_of || "—";
+    const setBar = (id, val) => {
+      const pct = Math.max(0, Math.min(100, Number(val) || 0));
+      document.getElementById(id).style.width = pct + "%";
+    };
+    setBar("lpBarSchemes", s.schemes_covered_pct);
+    setBar("lpBarIsin", s.isin_pct);
+    setBar("lpBarYtm", s.bonds_ytm_pct);
+    document.getElementById("lpBarSchemesVal").textContent = pctTxt(s.schemes_covered_pct);
+    document.getElementById("lpBarIsinVal").textContent = pctTxt(s.isin_pct);
+    document.getElementById("lpBarYtmVal").textContent = pctTxt(s.bonds_ytm_pct);
+  }).catch(() => {});
 </script>
 </body>
 </html>

@@ -149,3 +149,28 @@ App.md = function (md) {
 };
 
 App.debounced = {};
+
+// ---- Dark mode (welcome-gateway port) -------------------------------------
+// <html> gets .dark from the inline head snippet before first paint; this
+// only toggles + persists + repaints canvases via the `themechange` event.
+App.theme = {
+  get() { return document.documentElement.classList.contains("dark") ? "dark" : "light"; },
+  toggle() {
+    const next = App.theme.get() === "dark" ? "light" : "dark";
+    document.documentElement.classList.toggle("dark", next === "dark");
+    try { localStorage.setItem("fea_theme", next); } catch (e) { /* private mode */ }
+    document.dispatchEvent(new CustomEvent("themechange", { detail: next }));
+    return next;
+  },
+};
+
+App.initThemeToggle = function (id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const paint = () => {
+    el.textContent = App.theme.get() === "dark" ? "\u2600" : "\u263E";
+    el.title = App.theme.get() === "dark" ? "Switch to light mode" : "Switch to dark mode";
+  };
+  el.addEventListener("click", () => { App.theme.toggle(); paint(); });
+  paint();
+};
