@@ -181,11 +181,11 @@ list is PARTIAL — the deduction `opening = end − Σtx` then assigns the
 remainder to the EARLIEST available NAV date (often the fund's inception),
 not the account's true first-holding date. Full-history statements (the seed
 sample) produce opening ≈ 0 and a clean path; partial uploads can show an
-inflated outset value and a correspondingly noisy XIRR. Individual daily
-returns exceeding total loss (statement inconsistencies) are clamped to
-−99.9% and the annualised figure is nulled with reason
-`compound_base_non_positive` when the compounded base is non-positive —
-never a fabricated number.
+inflated outset value and a correspondingly noisy XIRR. Days whose
+flow-adjusted return exceeds ±99% (statement amount/units inconsistencies)
+are **excluded from the geometric chain and reported** via
+`data_note.artifact_days`; when any exist, `max_drawdown_pct` is null with
+`drawdown_unavailable` instead of a manufactured −100%.
 
 Example: TWR annualised of a 10.5-year 907-transaction sample (Client 1
 seeded portfolio) is computed once till date — no 1Y/3Y/5Y slices.

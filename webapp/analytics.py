@@ -576,9 +576,11 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
 
     if not any(values):
         return {"error": "insufficient dated value points"}
-    # series spans the holding period: from the first non-zero value through
-    # the later of the last non-zero value / the final transaction date
-    non_zero = sorted(d for d in values if values[d] != 0.0)
+    # series spans the holding period: from the first value >= INR 1 (an
+    # IEEE float-dust day like 2.6e-13 must NOT extend the window back to a
+    # scheme's inception) through the later of the last material value / the
+    # final transaction date
+    non_zero = sorted(d for d in values if abs(values[d]) >= 1.0)
     lo = non_zero[0]
     hi = max(non_zero[-1], max(tx_dates))
     days = sorted(d for d in values if lo <= d <= hi)
@@ -589,7 +591,12 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
     vals = [values[d] for d in days]
     fl = [flows[d] for d in days]
     # daily TWR, end-of-day flow model: r_i = (V_i - F_i - V_{i-1}) / V_{i-1}
-    # (F_i = amounts dated ON this grid day — they are already inside V_i)
+    # (F_i = amounts dated ON this grid day — they are already inside V_i).
+    # A multi-scheme portfolio can never move +/-99% in one day: such days are
+    # statement-consistency artifacts (amount/units mismatch on a redemption,
+    # partial-statement drift). They are EXCLUDED from the geometric chain and
+    # reported — the drawdown is nulled if any exist, never a fabricated -100%.
+    artifact_days = 0
     rets: list[float] = []
     linked = [1.0]
     for i in range(1, len(days)):
@@ -597,8 +604,9 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
         if v_prev <= 0:
             continue
         r = (vals[i] - fl[i] - v_prev) / v_prev
-        if r < -0.999:  # data-consistency guard: a statement-implied loss
-            r = -0.999  # beyond total loss is a tracking artifact, not math
+        if abs(r) > 0.99:
+            artifact_days += 1
+            continue
         rets.append(r)
         linked.append(linked[-1] * (1.0 + r))
     if not rets:
@@ -625,7 +633,16 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
                           "values": [round(r * 100.0, 4) for r in rets]},
         "value_series": {"dates": [d.isoformat() for d in days],
                          "values": [round(v, 2) for v in vals]},
-        "max_drawdown_pct": _pct_or_none(max_drawdown(linked)),
+        "data_note": {
+            "days": len(days),
+            "artifact_days": artifact_days,
+            "artifacts": artifact_days > 0,
+        },
+        "max_drawdown_pct": (None if artifact_days
+                             else _pct_or_none(max_drawdown(linked))),
+        "drawdown_unavailable": ({"reason": "flow_adjustment_artifacts",
+                                  "artifact_days": artifact_days}
+                                 if artifact_days else None),
         "constituents": [
             {"name": s["name"], "amfi_code": s["key"][0],
              "isin": s["key"][1], "tx_count": len(s["txs"]),

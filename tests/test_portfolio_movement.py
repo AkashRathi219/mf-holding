@@ -170,6 +170,74 @@ def test_xirr_underdetermined_returns_none():
     assert got is None or "error" in got or got["annualized_twr_pct"] is None
 
 
+# ---- regression: float-dust truncation + artifact-aware drawdown -----------------
+
+
+def test_truncation_ignores_float_dust_day():
+    """A sub-repairable opening (e.g. 1.42e-14 units leftover) must not extend
+    the series back to a scheme's inception as a 0.00-value day."""
+    d0 = date(2026, 1, 1)
+    nav = {}
+    v = 100.0
+    for i in range(5):
+        if i:
+            v *= 1.01
+        nav[(d0 + td(days=i)).isoformat()] = round(v, 4)
+    items = [{"isin": "INF000000101", "name": "Test Fund", "units": 100.0,
+              "amfi_code": "700001"}]
+    # opening = 100 - 99.99999999999999 = 1.42e-14 -> dust before the purchase
+    tx = [_tx(d0.isoformat(), 99.99999999999999, 9999.999999999998)]
+    got = portfolio_movement_series(items, tx, _lookup(nav))
+    assert got is not None and "error" not in got
+    # series must start at the (d0) purchase day with a material value, not at
+    # a dust-value 0.00 day
+    assert got["value_series"]["values"][0] >= 1.0
+    assert got["value_series"]["dates"][0] == d0.isoformat()
+
+
+def test_drawdown_nulls_when_flow_artifacts_present():
+    """Clamped (statement-inconsistent) daily returns null the drawdown and
+    emit drawdown_unavailable + data_note — never a manufactured -100%."""
+    from webapp import analytics as ana
+
+    # craft a value path whose day-3 collapse exceeds total loss: redemption
+    # amount far larger than implied value -> r < -0.999 -> clamped
+    d0 = date(2026, 1, 1)
+    nav = {}
+    v = 100.0
+    for i in range(5):
+        if i:
+            v *= 1.001
+        nav[(d0 + td(days=i)).isoformat()] = round(v, 4)
+    items = [{"isin": "INF000000101", "name": "Test Fund", "units": 0.0,
+              "amfi_code": "700001"}]  # fully exited by end
+    tx = [_tx((d0 + td(days=0)).isoformat(), 100, 10000.0),
+          # overstated redemption amount (10x the implied value)
+          _tx((d0 + td(days=3)).isoformat(), 100, 100000.0, ttype="REDEEM")]
+    got = portfolio_movement_series(items, tx, _lookup(nav))
+    if got is None or "error" in got:
+        return  # honest degrade is acceptable for this pathological input
+    assert got["data_note"]["artifacts"] is True
+    assert got["max_drawdown_pct"] is None
+    assert got["drawdown_unavailable"]["reason"] == "flow_adjustment_artifacts"
+    assert got["drawdown_unavailable"]["artifact_days"] >= 1
+
+
+def test_drawdown_present_without_artifacts():
+    """Hand-computed clean path keeps a real drawdown figure."""
+    d0 = date(2026, 1, 1)
+    nav = {d0.isoformat(): 100.0, (d0 + td(days=1)).isoformat(): 90.0,
+           (d0 + td(days=2)).isoformat(): 100.0}
+    items = [{"isin": "INF000000101", "name": "Test Fund", "units": 10.0,
+              "amfi_code": "700001"}]
+    tx = [_tx(d0.isoformat(), 10, 1000.0)]
+    got = portfolio_movement_series(items, tx, _lookup(nav))
+    assert got is not None and "error" not in got
+    assert got["data_note"]["artifacts"] is False
+    assert got["max_drawdown_pct"] == pytest.approx(-10.0, abs=0.01)
+    assert got["drawdown_unavailable"] is None
+
+
 # ---- T5: full exit ---------------------------------------------------------------
 
 def test_full_exit_terminal_value_zero():

@@ -2266,19 +2266,23 @@ function renderPortfolioMovementBlock(container, a) {
       <div style="font-size:10.5px;color:var(--text-2);text-transform:uppercase;letter-spacing:.04em">${label}</div>
       <div style="font-size:17px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px">${v != null ? v : "—"}</div>
       ${sub ? `<div class="metric-dates">${sub}</div>` : ""}</div>`;
+  const ddSub = mv.drawdown_unavailable
+    ? `unavailable: ${App.esc(mv.drawdown_unavailable.reason || "")} · ${App.formatNum(mv.drawdown_unavailable.artifact_days)} inconsistent statement days`
+    : "on flow-adjusted path";
   host.innerHTML = `<h3>Portfolio movement <span class="page-sub">actual cash flows · ${App.esc(a.movement_source || "")}</span></h3>
     <div class="page-sub">Reconstructed ${App.formatDate(mv.start)} → ${App.formatDate(mv.end)} · ${App.formatNum(mv.days)} days · marked daily at scheme NAVs, flow-adjusted daily returns.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
-      ${cell("Opening value", App.formatINR(mv.opening_value, 2), App.formatDate(mv.start))}
+      ${cell("Opening value", App.formatINR(mv.opening_value, 2), App.formatDate(mv.start) + " · deduced at statement start")}
       ${cell("Terminal value", App.formatINR(mv.terminal_value, 2), App.formatDate(mv.end))}
       ${cell("Total invested", "₹" + App.formatNum(Math.abs(mv.total_net_flow), 2), "net purchases minus redemptions")}
       ${cell("TWR till date", mv.total_twr_pct != null ? App.formatNum(mv.total_twr_pct, 2) + "%" : "—", "unannualised · flow-adjusted")}
       ${cell("TWR ann. till date", mv.annualized_twr_pct != null ? App.formatNum(mv.annualized_twr_pct, 2) + "%" : "—", (mv.annualized_window ? fmtWinRange(mv.annualized_window) : "—") + annNote)}
       ${cell("XIRR (money-weighted)", mv.xirr_pct != null ? App.formatNum(mv.xirr_pct, 2) + "%" : "—", annNote || "annualised, 365.25 basis")}
-      ${cell("Max drawdown", mv.max_drawdown_pct != null ? App.formatNum(mv.max_drawdown_pct, 2) + "%" : "—", "on flow-adjusted path")}
+      ${cell("Max drawdown", mv.max_drawdown_pct != null ? App.formatNum(mv.max_drawdown_pct, 2) + "%" : "—", ddSub)}
     </div>
     <div id="mvValueChart" style="margin-top:10px"></div>
-    <div id="mvReturnChart" style="margin-top:14px"></div>
+    <div class="page-sub" style="margin-top:14px">Daily returns (%) — flow-adjusted, 1-day move of the portfolio value</div>
+    <div id="mvReturnChart" style="margin-top:8px"></div>
     <div class="table-wrap" style="max-height:26vh;overflow:auto;margin-top:14px">
       <table class="data"><thead><tr><th>Scheme</th><th class="r">Tx</th><th class="r">Opening units</th><th class="r">End units</th><th>First tx</th><th>Last tx</th></tr></thead>
       <tbody>${(mv.constituents || []).map(x => `<tr>
@@ -2287,7 +2291,7 @@ function renderPortfolioMovementBlock(container, a) {
         <td class="num">${x.end_units != null ? App.formatNum(x.end_units, 2) : "—"}</td>
         <td class="mono">${App.formatDate(x.first_tx)}</td><td class="mono">${App.formatDate(x.last_tx)}</td></tr>`).join("") || `<tr><td colspan="6" class="empty">\u2014</td></tr>`}</tbody></table>
     </div>
-    <div class="page-sub" style="margin-top:8px"><b>${App.esc(mv.disclaimer)}</b> Money-weighted view of the investor's own income — purchases/redemptions included, unlike the weight-blended index above.</div>`;
+    <div class="page-sub" style="margin-top:8px"><b>${App.esc(mv.disclaimer)}</b> Money-weighted view of the investor's own income — purchases/redemptions included, unlike the weight-blended index above. Daily-path figures are flow-adjusted; the money-weighted XIRR reflects the statement's entire transaction history (holdings before the earliest transaction are deduced and valued at the earliest available NAV — partial statements will show a distorted opening and a noisy XIRR).</div>`;
   const vs = mv.value_series || {};
   if (vs.dates && vs.dates.length > 1) {
     Charts.mountMultiLine(document.getElementById("mvValueChart"),
