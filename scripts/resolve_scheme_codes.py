@@ -99,12 +99,19 @@ def candidates(name: str, directory: dict[str, tuple[str, str]], top: int = 3,
                ) -> list[tuple[str, str, float, str]]:
     """Top-(top) (code, amfi_name, ratio, amc) candidates for one scheme name.
 
-    Three guards against wrong matches:
+    Guards against wrong matches, in order of application:
     * house renames (HOUSE_RENAMES) are applied to the target tokens first;
     * candidates whose navall AMC header matches the scheme's own ``amc``
       get a +0.15 ratio boost — the DB already knows the correct house;
     * plan alignment: a Regular-plan scheme prefers 'regular plan' candidates
-      and is penalised 'direct plan' ones (and vice versa)."""
+      and is penalised 'direct plan' ones (and vice versa);
+    * ETF alignment: derived from the scheme's own name — a non-ETF scheme
+      is heavily penalised against an ETF scheme (structural mismatch);
+    * number tokens: shared series/limit numbers boost, no shared numbers
+      penalise ('Series 129' must never resolve to 'Series 131').
+    Matured FMPs whose codes are absent from today's directory surface as
+    low-ratio best-effort rows — the duplicate warning and the ratio tell
+    the reviewer not to approve them."""
     target_norm = norm_name(name)
     if not target_norm:
         return []
@@ -122,6 +129,10 @@ def candidates(name: str, directory: dict[str, tuple[str, str]], top: int = 3,
                  else "regular" if plan.startswith("reg") else "")
     other_plan = ({"direct": "regular", "regular": "direct"}.get(want_plan)
                   or "")
+    # Series/limit numbers are the most distinctive tokens a fund name has
+    # ('Fixed Term Plan Series 129' vs '131'): sharing them is a strong signal,
+    # not sharing them at all is a strong anti-signal.
+    t_numbers = set(re.findall(r"\d+", target))
     exact = directory.get(target)
     scored: list[tuple[float, str, str, str]] = []
     if exact is not None:
@@ -143,6 +154,12 @@ def candidates(name: str, directory: dict[str, tuple[str, str]], top: int = 3,
                 # structural mismatch: a non-ETF scheme never maps to an ETF
                 # scheme (different instrument/ISIN), however similar the name
                 ratio = max(0.0, ratio - 0.3)
+        if t_numbers:
+            c_numbers = set(re.findall(r"\d+", norm))
+            if t_numbers & c_numbers:
+                ratio = min(1.0, ratio + 0.05)
+            else:
+                ratio = max(0.0, ratio - 0.2)  # e.g. Series 129 vs Series 131
         if want_plan:
             if want_plan in norm:
                 ratio = min(1.0, ratio + 0.05)
