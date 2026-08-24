@@ -59,7 +59,8 @@ App.sourceLabel = function (s) {
     amc_website: "AMC website",
     // Internal key kept for the background aggregator fallback (stable link);
     // user-facing scope attributes the data to the AMC's own disclosures [D2].
-    advisorkhoj: "AMC disclosure",
+    // The third-party aggregator name must never render anywhere [D2].
+    advisorkhoj: "AMC",
     amfi: "AMFI",
     index: "Index",
     universe_only: "Universe only",

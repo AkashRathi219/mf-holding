@@ -2692,7 +2692,7 @@ async function refreshRelianceData() {
 
     const srcRows = Object.entries(r.by_source || {}).sort((a, b) => b[1].count - a[1].count)
       .map(([src, a]) => `<tr>
-        <td><strong>${App.esc(src)}</strong></td>
+        <td><strong>${App.esc(App.sourceLabel(src))}</strong></td>  <!-- [U4L] raw keys must never render -->
         <td class="num">${App.formatNum(a.count)}</td>
         <td class="num">${a.avg_score != null ? a.avg_score : "—"}</td>
         <td class="num">${a.stale_gt_45d ? `<span style="color:#c94f4f">${App.formatNum(a.stale_gt_45d)}</span>` : "0"}</td>

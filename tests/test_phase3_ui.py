@@ -63,11 +63,18 @@ def test_admin_reliance_table_masked():
     js = APP_JS.read_text(encoding="utf-8")
     assert '${App.esc(w.source || "none")}' not in js, \
         "reliance table renders raw source key"
+    # the by-source rollup must go through the label map too — raw keys
+    # (e.g. the aggregator archive key) must never render [U4L/D2]
+    assert "${App.esc(App.sourceLabel(src))}" in js, \
+        "by-source table renders raw source keys"
+    assert "App.esc(src)" not in js, "unmasked raw source render found"
 
 
 def test_utils_js_single_mask_entrypoint():
     utils = UTILS_JS.read_text(encoding="utf-8")
-    assert "advisorkhoj" in utils and "AMC disclosure" in utils
+    # the internal aggregator key exists only as a map entry; the user-facing
+    # label attributes the data to the AMC [D2] — never the third-party name
+    assert "advisorkhoj:" in utils and 'advisorkhoj: "AMC"' in utils
     assert utils.count("App.maskedSource = App.sourceLabel;") == 1
 
 
