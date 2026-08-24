@@ -92,6 +92,33 @@ def test_seed_backfills_transactions_on_reseed():
             assert len(p["transactions"]) > 800
 
 
+def test_analytics_endpoint_backfills_demo_transactions_lazily():
+    """A pre-transactions_json demo portfolio (name+kind match, no tx) gets
+    the sample transactions persisted on first analytics call — the live
+    superadmin account's case, no re-seed required."""
+    uid = _fresh_uid()
+    seed_for_user(uid)
+    con = userdata._conn()
+    try:
+        con.execute("UPDATE client_portfolios SET transactions_json='[]'")
+        con.commit()
+    finally:
+        con.close()
+    cp = next(p for p in userdata.list_client_portfolios(uid)
+              if p["name"] == DEFAULT_PORTFOLIO_NAME)
+    from webapp.tools_api import _ensure_demo_transactions
+    txs = _ensure_demo_transactions(uid, cp)
+    assert len(txs) > 800
+    refreshed = userdata.get_client_portfolio(uid, cp["id"])
+    assert len(refreshed["transactions"]) > 800  # persisted, not just returned
+    # a non-demo portfolio stays untouched
+    client_id = cp["client_id"]
+    custom = userdata.create_client_portfolio(uid, client_id, "My Custom",
+                                              "actual", [])
+    assert _ensure_demo_transactions(uid, custom) == []
+    assert not userdata.get_client_portfolio(uid, custom["id"])["transactions"]
+
+
 def test_seed_is_idempotent():
     uid = _fresh_uid()
     seed_for_user(uid)

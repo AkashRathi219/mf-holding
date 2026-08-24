@@ -1228,7 +1228,14 @@ def api_portfolio_analytics(request: Request, body: dict):
                 # [ANA3 movement] use THIS portfolio's stored cash-flow history
                 # (loaded by ingest / seed); a model-kind portfolio simply has none.
                 stored = cp.get("transactions") or []
-                transactions = stored if stored else None
+                if stored:
+                    transactions = stored
+                else:
+                    # Seeded demo portfolios created BEFORE transactions_json
+                    # existed have none until re-seed — backfill the sample
+                    # transactions once, lazily, on first analytics call, and
+                    # persist so it happens exactly once per portfolio.
+                    transactions = _ensure_demo_transactions(uid, cp)
     out = wdb.portfolio_analytics(items, transactions=transactions)
     out["label"] = body.get("label") or ""
     return out
@@ -1236,6 +1243,32 @@ def api_portfolio_analytics(request: Request, body: dict):
 
 def metrics_serialize(metrics: dict) -> dict:
     return {k: (round(v, 2) if isinstance(v, float) else v) for k, v in metrics.items()}
+
+
+# Seeded demo portfolio names that may carry the CAS sample transactions
+# (backfilled lazily for portfolios created before transactions_json).
+_DEMO_PORTFOLIO_NAMES = ("CAS Sample Portfolio", "Default Portfolio")
+
+
+def _ensure_demo_transactions(uid: int, cp: dict) -> list:
+    """Persist the CAS sample transactions onto a seeded demo portfolio that
+    predates transaction storage. Returns the list (empty if not applicable)."""
+    name = (cp.get("name") or "")
+    if cp.get("kind") != "actual" or name not in _DEMO_PORTFOLIO_NAMES:
+        return []
+    try:
+        from .seed_samples import cas_sample_transactions
+        txs = cas_sample_transactions()
+    except Exception:
+        return []
+    if txs:
+        try:
+            userdata.update_client_portfolio(uid, int(cp["id"]),
+                                             transactions=txs)
+        except Exception:
+            pass
+        return txs
+    return []
 
 
 @router.get("/analysis-runs")
