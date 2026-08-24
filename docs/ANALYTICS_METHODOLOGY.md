@@ -6,7 +6,7 @@ Living reference for every figure the performance engine emits
 `tests/test_analytics.py`, `tests/test_compare.py`,
 `tests/test_portfolio_analytics.py`.
 
-Methodology version: **`perf-v1.1-2026-08-24`** (stamped into every
+Methodology version: **`perf-v1.2-2026-08-24`** (stamped into every
 `compute_series_analytics` payload as `methodology_version`, and into
 proposals).
 
@@ -54,9 +54,20 @@ R2 object store (deploy/upload_r2.py)            (curated full-history set; lazy
 ```
 
 Read-path selection (`db.scheme_analytics`): Direct plan preferred, else
-Regular; equity-category schemes get a Nifty TR benchmark via keyword rules
-(large cap → NIFTY 100, mid → MIDCAP 150, small → SMALLCAP 250, default
-NIFTY 500); debt/hybrid deliberately get no benchmark block.
+Regular. Benchmark selection v2: (1) the scheme's own tracked index
+(`schemes.index_name`) when populated — strongest signal; (2) ordered
+word-boundary keyword rules over category+fund name, most-specific first
+("nifty 500" before "nifty 50", factor names with numbers before plain
+factors — full table in `webapp/db.py::_BENCHMARK_RULES`, mapping tests in
+`tests/test_benchmark_mapping.py`); (3) equity-only default NIFTY 500.
+Every mapped index has a TR series in `data/nifty/TR/`; a missing series
+degrades to a `"<index> (series unavailable)"` label, never a wrong number.
+
+**Deferred decisions (data acquisition, not code):**
+- *Debt/hybrid composite benchmarks*: no debt TR series exists in the repo;
+  equity-only mapping stays until one is sourced.
+- *Risk-free rate*: still the documented 6.0% assumption until a T-bill
+  feed lands.
 
 ## 4. Date-handling operations (in order)
 
@@ -182,3 +193,4 @@ self-healing; a thin file lies forever.
 |---|---|---|
 | perf-v1.0-2026-08-23 | 2026-08-23 | Initial engine [ANA1]: CAGRs, risk block, rolling-1Y, benchmark stats, duration [DBT5] |
 | perf-v1.1-2026-08-24 | 2026-08-24 | Risk/benchmark span guards (≥365d); `*_window` date objects on every metric group; `risk_unavailable` reason block; `methodology_version` stamp; [NAV-STUB] pipeline fixes |
+| perf-v1.2-2026-08-24 | 2026-08-24 | Benchmark selection v2 (index_name + ordered keyword rules — a Nifty 50 ETF now benchmarks NIFTY 50, not NIFTY 500); per-scheme rolling-1Y series + history-completeness badge in the payload; module-level analytics cache; daily stub pre-heal job; data_health stub-shadow component; trigger-mode telemetry labels; scheme-code resolver (human-review CSV) |

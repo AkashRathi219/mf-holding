@@ -230,6 +230,45 @@ def all_codes() -> list[str]:
     return sorted(fn.stem for fn in NAV_DIR.glob("*.json"))
 
 
+def scheme_history_completeness(code: str) -> dict | None:
+    """Completeness stats for ONE scheme's nav_history file; None when the
+    file is missing/unreadable. Same rules as completeness_report, scoped to
+    a single code so the scheme-details API can badge its history."""
+    path = NAV_DIR / f"{code}.json"
+    if not path.exists():
+        return None
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    import datetime as _dt
+    from webapp.market_value import _dtkey
+
+    def as_date(s):
+        k = _dtkey(s)
+        if k == (0, 0, 0):
+            return None
+        try:
+            return _dt.date(k[0], k[1], k[2])
+        except ValueError:
+            return None
+
+    hist = doc.get("history") or []
+    if not hist:
+        return {"code": code, "points": 0, "complete": False}
+    dates = [as_date(h.get("date")) for h in hist]
+    valid = [d for d in dates if d]
+    max_gap = 0
+    for i in range(1, len(valid)):
+        max_gap = max(max_gap, (valid[i] - valid[i - 1]).days)
+    last_days = stale_days(hist[-1].get("date"))
+    recent = last_days is not None and last_days <= 5
+    return {"code": code, "points": len(hist),
+            "earliest": hist[0].get("date"), "latest": hist[-1].get("date"),
+            "max_gap_days": max_gap, "last_age_days": last_days,
+            "complete": bool(valid and recent and max_gap <= 90)}
+
+
 def completeness_report(latest_expected: str | None = None) -> dict:
     """Status of every scheme's nav_history: earliest/latest date, point count,
     largest gap and whether it is COMPLETE from inception to the latest NAV."""

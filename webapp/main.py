@@ -125,14 +125,17 @@ def _bond_job() -> dict:
                 "bonds": catalog["n_bonds"]}
 
 
-def _nav_job(days: int = 7) -> dict:
+def _nav_job(days: int = 7, mode: str = "scheduled") -> dict:
     """Daily NAV refresh + per-scheme gap-fill from last-known date to today.
 
     Accepts ``days`` because the scheduler resolves the lookback window from
     settings (``scheduler.nav_refresh.days``) and passes it here [S2c].
-    """
+    ``mode`` records what actually triggered the run ("scheduled" cron vs
+    "manual" superadmin click) so telemetry never mislabels a run [NAV-STUB
+    follow-up: the 24-Aug incident run was a manual click logged as
+    "scheduled"]."""
     from src.refresh_log import track
-    with track("nav_daily", mode="scheduled") as meta:
+    with track("nav_daily", mode=mode) as meta:
         try:
             from .remote_store import ensure_prefix
             meta["universe_pulled"] = ensure_prefix("universe")
@@ -161,6 +164,12 @@ def _noop_pipeline(*args, **kwargs) -> None:
     from src.refresh_log import record
     record("monthly_holdings_fetch", "skipped",
            note="runs from workstation pipeline, not the web container")
+
+
+def _preheal_job() -> dict:
+    """Bounded sweep upgrading thin nav_history files from R2/mirror [NAV-STUB]."""
+    from webapp.db import preheal_nav_stubs
+    return preheal_nav_stubs(limit=500)
 
 
 def _start_scheduler_thread() -> None:
@@ -197,6 +206,7 @@ def _start_scheduler_thread() -> None:
                     stock_refresh_fn=refresh_all,
                     bond_refresh_fn=_bond_job,
                     amfi_fn=_amfi_job,
+                    preheal_fn=_preheal_job,
                 )
                 sched.start()
             except Exception:
@@ -1073,7 +1083,8 @@ _admin_running: set[str] = set()
 def _admin_jobs() -> dict:
     from src.stock_refresh import refresh_all
     return {
-        "nav_daily": _nav_job,
+        "nav_daily": lambda: _nav_job(mode="manual"),
+        "nav_preheal": _preheal_job,
         "amfi_fetch": _amfi_job,
         "bond_refresh": _bond_job,
         "stock_refresh": lambda: refresh_all(daily=True),

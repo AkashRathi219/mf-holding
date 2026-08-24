@@ -429,6 +429,7 @@ function renderSchemeAnalytics(id) {
     const r = a.risk || {};
     const roll = a.rolling_1y;
     const b = a.benchmark;
+    const hc = a.history_completeness;
     if (!a.risk) {
       // Honest dated empty-state: which dates were considered, what was found.
       const ru = a.risk_unavailable || {};
@@ -446,9 +447,19 @@ function renderSchemeAnalytics(id) {
       ${b ? `<dt>vs ${App.esc(a.benchmark_index || "benchmark")}</dt><dd>beta ${App.formatNum(b.beta, 2)} · alpha ${b.alpha_pct != null ? App.formatNum(b.alpha_pct, 2) + "%" : "—"} · tracking error ${b.tracking_error_pct != null ? App.formatNum(b.tracking_error_pct, 2) + "%" : "—"}${b.information_ratio != null ? ` · IR ${App.formatNum(b.information_ratio, 2)}` : ""} <span class="page-sub">· common days ${fmtWinRange(b)}</span></dd>` : ""}
     </div>`;
     }
-    html += `<div class="page-sub" style="margin-top:8px">As of ${App.formatDate(a.as_of)} · computed from AMFI NAV history (${App.formatNum(a.points)} points${a.inception ? `, inception ${App.formatDate(a.inception.date)}` : ""}, ${App.esc(a.plan_used || "")} plan, methodology ${App.esc(a.methodology_version || "")}). Percentile-neutral factual figures only.</div>
+    html += `<div class="page-sub" style="margin-top:8px">As of ${App.formatDate(a.as_of)} · computed from AMFI NAV history (${App.formatNum(a.points)} points${a.inception ? `, inception ${App.formatDate(a.inception.date)}` : ""}, ${App.esc(a.plan_used || "")} plan, methodology ${App.esc(a.methodology_version || "")}).${hc ? ` History: ${App.formatNum(hc.points)} pts · max gap ${App.formatNum(hc.max_gap_days)}d${hc.complete ? " · complete" : ""}.` : ""} Percentile-neutral factual figures only.</div>
     <div class="page-sub" style="margin-top:4px"><b>${App.esc(a.disclaimer)}</b></div>`;
+    const rollPts = (a.rolling_points || []).filter(p => Array.isArray(p) && p.length === 2);
+    if (rollPts.length > 30) {
+      html += `<div style="margin-top:14px"><div class="page-sub">Rolling 1-year return (%) · ${App.formatDate(rollPts[0][0])} → ${App.formatDate(rollPts[rollPts.length - 1][0])} · daily-history windows stepped weekly</div><div id="schemeRollChart" style="margin-top:8px"></div></div>`;
+    }
     el.innerHTML = html;
+    if (rollPts.length > 30) {
+      Charts.mountMultiLine(document.getElementById("schemeRollChart"),
+        [{ name: "Rolling 1Y return", color: "#2456d6",
+           dates: rollPts.map(p => p[0]), values: rollPts.map(p => p[1]) }],
+        { formatValue: v => App.formatNum(v, 1) + "%" });
+    }
   }).catch(e => {
     el.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
   });

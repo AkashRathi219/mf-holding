@@ -17,7 +17,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # import-name -> present in deploy/requirements-slim.txt (+ stdlib assumed).
 ALLOWED = {
-    "fastapi", "uvicorn", "pydantic", "boto3", "multipart", "pdfplumber",
+    "fastapi", "uvicorn", "pydantic", "boto3", "botocore", "multipart",
+    "pdfplumber",
     "yaml",          # pyyaml        [S2a]
     "apscheduler",   #               [S2a]
     "httpx",         #               [S2a]

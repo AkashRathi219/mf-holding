@@ -29,7 +29,8 @@ DATA_DIR = BASE_DIR / "data"
 HISTORY_PATH = DATA_DIR / "logs" / "data_health.jsonl"
 
 WEIGHTS = {"coverage": 25, "completeness": 15, "nav": 20,
-           "holdings": 15, "stocks_bonds": 10, "pipelines": 15}
+           "holdings": 15, "stocks_bonds": 10, "pipelines": 13,
+           "stubs": 2}
 
 # Pipeline -> max hours since last successful run before it loses points.
 # nav_daily runs twice a day (12h apart), so a 12h window keeps it green;
@@ -111,6 +112,45 @@ def _nav() -> tuple[float, dict]:
     fresh, total = _file_freshness(DATA_DIR / "nav_history")
     return (round(fresh / total * 100, 1) if total else 0.0), {
         "files": total, f"fresh_le_{MAX_AGE_DAYS}d": fresh}
+
+
+def _stubs() -> tuple[float | None, dict]:
+    """Stub-shadow detector [NAV-STUB]: thin (<30 pt) nav_history files whose
+    FIRST point is older than a year. A genuinely young fund is thin too, but
+    an OLD scheme serving <30 points means its full history is shadowed (or
+    missing) — the exact signature of the 24-Aug cold-start incident, which
+    was previously only findable by a user opening a scheme page."""
+    from .db import NAV_HISTORY_DIR, NAV_STUB_HEAL_MIN_POINTS
+    total = shadowed = 0
+    samples: list[str] = []
+    cutoff = date.today().replace(year=date.today().year - 1)
+    if NAV_HISTORY_DIR.is_dir():
+        for fn in NAV_HISTORY_DIR.glob("*.json"):
+            total += 1
+            try:
+                doc = json.loads(fn.read_text(encoding="utf-8"))
+                hist = doc.get("history") or []
+            except Exception:
+                continue
+            if not hist or len(hist) >= NAV_STUB_HEAL_MIN_POINTS:
+                continue
+            first = str((hist[0] or {}).get("date") or "")
+            try:  # 'DD-Mon-YYYY' or ISO
+                d = datetime.strptime(first, "%d-%b-%Y").date()
+            except ValueError:
+                try:
+                    d = date.fromisoformat(first)
+                except ValueError:
+                    continue
+            if d <= cutoff:
+                shadowed += 1
+                if len(samples) < 10:
+                    samples.append(f"{fn.stem} ({len(hist)} pts from {d})")
+    if not total:
+        return None, {"files": 0}
+    score = round((1 - shadowed / total) * 100, 1)
+    return score, {"files": total, f"thin_lt_{NAV_STUB_HEAL_MIN_POINTS}pts":
+                   shadowed, "examples": samples}
 
 
 def _holdings(wdb) -> tuple[float, dict]:
@@ -214,9 +254,14 @@ def compute(force: bool = False, max_age_s: float = 300) -> dict:
     comps["stocks_bonds"] = {"score": score, "weight": WEIGHTS["stocks_bonds"], "detail": det}
     score, det = _pipelines()
     comps["pipelines"] = {"score": score, "weight": WEIGHTS["pipelines"], "detail": det}
+    score, det = _stubs()
+    comps["stubs"] = {"score": score, "weight": WEIGHTS["stubs"], "detail": det}
 
+    scored = [c for c in comps.values() if c["score"] is not None]
+    weight_total = sum(c["weight"] for c in scored)
     overall = round(
-        sum(c["score"] * c["weight"] for c in comps.values()) / sum(WEIGHTS.values()), 1)
+        sum(c["score"] * c["weight"] for c in scored) / weight_total, 1) \
+        if weight_total else 0.0
     from src.refresh_log import _now_ist
     out = {"overall": overall, "band": band(overall),
            "computed_at": _now_ist(),

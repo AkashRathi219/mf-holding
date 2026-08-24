@@ -34,7 +34,7 @@ MIN_CAGR_WINDOW_DAYS = 90     # below this, even since-inception CAGR is None:
 MIN_RISK_WINDOW_DAYS = 365    # risk stats need >=1y of observed span, not just
                               # >=30 points: 30 points over 5 weeks must never
                               # masquerade as "3-year" volatility
-METHODOLOGY_VERSION = "perf-v1.1-2026-08-24"  # stamped into proposals [ANA4]
+METHODOLOGY_VERSION = "perf-v1.2-2026-08-24"  # stamped into proposals [ANA4]
 
 
 def parse_nav_date(s) -> date | None:

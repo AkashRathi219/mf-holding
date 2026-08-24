@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class MonthlyScheduler:
     def __init__(self, pipeline_fn, settings: dict, base_dir: Path,
                  nav_refresh_fn=None, stock_refresh_fn=None, bond_refresh_fn=None,
-                 amfi_fn=None):
+                 amfi_fn=None, preheal_fn=None):
         self.pipeline_fn = pipeline_fn
         self.settings = settings
         self.base_dir = base_dir
@@ -23,6 +23,7 @@ class MonthlyScheduler:
         self.stock_refresh_fn = stock_refresh_fn
         self.bond_refresh_fn = bond_refresh_fn
         self.amfi_fn = amfi_fn
+        self.preheal_fn = preheal_fn
         self.scheduler = AsyncIOScheduler(timezone="Asia/Kolkata")
 
     def setup(self):
@@ -101,6 +102,30 @@ class MonthlyScheduler:
                 logger.info(
                     f"Daily NAV refresh (2nd) set: {nav_cfg.get('hour2'):02d}:"
                     f"{nav_cfg.get('minute2', nav_cfg.get('minute', 30)):02d} IST"
+                )
+
+        # ---- Daily nav_history stub pre-heal [NAV-STUB] -------------------
+        # Upgrades thin cold-start stubs from R2/mirror BEFORE the first
+        # visitor pays the cost, bounded per run (once-per-code-per-process
+        # guard inside makes repeats cheap no-ops).
+        if self.preheal_fn:
+            pre_cfg = sched.get("nav_preheal", {})
+            if pre_cfg.get("enabled", True):
+                pre_trigger = CronTrigger(
+                    hour=pre_cfg.get("hour", 8),
+                    minute=pre_cfg.get("minute", 35),
+                    timezone="Asia/Kolkata",
+                )
+                self.scheduler.add_job(
+                    self._run_preheal,
+                    trigger=pre_trigger,
+                    id="daily_nav_preheal",
+                    name="Daily NAV Stub Pre-Heal",
+                    replace_existing=True,
+                )
+                logger.info(
+                    f"Daily NAV stub pre-heal set: "
+                    f"{pre_cfg.get('hour', 8):02d}:{pre_cfg.get('minute', 35):02d} IST"
                 )
 
         # ---- Daily stock refresh (price + actions + reports) ----
@@ -205,6 +230,14 @@ class MonthlyScheduler:
             logger.info(f"Daily NAV refresh complete: {summary}")
         except Exception as e:
             logger.error(f"Daily NAV refresh failed: {e}")
+
+    async def _run_preheal(self):
+        logger.info("Daily NAV stub pre-heal triggered")
+        try:
+            summary = await asyncio.to_thread(self.preheal_fn)
+            logger.info(f"NAV stub pre-heal complete: {summary}")
+        except Exception as e:
+            logger.error(f"NAV stub pre-heal failed: {e}")
 
     async def _run_stock_refresh(self):
         logger.info("Daily stock refresh triggered")

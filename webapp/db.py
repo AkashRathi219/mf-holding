@@ -59,6 +59,12 @@ _NONALNUM = re.compile(r"[^a-z0-9]+")
 NAV_STUB_HEAL_MIN_POINTS = 30
 _nav_heal_attempted: set[str] = set()
 
+# scheme_analytics result cache [perf]: keyed by (scheme, plan, last NAV
+# date, rf, benchmark-file mtime) — a fresh WebDB is built per request, so
+# this MUST live at module level to survive across calls. FIFO-bounded.
+_analytics_cache: dict[tuple, dict] = {}
+_ANALYTICS_CACHE_MAX = 512
+
 
 def _heal_thin_nav_history(code: str, local_points: int) -> dict | None:
     """Try to upgrade a thin nav_history file to a full one; return the better
@@ -100,6 +106,33 @@ def _heal_thin_nav_history(code: str, local_points: int) -> dict | None:
     except Exception:
         pass
     return None
+
+
+def preheal_nav_stubs(limit: int = 500) -> dict:
+    """Proactively upgrade thin (<30 pt) nav_history files from R2/mirror.
+
+    The read path heals lazily on first request; after a cold-start stub
+    incident that leaves thousands of schemes paying a one-time heal on their
+    first visitor. This sweep does the same work upfront, bounded per run.
+    Reuses ``_heal_thin_nav_history`` (once-per-code-per-process guard), so a
+    code with no better copy anywhere costs exactly one R2 miss + one mirror
+    miss per process — genuinely young funds stay honestly thin."""
+    thin: list[tuple[str, int]] = []
+    if NAV_HISTORY_DIR.is_dir():
+        for path in sorted(NAV_HISTORY_DIR.glob("*.json")):
+            try:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            n = len(doc.get("history") or [])
+            if 0 < n < NAV_STUB_HEAL_MIN_POINTS:
+                thin.append((path.stem, n))
+    healed = 0
+    for code, n in thin[:max(0, limit)]:
+        if _heal_thin_nav_history(code, n) is not None:
+            healed += 1
+    return {"scanned_thin": len(thin), "attempted": min(len(thin), max(0, limit)),
+            "healed": healed, "deferred": max(0, len(thin) - max(0, limit))}
 
 
 def norm_name(name: str) -> str:
@@ -2158,26 +2191,75 @@ class WebDB:
         return out
 
     # ---- performance & risk analytics [ANA1] --------------------------------
-    # Staged benchmark map: keyword in category+fund name -> Nifty TR index.
-    # Equity-only by design for now (debt/hybrid need composite benchmarks —
-    # documented on the methodology page); unmapped schemes get no benchmark
-    # block rather than a misleading one.
-    _BENCHMARK_RULES = [
-        ("large cap", "NIFTY 100"), ("largecap", "NIFTY 100"),
-        ("mid cap", "NIFTY MIDCAP 150"), ("midcap", "NIFTY MIDCAP 150"),
-        ("small cap", "NIFTY SMALLCAP 250"), ("smallcap", "NIFTY SMALLCAP 250"),
+    # Benchmark selection v2 [ANA1]: (1) the scheme's own tracked index
+    # (schemes.index_name — strongest signal, bypasses the category gate);
+    # (2) ordered word-boundary keyword rules over category+fund name —
+    # MOST SPECIFIC FIRST (factor names with numbers before plain factors,
+    # "nifty 500" before "nifty 50"); (3) equity-only default NIFTY 500.
+    # Every index here has a TR series in data/nifty/TR/; a missing series
+    # degrades to a '"<index> (series unavailable)"' label, never a wrong
+    # number. Debt/hybrid without index_name stay unmapped (composite
+    # benchmarks deferred — see docs/ANALYTICS_METHODOLOGY.md).
+    _BENCHMARK_RULES: list[tuple[str, str]] = [
+        (r"nifty\s*500\s*equal\s*weight", "NIFTY 500 EQUAL WEIGHT"),
+        (r"equal\s*weight", "NIFTY 50 EQUAL WEIGHT"),
+        (r"nifty\s*next\s*100", "NIFTY NEXT 100"),
+        (r"nifty\s*next\s*50|junior", "NIFTY NEXT 50"),
+        (r"200\s*momentum\s*30", "NIFTY200 MOMENTUM 30"),
+        (r"100\s*alpha\s*30", "NIFTY100 ALPHA 30"),
+        (r"200\s*quality\s*30", "NIFTY200 QUALITY 30"),
+        (r"100\s*low\s*volatility\s*30", "NIFTY100 LOW VOLATILITY 30"),
+        (r"200\s*value\s*30", "NIFTY200 VALUE 30"),
+        (r"50\s*value\s*20", "NIFTY 50 VALUE 20"),
+        (r"500\s*momentum\s*50", "NIFTY500 MOMENTUM 50"),
+        (r"momentum", "NIFTY200 MOMENTUM 30"),
+        (r"\balpha\b", "NIFTY100 ALPHA 30"),
+        (r"quality", "NIFTY200 QUALITY 30"),
+        (r"low\s*volatility", "NIFTY100 LOW VOLATILITY 30"),
+        (r"\bvalue\b", "NIFTY200 VALUE 30"),
+        (r"nifty\s*500", "NIFTY 500"),
+        (r"nifty\s*200", "NIFTY 200"),
+        (r"nifty\s*100", "NIFTY 100"),
+        (r"nifty\s*50\b", "NIFTY 50"),
+        (r"cnx\s*nifty\b|bees\b", "NIFTY 50"),
+        (r"midcap\s*150|mid\s*cap\s*150", "NIFTY MIDCAP 150"),
+        (r"smallcap\s*250|small\s*cap\s*250", "NIFTY SMALLCAP 250"),
+        (r"midcap|mid\s*cap", "NIFTY MIDCAP 150"),
+        (r"smallcap|small\s*cap", "NIFTY SMALLCAP 250"),
+        (r"large\s*cap|largecap", "NIFTY 100"),
+        (r"total\s*market", "NIFTY TOTAL MARKET"),
+        (r"nifty\s*bank|\bbanks?\b|banking", "NIFTY BANK"),
+        (r"\bit\b", "NIFTY IT"),
+        (r"pharma", "NIFTY PHARMA"),
+        (r"health\s*care|healthcare", "NIFTY HEALTHCARE"),
+        (r"fmcg", "NIFTY FMCG"),
+        (r"auto\b|automobiles?", "NIFTY AUTO"),
+        (r"energy", "NIFTY ENERGY"),
+        (r"\bmetals?\b", "NIFTY METAL"),
+        (r"\bpower\b", "NIFTY POWER"),
+        (r"consumption", "NIFTY INDIA CONSUMPTION"),
+        (r"infrastructure", "NIFTY INFRASTRUCTURE"),
+        (r"\bcpse\b", "NIFTY CPSE"),
+        (r"\bpsu\b", "NIFTY PSE"),
+        (r"\bmnc\b", "NIFTY MNC"),
+        (r"dividend", "NIFTY DIVIDEND OPPORTUNITIES 50"),
     ]
     DEFAULT_EQUITY_BENCHMARK = "NIFTY 500"
 
     @classmethod
     def _benchmark_index_for(cls, s: dict) -> str | None:
+        # 1) The fund's own tracked index (display form; _load_tr_index
+        #    re-normalises to the CSV name).
+        tracked = (s.get("index_name") or "").strip()
+        if tracked:
+            return tracked.replace("_", " ").upper()
         if (s.get("category") or "").lower() != "equity":
             return None
         text = ((s.get("category") or "") + " "
                 + (s.get("fund_name") or "")).lower()
-        for kw, idx in cls._BENCHMARK_RULES:
-            if kw in text:
-                return idx
+        for pattern, index in cls._BENCHMARK_RULES:
+            if re.search(pattern, text):
+                return index
         return cls.DEFAULT_EQUITY_BENCHMARK
 
     @staticmethod
@@ -2229,6 +2311,22 @@ class WebDB:
             rf = 0.0
         bench_name = self._benchmark_index_for(s)
         bench = self._load_tr_index(bench_name) if bench_name else None
+        # Benchmark TR series file identity joins the cache key so a refreshed
+        # CSV invalidates naturally; everything else keys off the scheme's own
+        # last NAV date (data advance == cache miss).
+        bench_mtime = 0.0
+        if bench_name:
+            _bp = NIFTY_TR_DIR / (bench_name.strip().upper()
+                                  .replace(" ", "_") + ".csv")
+            try:
+                bench_mtime = _bp.stat().st_mtime if _bp.exists() else 0.0
+            except OSError:
+                bench_mtime = 0.0
+        cache_key = (scheme_id, plan_used, doc.get("last_date"),
+                     round(rf if rf > 0 else DEFAULT_RF_PCT, 2), bench_mtime)
+        cached = _analytics_cache.get(cache_key)
+        if cached is not None:
+            return {**cached}
         out = compute_series_analytics(
             list(zip(doc["dates"], doc["navs"])),
             rf_pct=rf if rf > 0 else DEFAULT_RF_PCT,
@@ -2237,6 +2335,23 @@ class WebDB:
         out["plan_used"] = plan_used
         out["benchmark_index"] = bench_name if bench else (
             None if not bench_name else f"{bench_name} (series unavailable)")
+        # Per-scheme rolling-1Y series for the details chart [ANA2], and a
+        # completeness badge (points / span / max gap) so the UI can state
+        # exactly how much history backs every figure above.
+        try:
+            out["rolling_points"] = self._rolling_1y_points(doc["dates"],
+                                                            doc["navs"])
+        except Exception:
+            out["rolling_points"] = []
+        try:
+            from src.nav_freshness import scheme_history_completeness
+            out["history_completeness"] = \
+                scheme_history_completeness(doc.get("code") or "")
+        except Exception:
+            out["history_completeness"] = None
+        _analytics_cache[cache_key] = out
+        if len(_analytics_cache) > _ANALYTICS_CACHE_MAX:
+            _analytics_cache.pop(next(iter(_analytics_cache)))
         return out
 
     @staticmethod

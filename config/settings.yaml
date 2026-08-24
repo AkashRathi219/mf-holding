@@ -47,6 +47,13 @@ scheduler:
     hour2: 8              # second run of the day (08:30 IST)
     minute2: 30
     days: 10
+  # Daily nav_history stub pre-heal [NAV-STUB]: upgrade thin (<30 pt)
+  # cold-start files from R2/mirror before the first visitor pays for it.
+  # Runs just after the morning NAV refresh; bounded per run.
+  nav_preheal:
+    enabled: true
+    hour: 8
+    minute: 35
   # Daily stock refresh: update closing prices + corporate actions + NSE
   # financial-report announcements for resolved equity stocks.
   stock_refresh:
