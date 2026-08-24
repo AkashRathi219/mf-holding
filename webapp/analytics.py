@@ -587,15 +587,17 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
     if len(days) < 2:
         return {"error": "insufficient dated value points"}
 
-    days = sorted(values)
     vals = [values[d] for d in days]
     fl = [flows[d] for d in days]
     # daily TWR, end-of-day flow model: r_i = (V_i - F_i - V_{i-1}) / V_{i-1}
     # (F_i = amounts dated ON this grid day — they are already inside V_i).
-    # A multi-scheme portfolio can never move +/-99% in one day: such days are
-    # statement-consistency artifacts (amount/units mismatch on a redemption,
-    # partial-statement drift). They are EXCLUDED from the geometric chain and
-    # reported — the drawdown is nulled if any exist, never a fabricated -100%.
+    # A diversified mutual-fund portfolio in India has NEVER moved +/-20% in
+    # one trading day (worst equity-fund single-day swings ~8%); larger daily
+    # moves can only be statement-consistency artifacts (amount/units
+    # mismatch on a redemption, partial-statement drift). Such days are
+    # EXCLUDED from the geometric chain and reported via data_note — the
+    # drawdown is nulled if any exist, never a fabricated -100%.
+    ARTIFACT_THRESHOLD = 0.20  # 20% portfolio-level daily move bound
     artifact_days = 0
     rets: list[float] = []
     linked = [1.0]
@@ -604,7 +606,7 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
         if v_prev <= 0:
             continue
         r = (vals[i] - fl[i] - v_prev) / v_prev
-        if abs(r) > 0.99:
+        if abs(r) > ARTIFACT_THRESHOLD:
             artifact_days += 1
             continue
         rets.append(r)

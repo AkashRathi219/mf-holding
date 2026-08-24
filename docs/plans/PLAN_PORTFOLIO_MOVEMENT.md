@@ -48,3 +48,11 @@ flow-adjusted daily returns (TWR) and the money-weighted return (XIRR).
 - T4: 100→110 @365.25d no flows → XIRR = 10.000% exact.
 - T8: real sample (907 tx) — opening ≈ Σ opening_units·NAV(start);
   value_series[-1] ≈ Σ end_units·NAV(last); tx_count sums to 907−dropped.
+
+## Follow-up open item (documented limitation, not a bug)
+Partial CAMS statements (tx list newer than the fund's own inception) make the
+opening deduction assign pseudo-holdings at the earliest available NAV date,
+corrupting early values and near-redemption days. The engine flags these via
+`data_note.artifact_days` and refuses the drawdown (`drawdown_unavailable`).
+Full remedy = statement-start/opening-units metadata from the CAS cover sheet
+(future enhancement; needs an extra parsed field in the extraction pipeline).
