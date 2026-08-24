@@ -641,12 +641,12 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
         v_prev = vals[i - 1]
         if v_prev <= 0:
             continue
-        if vals[i] == v_prev and fl[i] == 0.0:
-            # value bit-identical, no flow: pure repeat-mark (weekend rows,
-            # holidays) — no information
+        r = (vals[i] - fl[i] - v_prev) / v_prev
+        if abs(r) < 1e-6 and fl[i] == 0.0:
+            # value moved by float dust only, no flow: pure repeat-mark
+            # (weekend rows, holidays) — no information
             zero_info_days += 1
             continue
-        r = (vals[i] - fl[i] - v_prev) / v_prev
         if abs(r) > ARTIFACT_THRESHOLD:
             artifact_days += 1
             continue
