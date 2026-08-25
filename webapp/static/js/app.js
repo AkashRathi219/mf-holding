@@ -1353,6 +1353,13 @@ function pfRenderResults(r) {
   const coverageNote = (r.coverage_pct != null && r.coverage_pct < 99.9)
     ? `<div class="page-sub" style="margin-top:6px">Analysis resolves ${App.formatPct(r.coverage_pct, 1)} of the portfolio (${App.formatPct(r.effective_total, 1)} of ${App.formatPct(r.total_weight, 1)} allocated) \u2014 the remainder has no holdings data on record and is excluded from these charts.</div>`
     : "";
+  // [perf-v2.0.0] disclosure coverage warnings — renormalised schemes flagged
+  const covWarnNote = (r.coverage_warnings || []).length
+    ? `<div class="empty" style="margin-top:10px;border-left:3px solid #d97706;padding-left:10px">` +
+      `<strong>Disclosure coverage:</strong><ul style="margin:6px 0 0 16px;padding:0">` +
+      r.coverage_warnings.map(w => `<li>${App.esc(w.note)}</li>`).join("") +
+      `</ul></div>`
+    : "";
   const errRows = (r.errors || []).length ? `<div class="empty" style="margin-top:12px">${r.errors.map(e => `${App.esc(e.type)} "${App.esc(e.name || e.isin || e.id || "")}" \u2014 ${App.esc(e.error)}`).join("; ")}</div>` : "";
   const sectorRows = (r.sector_table || []).slice(0, 15).map(s => `<tr>
       <td>${App.esc(s.sector)}</td><td class="num"><strong>${App.formatPct(s.weight)}</strong></td></tr>`).join("");
@@ -1401,6 +1408,7 @@ function pfRenderResults(r) {
         <h3>Effective holdings \u2014 concentration <span class="badge blue">${r.n_holdings} securities</span></h3>
         ${conc}
         ${coverageNote}
+        ${covWarnNote}
         <div class="table-wrap" style="max-height:44vh; overflow:auto">
           <table class="data"><thead><tr><th>Holding</th><th>ISIN</th><th>Sector</th><th>Asset</th><th class="r">Weight %</th></tr></thead>
           <tbody>${holdingsRows}</tbody></table>
@@ -2541,6 +2549,13 @@ function renderCompliance(out, r) {
   const effTotal = pa.effective_total || 0;
   const totalW = pa.total_weight || effTotal;
   const coverageLine = !isAlloc ? `<div class="page-sub" style="margin-top:6px">Analysis resolves ${App.formatPct(pa.coverage_pct, 1)} of the portfolio (${App.formatPct(effTotal, 1)} of ${App.formatPct(totalW, 1)} allocated) \u2014 the remainder has no holdings data on record and is excluded from these charts.</div>` : "";
+  // [perf-v2.0.0] disclosure coverage warnings — renormalised schemes flagged
+  const covWarnLine = !isAlloc && (pa.coverage_warnings || []).length
+    ? `<div class="empty" style="margin-top:10px;border-left:3px solid #d97706;padding-left:10px">` +
+      `<strong>Disclosure coverage:</strong><ul style="margin:6px 0 0 16px;padding:0">` +
+      pa.coverage_warnings.map(w => `<li>${App.esc(w.note)}</li>`).join("") +
+      `</ul></div>`
+    : "";
   const allH = pa.effective_holdings || [];
   const topPie = allH.map(h => ({ label: h.company, value: h.weight }));
   const capEntries = capPieData(pa.cap_split_raw || {});
@@ -2731,6 +2746,7 @@ function renderCompliance(out, r) {
           <dt>Securities</dt><dd>${pa.n_holdings}</dd>
         </div>
         ${coverageLine}
+        ${covWarnLine}
         <div class="table-wrap" style="max-height:44vh; overflow:auto">
           <table class="data"><thead><tr><th>Rule</th><th class="r">Limit</th><th class="r">Actual</th><th class="r">Deviation</th><th>Status</th></tr></thead>
           <tbody>${rows}</tbody></table>

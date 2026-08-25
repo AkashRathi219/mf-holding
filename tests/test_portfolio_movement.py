@@ -518,13 +518,48 @@ def test_parse_cas_transactions_normalisation():
          "isin": "INF000000104", "amfi_code": "700004"},  # no date -> dropped
     ]}
     got = parse_cas_transactions(doc)
-    assert len(got) == 4  # zero-both and no-date dropped
+    # [perf-v2.0.0] purchases/redemptions signed; switches KEPT but neutralised
+    # (internal transfers, counted by movement as switches_skipped); the
+    # zero-both purchase and the no-date row are dropped.
+    assert len(got) == 4
     by_date = {r["date"]: r for r in got}
     assert by_date["2026-01-05"]["amount"] == 1000.0      # purchase +
     assert by_date["2026-02-02"]["amount"] == -420.0      # redeem -
-    assert by_date["2026-02-10"]["amount"] == 210.0       # switch_in +
-    assert by_date["2026-02-11"]["amount"] == -105.0      # switch_out -
+    si = by_date["2026-02-10"]
+    so = by_date["2026-02-11"]
+    assert si["flow_kind"] == "internal" and so["flow_kind"] == "internal"
+    assert si["amount"] == 0.0 and so["amount"] == 0.0
+    assert si["cum_units"] == 0.0 and so["cum_units"] == 0.0
     assert got[0]["date"] <= got[1]["date"]  # sorted
+
+
+def test_parse_cas_transactions_idcw_policy():
+    """[perf-v2.0.0] payouts are cash OUT of the portfolio (investor income);
+    reinvestments move units with NO cash flow; unknown types survive
+    neutralised for counting."""
+    doc = {"transactions": [
+        {"date": "2026-03-01", "transaction_type": "IDCW", "units": "",
+         "amount": "250.50", "isin": "INF000000105", "amfi_code": "700005"},
+        {"date": "2026-03-10", "transaction_type": "IDCW REINVESTMENT",
+         "units": "6.1", "amount": "249.87", "isin": "INF000000105",
+         "amfi_code": "700005"},
+        {"date": "2026-03-15", "transaction_type": "MYSTERY_TYPE",
+         "units": "3", "amount": "300", "isin": "INF000000106",
+         "amfi_code": "700006"},
+    ]}
+    got = parse_cas_transactions(doc)
+    assert len(got) == 3
+    payout = got[0]
+    assert payout["flow_kind"] == "income"
+    assert payout["amount"] == -250.50          # leaves the portfolio
+    assert payout["cum_units"] == 0.0           # payouts never move units
+    reinv = got[1]
+    assert reinv["flow_kind"] == "reinvest"
+    assert reinv["cum_units"] == pytest.approx(6.1)
+    assert reinv["amount"] == 0.0               # no external cash ever moved
+    mystery = got[2]
+    assert mystery["flow_kind"] == "unknown"
+    assert mystery["amount"] == 0.0 and mystery["cum_units"] == 0.0
 
 
 # ---- T8: real sample end-to-end (requires repo fixtures) --------------------------

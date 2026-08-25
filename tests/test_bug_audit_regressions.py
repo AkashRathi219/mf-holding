@@ -258,10 +258,15 @@ def test_parse_cas_transactions_nav_na_does_not_crash():
         {"date": "2026-01-06", "transaction_type": "MYSTERY", "units": "1",
          "amount": "100"}]}
     out = parse_cas_transactions(doc)
-    assert len(out) == 1
+    # [perf-v2.0.0] unknown types are kept NEUTRALISED (sign 0, zeroed) so
+    # movement analytics can count them in data_note.unrecognized_types.
+    assert len(out) == 2
+    assert out[0]["flow_kind"] == "cash_out"
     assert out[0]["sign"] == -1.0
     assert out[0]["amount"] == -1230.0   # signed by type [perf-v1.4 contract]
     assert out[0]["nav"] is None         # was an unhandled ValueError before
+    assert out[1]["flow_kind"] == "unknown"
+    assert out[1]["amount"] == 0.0 and out[1]["cum_units"] == 0.0
 
 
 # ---------------------------------------------------------------------------

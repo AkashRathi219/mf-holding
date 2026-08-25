@@ -27,6 +27,12 @@ INDEX_PATH = BASE_DIR / "data" / "reference" / "isin_latest_nav.json"
 
 _MAX_INDEX_AGE = 60 * 60 * 6  # rebuild at most every 6h, or when dirs change
 
+# [BUG-F4] malformed NAV files (history = plain date strings, no NAV rows)
+# used to raise AttributeError OUTSIDE the try block and kill the whole
+# index rebuild -> reweight_by_market_value -> /analyze. Scanners now skip
+# non-dict history rows/files and remember them for data-health.
+_LAST_ANOMALIES: list[dict] = []
+
 _MONTHS = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
            "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12}
 
@@ -66,7 +72,8 @@ def scheme_latest_nav(scheme: dict, prefer: str = "regular") -> tuple | None:
             continue
         try:
             doc = json.loads(f.read_text(encoding="utf-8"))
-            hist = doc.get("history") or []
+            hist = [h for h in (doc.get("history") or [])
+                    if isinstance(h, dict)]
             if hist:
                 # [BUG-C3] history files can be misordered on disk; the latest
                 # point is the max-dated row, not necessarily the last one.
@@ -100,17 +107,30 @@ def _dtkey(d) -> tuple:
 
 
 def _scan_nav_history(idx: dict) -> None:
+    global _LAST_ANOMALIES
+    anomalies: list[dict] = []
     if not NAV_DIR.is_dir():
+        _LAST_ANOMALIES = anomalies
         return
     for fn in os.listdir(NAV_DIR):
         if not fn.endswith(".json"):
             continue
         try:
             doc = json.load(open(NAV_DIR / fn, encoding="utf-8"))
+            hist = doc.get("history") or []
         except Exception:
             continue
         isin = (doc.get("isin") or "").strip().upper()
-        hist = doc.get("history") or []
+        # [BUG-F4] schema guard: history rows must be dicts with date+nav.
+        bad = [h for h in hist if not isinstance(h, dict)]
+        if bad and not [h for h in hist if isinstance(h, dict)]:
+            anomalies.append({"file": fn, "problem": "history_not_dicts",
+                              "rows": len(hist)})
+            continue
+        if bad:
+            anomalies.append({"file": fn, "problem": "partial_non_dict_rows",
+                              "rows": len(bad)})
+        hist = [h for h in hist if isinstance(h, dict)]
         if not isin or not hist:
             continue
         # [BUG-C3] files may be stored misordered; pick the truly-latest row.
@@ -120,6 +140,38 @@ def _scan_nav_history(idx: dict) -> None:
         if nav is not None and (cur is None or _dtkey(last.get("date")) > _dtkey(cur.get("date"))):
             idx[isin] = {"nav": nav, "date": last.get("date"),
                          "code": doc.get("scheme_code"), "fund": doc.get("fund_name")}
+    _LAST_ANOMALIES = anomalies
+
+
+def nav_schema_anomalies() -> list[dict]:
+    """Malformed NAV-history files seen at the last index build (data-health)."""
+    return list(_LAST_ANOMALIES)
+
+
+def scan_nav_history_schema() -> list[dict]:
+    """Standalone full pass over data/nav_history flagging files whose
+    ``history`` rows are not {date, nav} dicts (the 97-file corruption class).
+    Read-only; safe to call from data-health on its refresh cadence."""
+    out: list[dict] = []
+    if not NAV_DIR.is_dir():
+        return out
+    for fn in os.listdir(NAV_DIR):
+        if not fn.endswith(".json"):
+            continue
+        try:
+            doc = json.load(open(NAV_DIR / fn, encoding="utf-8"))
+            hist = doc.get("history") or []
+        except Exception:
+            continue
+        if not hist:
+            continue
+        bad = sum(1 for h in hist if not isinstance(h, dict))
+        if bad:
+            out.append({"file": fn,
+                        "problem": "all_rows_plain_strings" if bad == len(hist)
+                        else f"{bad}/{len(hist)}_rows_not_dicts",
+                        "rows": bad})
+    return out
 
 
 def _scan_stock_prices(idx: dict) -> None:
@@ -136,6 +188,7 @@ def _scan_stock_prices(idx: dict) -> None:
         except Exception:
             continue
         hist = doc.get("history") or doc.get("prices") or doc.get("data") or []
+        hist = [h for h in hist if isinstance(h, dict)]  # [BUG-F4] schema guard
         # [BUG-C3] defensively select the max-dated row, not the file-last row.
         last = max(hist, key=lambda h: _dtkey(h.get("date"))) if hist else None
         if not last:
@@ -209,10 +262,19 @@ def reweight_by_market_value(items: list[dict]) -> list[dict]:
     """Re-compute each item's ``weight`` from its CURRENT market value
     (units x latest NAV/price) instead of cost.
 
-    - items with ``units > 0`` and a price/NAV are re-weighted by market value;
-    - items with ``units > 0`` but no price keep their existing weight (fallback);
-    - items with ``units <= 0`` are valued at 0 (no holding);
-    - items without ``units`` are manual weights and left untouched.
+    [perf-v2.0.0 ALL-OR-NOTHING pricing] Market weighting applies only when
+    EVERY unit-bearing item prices. The old mixed behaviour reweighted the
+    priced lines among themselves while unpriced lines kept stale cost/manual
+    weights — totals exceeded 100% and every pie chart silently renormalised
+    the error away. Now: one unpriced line keeps the WHOLE portfolio on its
+    existing weights, flagged ``pricing_basis: "cost"``.
+
+    - items with ``units > 0`` and a price/NAV -> reweighted by market value;
+    - any ``units > 0`` line without a price -> whole call falls back to cost;
+    - items with ``units <= 0`` are dropped from the valued set;
+    - items without ``units`` are manual weights, left untouched.
+    Every returned item carries ``pricing_basis`` ("market" | "cost" |
+    "manual") so the UI can state which basis backs the numbers.
     """
     if not items or not any(it.get("units") for it in items):
         return items
@@ -250,29 +312,39 @@ def reweight_by_market_value(items: list[dict]) -> list[dict]:
         cands.sort(key=lambda c: c[0])
         return cands[-1][1], cands[-1][2]
 
-    valued: list[tuple[dict, float | None, float | None]] = []
+    valued: list[tuple[dict, float | None, float | None, str]] = []
     for it in items:
         units = _num(it.get("units"))
         if units is None:
-            valued.append((it, None, None))
+            valued.append((it, None, None, "manual"))
             continue
         if units <= 0:
             continue  # zero-unit position is not a real holding
         got = nav_for(it)
         if got is None or got[0] is None or got[0] <= 0:
-            valued.append((it, None, None))  # unpriced -> keep existing weight
+            valued.append((it, None, None, "cost"))  # unpriced unit line
         else:
             nav, nav_date = got
             it = dict(it)
             it["nav_date"] = _iso_date(nav_date) or ""
-            valued.append((it, units * nav, nav))
+            valued.append((it, units * nav, nav, "market"))
 
-    total = sum(mv for _, mv, _ in valued if mv is not None and mv > 0)
+    # [perf-v2.0.0] purity gate — see docstring.
+    if any(basis == "cost" for _, mv, _, basis in valued):
+        out = []
+        for it, _mv, _nav, _basis in valued:
+            it = dict(it)
+            it["pricing_basis"] = "cost"
+            out.append(it)
+        return out
+
+    total = sum(mv for _, mv, _, _ in valued if mv is not None and mv > 0)
     if total <= 0:
         return items
     out = []
-    for it, mv, nav in valued:
+    for it, mv, nav, basis in valued:
         it = dict(it)
+        it["pricing_basis"] = basis
         if mv is None:
             out.append(it)
             continue

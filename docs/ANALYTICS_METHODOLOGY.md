@@ -6,9 +6,29 @@ Living reference for every figure the performance engine emits
 `tests/test_analytics.py`, `tests/test_compare.py`,
 `tests/test_portfolio_analytics.py`.
 
-Methodology version: **`perf-v1.4.2-2026-08-25`** (stamped into every
+Methodology version: **`perf-v2.0.0-2026-08-25`** (stamped into every
 `compute_series_analytics` payload as `methodology_version`, and into
 proposals).
+
+### perf-v2.0.0 changelog (financial-metrics audit fixes, 2026-08-25)
+
+| Change | Before | After |
+|---|---|---|
+| Information ratio | annualised active return ÷ **daily** TE → every IR ~15.9× too high (PPFCF showed 1.066; true 0.067) | ÷ **annualised** TE (`te·√252`); `r_squared` + regression method now disclosed in-payload |
+| Sharpe / Sortino (funds <3y) | `cagr3 or 0.0` fallback fabricated NEGATIVE ratios (a 1.1y fund at +17% CAGR scored −0.425) | **window-pairing rule**: numerator CAGR and denominator vol always span the SAME observed window, labelled via `risk.window_years`; `return_cagr_pct` exposed |
+| Rolling returns | chart (365d win, ≥355 gap, every-7th-row ≈9-day stride) vs KPI card (365.25d win, ≥360 gap, daily) disagreed | ONE core `rolling_returns()`; single slack constant `ROLLING_GAP_SLACK_DAYS = 10`; charts stride the SAME rows by calendar week |
+| Benchmark block | undocumented convention | OLS on daily simple returns; alpha arithmetic ×252; TE/IR annualised; method string in payload |
+| Zero-coupon duration | implied yield silently capped at 200%/yr | implausible quotes → honest null |
+| CAS flows | IDCW payouts invisible; reinvestments signed as purchases (phantom units) | payout = portfolio cash-outflow (XIRR sees investor income); reinvestment = units only, zero flow; unknown types counted in `data_note.unrecognized_types` |
+| Stored units | TER/YTM percent-scale contamination rendered ×100 wrong (6 schemes, e.g. "29.61%" TER) | `conventions.normalize_metric()` guardrail at ingest + `scripts/migrate_ter_scale.py` repair |
+| Market-value reweight | mixed basis: unpriced lines kept stale weights while priced renormalised → totals >100% | **all-or-nothing**: one unpriced line keeps whole portfolio on cost; `pricing_basis` flag |
+| Look-through | partial disclosures silently amplified to 100% (up to ~15×) | same policy (renormalize) but flagged: `disclosure[]`, `coverage_warnings[]` in analysis/overlap payloads + proposal footnote + UI chips |
+| Cache keys | analytics cache ignored methodology version | version in key — math changes invalidate |
+
+All conventions now live in ONE module (`webapp/conventions.py`,
+vendored into chatapp by `scripts/sync_perf_engine.py`; byte-parity enforced
+by `tests/test_perf_parity.py` in BOTH repos).
+
 
 ## 0. Data-source policy (2026-08-25)
 
@@ -105,9 +125,10 @@ degrades to a `"<index> (series unavailable)"` label, never a wrong number.
 5. **As-of** = last sorted date.
 6. **Window cut-offs** are calendar-day subtractions from the as-of date:
    `today − round(years × 365.25)`.
-7. **Tolerances**: window completeness and rolling windows allow −5 days of
-   calendar gaps; the chart-level rolling scan requires base-point gaps
-   ≥355 days.
+7. **Tolerances**: CAGR window completeness allows −5 days of calendar
+   gaps; rolling returns use ONE slack constant
+   (`ROLLING_GAP_SLACK_DAYS = 10` → a 1Y base qualifies at ≥355 days) for
+   BOTH the KPI distribution and the weekly-strided chart [perf-v2.0.0].
 8. **Chain breaks**: `daily_returns()` skips a pair when either side is ≤0 —
    a single 0-value point breaks the chain rather than producing −100%.
 
@@ -152,18 +173,30 @@ found_points, found_start, found_end}` — e.g. the cold-start stub case:
 bare "not enough history".
 
 ### Rolling 1Y distribution `rolling_1y`
-365-day windows at daily steps over the **full** record; a window counts when
-its base-point gap ≥360 days; needs ≥30 windows. Emits `window_days`,
-`first_window_start`, `last_window_end`, `n_periods`, `pct_positive`, best /
-worst / median. Worked example: 2,503 windows, **88.4% positive**.
+365-day windows at daily steps over the **full** record, via the shared core
+`rolling_returns()` (a window counts when its base-point gap ≥
+`window − ROLLING_GAP_SLACK_DAYS` = 355 days); needs ≥30 windows. The chart
+series (`rolling_points`) is a calendar-weekly STRIDE of exactly these rows —
+card and chart can never use different definitions [perf-v2.0.0]. Emits
+`window_days`, `first_window_start`, `last_window_end`, `n_periods`,
+`pct_positive`, best / worst / median. Worked example: 2,503 windows,
+**88.4% positive**.
+
+### Risk block `risk` (window-pairing rule [perf-v2.0.0])
+The window is `max(start, as-of − 3y) → as-of`. The Sharpe/Sortino NUMERATOR
+is the CAGR over that same observed span (`return_cagr_pct`) — never a
+3-year figure substituted with 0 for young funds. `window_years` labels the
+realised span (e.g. 1.1 for an NFO with 400 NAVs).
 
 ### Benchmark-relative `benchmark` (needs ≥30 common days AND ≥365-day span)
 Only dates present in **both** return maps count.
-- `beta` = cov(r_s, r_b) / var(r_b)
-- `alpha_pct` = (mean_s − β·mean_b) × 252 × 100  (Jensen's, annualised)
-- `tracking_error_pct` = std(r_s − r_b) × √252 × 100
-- `information_ratio` = (mean_s − mean_b)×252 / TE (null when TE = 0)
-- Emits `window_start`, `window_end`, `n_days`.
+- `beta` = cov(r_s, r_b) / var(r_b)   (OLS on daily simple returns)
+- `alpha_pct` = (mean_s − β·mean_b) × 252 × 100  (Jensen's, arithmetic ×252)
+- `tracking_error_pct` = std(r_s − r_b) × √252 × 100  (annualised)
+- `information_ratio` = (mean_s − mean_b)×252 / TE_annual  (null when TE = 0;
+  [perf-v2.0.0] divides by the ANNUALISED TE — pre-v2 divided by the daily
+  std and inflated every IR ~15.9×)
+- `r_squared`, `method`, `window_start`, `window_end`, `n_days`.
 
 ### Portfolio & compare layers
 - `portfolio_analytics`: weights normalised to 100, blended on the densest
@@ -278,3 +311,4 @@ self-healing; a thin file lies forever.
 | perf-v1.2-2026-08-24 | 2026-08-24 | Benchmark selection v2 (index_name + ordered keyword rules — a Nifty 50 ETF now benchmarks NIFTY 50, not NIFTY 500); per-scheme rolling-1Y series + history-completeness badge in the payload; module-level analytics cache; daily stub pre-heal job; data_health stub-shadow component; trigger-mode telemetry labels; scheme-code resolver (human-review CSV) |
 | perf-v1.3-2026-08-24 | 2026-08-24 | [ANA3] Portfolio movement: cash-flow-aware value path (opening deduction, daily grid valuation, flow-adjusted TWR chain, XIRR, linked-index drawdown) attached to portfolio analytics when transactions exist; honest 90-day annualisation floor; CAS transaction ingest + per-portfolio storage + seed demo |
 | perf-v1.4.2-2026-08-25 | 2026-08-25 | Data-source policy: AMFI/AMC/NSE only — mfapi + mfdata retired (fetch_missing_nav dormant; AMFI portal walk is the full-history source; the 4 CAS funds re-fetched from AMFI). Publication-day rule: daily returns reported only on NAV-publication days (weekend/repeat rows no longer plot as zeros); phantom-flow fix (nav-less schemes' cash excluded from flows, reported in data_note); double-sign fix (net invested 1.43cr vs 822cr); switches excluded; series-start rule; NAV-source ladder + per-scheme stamps |
+| perf-v2.0.0-2026-08-25 | 2026-08-25 | Financial-metrics audit fixes (see §0 changelog table): IR annualised-TE denominator; window-paired Sharpe/Sortino; single rolling core + slack constant; benchmark method/R² disclosure; ZC yield cap removed; IDCW payout/reinvest flow policy; stored-unit guardrail + TER migration; all-or-nothing pricing basis; look-through disclosure ledger; versioned analytics cache; platform parity lock (`sync_perf_engine.py` + parity tests in both repos) |

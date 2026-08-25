@@ -114,8 +114,19 @@ def _file_freshness(dirpath: Path) -> tuple[int, int]:
 
 def _nav() -> tuple[float, dict]:
     fresh, total = _file_freshness(DATA_DIR / "nav_history")
-    return (round(fresh / total * 100, 1) if total else 0.0), {
-        "files": total, f"fresh_le_{MAX_AGE_DAYS}d": fresh}
+    meta = {"files": total, f"fresh_le_{MAX_AGE_DAYS}d": fresh}
+    # [BUG-F4] surface the malformed-history corruption class (history rows
+    # that are plain strings instead of {date, nav} dicts).
+    try:
+        from .market_value import scan_nav_history_schema
+        bad = scan_nav_history_schema()
+        if bad:
+            meta["schema_anomalies"] = len(bad)
+            meta["schema_anomaly_examples"] = \
+                [b["file"] for b in bad[:8]]
+    except Exception:
+        pass
+    return (round(fresh / total * 100, 1) if total else 0.0), meta
 
 
 def _stubs() -> tuple[float | None, dict]:
@@ -141,6 +152,9 @@ def _stubs() -> tuple[float | None, dict]:
             except Exception:
                 continue
             if not hist or len(hist) >= NAV_STUB_HEAL_MIN_POINTS:
+                continue
+            if not isinstance(hist[0], dict):
+                # [BUG-F4] string-row corruption class — not a stub, skip
                 continue
             first = str((hist[0] or {}).get("date") or "")
             try:  # 'DD-Mon-YYYY' or ISO

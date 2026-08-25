@@ -3,11 +3,22 @@
 Pure functions, no I/O — every figure here is unit-tested against
 hand-computed values (PLAN_PERFORMANCE_ANALYTICS verification checklist).
 
+perf-v2.0.0 changes (methodology page documents each):
+- Information ratio divides annualised active return by ANNUALISED TE
+  (was daily TE: every IR was ~15.9x too high).
+- Sharpe/Sortino pair the return numerator and risk denominator over the
+  SAME observed window ("window-pairing"); no more fabricated negative
+  Sharpe for funds younger than 3y.
+- ONE rolling-return core (rolling_returns) feeds both KPI cards and
+  charts; slack = window - ROLLING_GAP_SLACK_DAYS everywhere.
+- Benchmark block discloses its regression method + R^2.
+
 Debt metrics [DBT5]:
     bullet_modified_duration() — Macaulay / modified duration for a fixed-rate
     bullet bond (or zero-coupon instrument when the coupon is 0/None), driven
     by an explicit yield-to-maturity or a clean price (YTM solved by
-    bisection). Yields are effective-annual throughout.
+    bisection). Yields are effective-annual throughout; implied ZC yields
+    beyond 200%/yr are honest nulls, never silently capped.
 
 Scheme performance metrics [ANA1]:
     compute_series_analytics() — CAGR windows, annualised volatility,
@@ -24,18 +35,23 @@ from __future__ import annotations
 from bisect import bisect_left
 from datetime import date, datetime, timedelta
 
-# Conventions (documented on the methodology page):
-TRADING_DAYS = 252            # annualisation factor for daily stats
-DAYS_PER_YEAR = 365.25        # calendar-day CAGR exponent
-DEFAULT_RF_PCT = 6.0          # documented assumption until a T-bill feed lands
-ROLLING_WINDOW_YEARS = 1      # rolling-return window
-MIN_POINTS_FOR_STATS = 30     # below this, risk metrics are None (honest gaps)
-MIN_CAGR_WINDOW_DAYS = 90     # below this, even since-inception CAGR is None:
-                              # annualising a few days fabricates absurd rates
-MIN_RISK_WINDOW_DAYS = 365    # risk stats need >=1y of observed span, not just
-                              # >=30 points: 30 points over 5 weeks must never
-                              # masquerade as "3-year" volatility
-METHODOLOGY_VERSION = "perf-v1.4.2-2026-08-25"  # stamped into proposals [ANA4]
+# Conventions live in ONE place [perf-v2.0.0]; re-exported here so existing
+# `from .analytics import X` call sites keep working unchanged.
+from .conventions import (DEFAULT_RF_PCT, DAYS_PER_YEAR,
+                          MIN_CAGR_WINDOW_DAYS, MIN_POINTS_FOR_STATS,
+                          MIN_RISK_WINDOW_DAYS, METHODOLOGY_VERSION,
+                          ROLLING_GAP_SLACK_DAYS, ROLLING_WINDOW_DAYS,
+                          ROLLING_WINDOW_YEARS, TRADING_DAYS)
+
+__all__ = ["TRADING_DAYS", "DAYS_PER_YEAR", "DEFAULT_RF_PCT",
+           "ROLLING_WINDOW_YEARS", "ROLLING_WINDOW_DAYS",
+           "ROLLING_GAP_SLACK_DAYS", "MIN_POINTS_FOR_STATS",
+           "MIN_CAGR_WINDOW_DAYS", "MIN_RISK_WINDOW_DAYS",
+           "METHODOLOGY_VERSION", "parse_nav_date", "daily_returns",
+           "cagr_between", "max_drawdown", "rolling_returns",
+           "rolling_1y_distribution", "benchmark_relative_stats",
+           "compute_series_analytics", "bullet_modified_duration",
+           "_xirr", "portfolio_movement_series"]
 
 
 def parse_nav_date(s) -> date | None:
@@ -117,38 +133,54 @@ def max_drawdown(values: list[float]) -> float | None:
     return worst if saw else None
 
 
+def rolling_returns(parsed: list[tuple[date, float]],
+                    win_days: int = ROLLING_WINDOW_DAYS,
+                    min_gap_days: int | None = None
+                    ) -> list[tuple[date, float, date]]:
+    """THE rolling-return core — single source for KPI cards AND charts.
+
+    ``parsed``: [(date, nav)] sorted ascending, positive values only.
+    Returns [(end_date, ret, base_date)] for every point whose base is the
+    nearest available value at least ``win_days`` back, provided that base
+    is no older than ``win_days - ROLLING_GAP_SLACK_DAYS`` (one slack rule
+    platform-wide; charts stride the OUTPUT by calendar days for density).
+    """
+    if min_gap_days is None:
+        min_gap_days = win_days - ROLLING_GAP_SLACK_DAYS
+    out: list[tuple[date, float, date]] = []
+    j = 0
+    n = len(parsed)
+    for i in range(n):
+        d, v = parsed[i]
+        while j < n and parsed[j][0] < d - timedelta(days=win_days):
+            j += 1
+        if j >= n:
+            break
+        bd, bv = parsed[j]
+        if (d - bd).days >= min_gap_days and bv > 0 and v > 0:
+            out.append((d, v / bv - 1.0, bd))
+    return out
+
+
 def rolling_1y_distribution(series: list[tuple[date, float]],
                             today: date) -> dict | None:
     """% positive + spread of rolling 1Y returns at daily steps."""
-    win_days = round(ROLLING_WINDOW_YEARS * DAYS_PER_YEAR)
-    tol = win_days - 5  # allow short calendar gaps around month-ends
+    win_days = ROLLING_WINDOW_DAYS
     vals = [(d, v) for d, v in series if v is not None and v > 0]
     if len(vals) < MIN_POINTS_FOR_STATS:
         return None
-    rets: list[float] = []
-    first_base: date | None = None
-    last_end: date | None = None
-    j = 0
-    for d, v in vals:
-        while j < len(vals) and vals[j][0] < d - timedelta(days=win_days):
-            j += 1
-        if j < len(vals):
-            bd, bv = vals[j]
-            if (d - bd).days >= tol and bv > 0:
-                rets.append(v / bv - 1.0)
-                if first_base is None:
-                    first_base = bd
-                last_end = d
-    if len(rets) < MIN_POINTS_FOR_STATS:
+    rows = rolling_returns(vals, win_days)
+    if len(rows) < MIN_POINTS_FOR_STATS:
         return None
-    pos = sum(1 for r in rets if r > 0)
-    rs = sorted(rets)
+    rets_only = [r for _, r, _ in rows]
+    pos = sum(1 for r in rets_only if r > 0)
+    rs = sorted(rets_only)
     return {
         "window_days": win_days,
-        "first_window_start": first_base.isoformat() if first_base else None,
-        "last_window_end": last_end.isoformat() if last_end else None,
-        "n_periods": len(rets),
-        "pct_positive": round(pos / len(rets) * 100.0, 1),
+        "first_window_start": rows[0][2].isoformat(),
+        "last_window_end": rows[-1][0].isoformat(),
+        "n_periods": len(rets_only),
+        "pct_positive": round(pos / len(rets_only) * 100.0, 1),
         "best_pct": round(rs[-1] * 100.0, 2),
         "worst_pct": round(rs[0] * 100.0, 2),
         "median_pct": round(rs[len(rs) // 2] * 100.0, 2),
@@ -172,7 +204,15 @@ def benchmark_relative_stats(scheme_rets: dict[str, float],
     """Beta / Jensen's alpha / tracking error / IR from aligned daily returns.
 
     ``*_rets`` map YYYY-MM-DD -> simple daily return; only common dates count.
-    Alpha is Jensen's, annualised: mean_s - beta*mean_b, x TRADING_DAYS."""
+    Method [perf-v2.0.0], disclosed in the payload:
+      - OLS regression of scheme on benchmark daily returns -> beta
+      - Jensen's alpha  = (mean_s - beta*mean_b) x TRADING_DAYS  (arithmetic,
+        annualised by trading days — the industry convention for daily data)
+      - tracking error  = std(daily active) x sqrt(TRADING_DAYS)  (annualised)
+      - information ratio = active_annual / TE_annual   [BUG-FIX: was divided
+        by the DAILY TE, inflating every IR by ~sqrt(252) = 15.9x]
+      - r_squared of the regression is reported for context.
+    """
     common = sorted(set(scheme_rets) & set(bench_rets))
     if len(common) < MIN_POINTS_FOR_STATS:
         return None
@@ -190,16 +230,22 @@ def benchmark_relative_stats(scheme_rets: dict[str, float],
     cov = sum((si - ms) * (bi - mb) for si, bi in zip(s, b)) / (len(b) - 1)
     beta = cov / var_b
     diff = [si - bi for si, bi in zip(s, b)]
-    te = _std(diff)
+    te_daily = _std(diff)
+    te_annual = te_daily * (TRADING_DAYS ** 0.5)
     active_annual = (ms - mb) * TRADING_DAYS
+    var_s = sum((x - ms) ** 2 for x in s) / (len(s) - 1)
+    corr = (cov / ((var_s ** 0.5) * (var_b ** 0.5))) if var_s > 0 and var_b > 0 else None
     out = {"beta": round(beta, 3),
            "alpha_pct": round((ms - beta * mb) * TRADING_DAYS * 100.0, 2),
-           "tracking_error_pct": round(te * (TRADING_DAYS ** 0.5) * 100.0, 2)}
-    out["information_ratio"] = (round(active_annual / te, 3)
-                                if te > 0 else None)
+           "tracking_error_pct": round(te_annual * 100.0, 2)}
+    out["information_ratio"] = (round(active_annual / te_annual, 3)
+                                if te_annual > 0 else None)
+    out["r_squared"] = round(corr * corr, 3) if corr is not None else None
     out["n_days"] = len(common)
     out["window_start"] = common[0]
     out["window_end"] = common[-1]
+    out["method"] = ("OLS on daily simple returns; alpha arithmetic "
+                     "x252; TE/IR annualised")
     return out
 
 
@@ -263,24 +309,31 @@ def compute_series_analytics(series: list[tuple[str, float]],
     recent_span = (recent[-1][0] - recent[0][0]).days if recent else 0
     if len(recent) >= MIN_POINTS_FOR_STATS and recent_span >= MIN_RISK_WINDOW_DAYS:
         rets = daily_returns([v for _, v in recent])
-        n = len(rets)
-        mean_d, std_d = _mean(rets), _std(rets)
+        std_d = _std(rets)
         rf_daily = rf_pct / 100.0 / TRADING_DAYS
         downside = [min(r - rf_daily, 0.0) for r in rets]
         dd_dev = (_mean([x * x for x in downside])) ** 0.5
         vol_ann = std_d * (TRADING_DAYS ** 0.5)
-        cagr3 = _window_cagr(parsed, 3, today) or 0.0
-        sharpe = ((cagr3 - rf_pct / 100.0) / vol_ann
-                  if vol_ann > 1e-9 else None)
-        sortino = ((cagr3 - rf_pct / 100.0) /
-                   (dd_dev * TRADING_DAYS ** 0.5)
-                   if dd_dev > 1e-12 else None)
+        # [perf-v2.0.0 window-pairing rule] the return numerator and the risk
+        # denominator are ALWAYS measured over the SAME observed span. The old
+        # `cagr3 or 0.0` fallback fabricated NEGATIVE Sharpe/Sortino (a 6%
+        # penalty against a 0% return) for every fund younger than 3y while it
+        # was actually compounding at +17%. A 1.2y-old fund now gets a
+        # 1.2-year-window Sharpe, honestly labelled via window_years.
+        cagr_win = cagr_between(recent[0][1], recent[-1][1], recent_span)
+        excess = ((cagr_win - rf_pct / 100.0)
+                  if cagr_win is not None else None)
+        sharpe = (excess / vol_ann if excess is not None and vol_ann > 1e-9
+                  else None)
+        sortino = (excess / (dd_dev * TRADING_DAYS ** 0.5)
+                   if excess is not None and dd_dev > 1e-12 else None)
         out["risk"] = {
-            "window_years": 3,
+            "window_years": round(recent_span / DAYS_PER_YEAR, 2),
             "window_start": recent[0][0].isoformat(),
             "window_end": recent[-1][0].isoformat(),
             "n_points": len(recent),
             "volatility_pct": round(vol_ann * 100.0, 2) if vol_ann > 0 else None,
+            "return_cagr_pct": (_pct_or_none(cagr_win)),
             "sharpe": round(sharpe, 3) if sharpe is not None else None,
             "sortino": round(sortino, 3) if sortino is not None else None,
             "max_drawdown_pct": _pct_or_none(max_drawdown([v for _, v in recent])),
@@ -352,9 +405,12 @@ def bullet_modified_duration(*, coupon_pct: float | None, years: float,
     coupon is treated as a zero-coupon instrument: Macaulay duration equals
     maturity exactly (no period-grid rounding, so sub-1y T-Bills stay right).
 
-    Returns {"modified_duration", "macaulay_duration", "ytm_pct"} or None
-    when inputs are insufficient (no tenor, non-positive tenor, no yield
-    source, or price unreachable within 0–200% annual yield)."""
+    Returns {"modified_duration", "macaulay_duration", "ytm_pct",
+    "ytm_effective_annual_pct"} or None when inputs are insufficient (no
+    tenor, non-positive tenor, no yield source, price unreachable within
+    0–200% annual yield, or an implied zero-coupon yield beyond 200% —
+    [perf-v2.0.0] the old silent `min(y, 200%)` cap fabricated durations
+    from implausible quotes; now it is an honest null)."""
     if years is None or years <= 0:
         return None
     freq = max(1, int(coupons_per_year or 1))
@@ -362,9 +418,11 @@ def bullet_modified_duration(*, coupon_pct: float | None, years: float,
 
     def zc_from_annual(y_annual: float) -> dict:
         mac = years
+        y_pct = round(y_annual * 100.0, 4)
         return {"modified_duration": round(mac / (1.0 + y_annual), 4),
                 "macaulay_duration": round(mac, 4),
-                "ytm_pct": round(y_annual * 100.0, 4)}
+                "ytm_pct": y_pct,
+                "ytm_effective_annual_pct": y_pct}
 
     if not cpn_total:  # ---- zero-coupon -------------------------------------------------
         y_annual: float | None = None
@@ -377,7 +435,9 @@ def bullet_modified_duration(*, coupon_pct: float | None, years: float,
             return None  # a zero-coupon cannot trade above its face value
         if y_annual is None:
             return None
-        return zc_from_annual(min(y_annual, 2.0))
+        if y_annual > 2.0:  # implied yield >200%/yr is a bad quote, not a bond
+            return None
+        return zc_from_annual(y_annual)
 
     # ---- coupon-bearing -----------------------------------------------------------------
     n = max(1, round(years * freq))
@@ -409,12 +469,57 @@ def bullet_modified_duration(*, coupon_pct: float | None, years: float,
     _, mac_periods = _pv_schedule(face, cpn, n, y_period)
     mac_years = mac_periods / freq
     y_annual_eff = (1.0 + y_period) ** freq - 1.0
+    y_pct = round(y_annual_eff * 100.0, 4)
     return {"modified_duration": round(mac_years / (1.0 + y_period), 4),
             "macaulay_duration": round(mac_years, 4),
-            "ytm_pct": round(y_annual_eff * 100.0, 4)}
+            "ytm_pct": y_pct,
+            "ytm_effective_annual_pct": y_pct}
 
 
 # ---- [ANA3] cash-flow-aware portfolio movement ---------------------------------
+
+# Canonical CAS transaction vocabulary [perf-v2.0.0]. ONE classifier shared by
+# every parser and both apps: amounts are signed from the PORTFOLIO's cash
+# perspective, which makes TWR flows and investor-perspective XIRR uniform:
+#   cash_in   purchase/SIP      -> amount +, units +
+#   cash_out  redemption/SWP    -> amount -, units -
+#   income    IDCW/dividend PAYOUT -> amount - (cash LEAVES the portfolio),
+#               units unchanged; XIRR sees it as money back to the investor
+#   reinvest  IDCW/dividend REINVESTMENT / bonus -> units +, amount 0 (no
+#               external cash ever moved; fixes phantom-opening-unit drift)
+#   internal  switch in/out     -> excluded from flows & invested entirely
+#   unknown   anything else     -> neutralised (0/0), counted in data_note,
+#               never silently dropped
+_TX_CASH_IN_TYPES = {"PURCHASE", "BUY", "ADDITIONAL_PURCHASE",
+                     "SYSTEMATIC_INVESTMENT"}
+_TX_CASH_OUT_TYPES = {"REDEEM", "SELL", "REDEMPTION", "SYSTEMATIC_WITHDRAWAL"}
+_TX_INTERNAL_TYPES = {"SWITCH_IN", "SWITCH_OUT"}
+_TX_INCOME_TYPES = {"IDCW", "DIVIDEND", "IDCW_PAYOUT", "DIVIDEND_PAYOUT"}
+_TX_REINVEST_TYPES = {"REINVESTMENT", "IDCW_REINVESTMENT",
+                      "DIVIDEND_REINVESTMENT", "BONUS"}
+
+
+def classify_tx_type(ttype) -> str:
+    """CAS transaction-type text -> canonical flow kind (never raises)."""
+    norm = str(ttype or "").strip().upper().replace(" ", "_").replace("-", "_")
+    if not norm:
+        return "unknown"
+    if norm in _TX_CASH_IN_TYPES:
+        return "cash_in"
+    if norm in _TX_CASH_OUT_TYPES:
+        return "cash_out"
+    if norm in _TX_INTERNAL_TYPES:
+        return "internal"
+    if norm in _TX_INCOME_TYPES:
+        return "income"
+    if norm in _TX_REINVEST_TYPES:
+        return "reinvest"
+    # common compound spellings, e.g. "IDCW_PAYOUT_OPTION", "DIV_REINVEST"
+    if "PAYOUT" in norm and ("IDCW" in norm or "DIV" in norm):
+        return "income"
+    if "REINVEST" in norm or norm == "BONUS":
+        return "reinvest"
+    return "unknown"
 
 
 def _tx_key(t: dict) -> tuple[str, str]:
@@ -477,21 +582,38 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
         return None
     parsed: list[dict] = []
     switches_skipped = 0
+    unrecognized: dict[str, int] = {}
+    income_count = reinvest_count = 0
     for t in transactions:
         d = parse_nav_date(t.get("date") or "")
-        # [perf-v1.4] SWITCH_IN/SWITCH_OUT are INTERNAL transfers, not cash:
-        # excluded everywhere (units, flows, invested) per product decision.
-        if (t.get("type") or "").upper() in ("SWITCH_IN", "SWITCH_OUT"):
-            if d is not None:
-                switches_skipped += 1
+        kind = (t.get("flow_kind") or "").strip().lower()
+        if not kind:
+            # legacy records without the classifier field: classify from type
+            kind = classify_tx_type(t.get("type"))
+        if d is None and kind != "unknown":
+            continue
+        # [perf-v1.4 / v2.0.0] internal transfers are NOT cash; unknown types
+        # carry no trustworthy sign — both stay out of the valuation.
+        if kind == "internal":
+            switches_skipped += 1
+            continue
+        tt = str(t.get("type") or "?").strip().upper() or "?"
+        if kind == "unknown":
+            unrecognized[tt] = unrecognized.get(tt, 0) + 1
             continue
         units = float(t.get("cum_units") or 0.0)
-        amt = float(t.get("amount") or 0.0)  # parse already signs by type
-        if d is None or (units == 0.0 and amt == 0.0):
+        amt = float(t.get("amount") or 0.0)  # parse already signs by kind
+        if kind == "income":
+            units = 0.0          # payouts never move units
+            income_count += 1
+        elif kind == "reinvest":
+            amt = 0.0            # no external cash ever moved
+            reinvest_count += 1
+        if units == 0.0 and amt == 0.0:
             continue
         code, isin = _tx_key(t)
         parsed.append({"amfi_code": code, "isin": isin, "d": d,
-                       "units": units, "amt": amt,
+                       "units": units, "amt": amt, "kind": kind,
                        "name": t.get("name") or ""})
     if not parsed:
         return None
@@ -687,6 +809,11 @@ def portfolio_movement_series(items: list[dict], transactions: list[dict],
             "artifact_days": artifact_days,
             "artifacts": artifact_days > 0,
             "switches_skipped": switches_skipped,
+            "income_tx_count": income_count,
+            "reinvest_tx_count": reinvest_count,
+            "unrecognized_tx_count": sum(unrecognized.values()),
+            "unrecognized_types": sorted(unrecognized.items(),
+                                         key=lambda kv: -kv[1])[:6],
             "partial_statement": partial_statement,
             "start_reason": ("first_purchase" if not partial_statement
                              else "earliest_nav_partial_statement"),

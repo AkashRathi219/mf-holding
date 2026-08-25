@@ -21,6 +21,7 @@ from typing import Iterable
 
 from . import remote_store
 from src.amfi_nav import fund_name_from_nav
+from .conventions import normalize_metric as _normalize_metric
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -703,13 +704,14 @@ def _load_universe_index() -> dict[str, list[dict]]:
                 "amfi_code": _norm_amfi_code(r.get("Amficode")),
                 "as_of": _as_of_date(r.get("Data as of")),
                 "nav": _num(r.get("NAV")),
-                "ter": _num(r.get("TER")),
+                # [perf-v2.0.0] rate metrics pass the stored-unit guardrail
+                "ter": _normalize_metric(_num(r.get("TER")), "ter", source=f"universe:{fund[:48]}"),
                 "aum": _num(r.get("AUM")),
                 "category": (r.get("Category") or "").strip(),
                 "plan": (r.get("Type") or "").strip(),
-                "ytm": _num(r.get("YTM")),
-                "duration": _num(r.get("Duration")),
-                "avg_maturity": _num(r.get("Av. Mat.")),
+                "ytm": _normalize_metric(_num(r.get("YTM")), "ytm", source=f"universe:{fund[:48]}"),
+                "duration": _normalize_metric(_num(r.get("Duration")), "duration", source=f"universe:{fund[:48]}"),
+                "avg_maturity": _normalize_metric(_num(r.get("Av. Mat.")), "avg_maturity", source=f"universe:{fund[:48]}"),
                 "large_pct": _num(r.get("LargeCap %")),
                 "mid_pct": _num(r.get("MidCap %")),
                 "small_pct": _num(r.get("SmallCap%")),
@@ -956,18 +958,26 @@ def _seed_schemes_and_holdings(cur: sqlite3.Cursor) -> None:
         plan = (uni_match or {}).get("plan") or "Regular"
         sid = len(scheme_slots) + 1
         universe_match_by_key[sid] = uni_match or {}
+        # [perf-v2.0.0] stored-unit guardrail: universe rate metrics are
+        # FRACTIONS; percent-scale sources are rescaled once at this boundary.
+        def _uni(kind, field):
+            return _normalize_metric((uni_match or {}).get(field), kind,
+                                     source=f"universe:{fund[:48]}")
         scheme_rows[key] = {
             "id": sid, "key": key, "amc": amc, "fund_name": fund, "source": source,
             "as_of": _clean_holdings_date(as_of or (uni_match or {}).get("as_of") or ""),
             "category": category, "plan": plan,
-            "nav": (uni_match or {}).get("nav"), "ter": (uni_match or {}).get("ter"),
-            "ter_regular": _ter_by_plan(uni_match, "regular"),
-            "ter_direct": _ter_by_plan(uni_match, "direct"),
+            "nav": (uni_match or {}).get("nav"), "ter": _uni("ter", "ter"),
+            "ter_regular": _normalize_metric(_ter_by_plan(uni_match, "regular"),
+                                             "ter", source=f"universe:{fund[:48]}"),
+            "ter_direct": _normalize_metric(_ter_by_plan(uni_match, "direct"),
+                                            "ter", source=f"universe:{fund[:48]}"),
             "amfi_regular": None, "amfi_direct": None,
             "isin_regular": None, "isin_direct": None,
-            "aum": (uni_match or {}).get("aum"), "ytm": (uni_match or {}).get("ytm"),
-            "duration": (uni_match or {}).get("duration"),
-            "avg_maturity": (uni_match or {}).get("avg_maturity"),
+            "aum": (uni_match or {}).get("aum"),
+            "ytm": _uni("ytm", "ytm"),
+            "duration": _uni("duration", "duration"),
+            "avg_maturity": _uni("avg_maturity", "avg_maturity"),
             "is_index": is_index, "is_etf": is_etf, "is_fof": is_fof,
             "coverage": cov.get("coverage", "has_holdings"),
             "n_holdings": 0, "n_equity": 0, "n_debt": 0,
@@ -2319,7 +2329,8 @@ class WebDB:
         Regular. Degrades honestly: missing history/benchmark -> explicit
         nulls, never fabricated numbers."""
         import os as _os
-        from .analytics import DEFAULT_RF_PCT, compute_series_analytics
+        from .analytics import (DEFAULT_RF_PCT, METHODOLOGY_VERSION,
+                                compute_series_analytics)
 
         s = self.get_scheme(scheme_id)
         if not s:
@@ -2340,6 +2351,7 @@ class WebDB:
             rf = float(_os.environ.get("ANALYTICS_RF_PCT", "") or 0.0)
         except ValueError:
             rf = 0.0
+        rf_eff = rf if rf > 0 else DEFAULT_RF_PCT
         bench_name = self._benchmark_index_for(s)
         bench = self._load_tr_index(bench_name) if bench_name else None
         # Benchmark TR series file identity joins the cache key so a refreshed
@@ -2354,16 +2366,18 @@ class WebDB:
             except OSError:
                 bench_mtime = 0.0
         cache_key = (scheme_id, plan_used, doc.get("last_date"),
-                     round(rf if rf > 0 else DEFAULT_RF_PCT, 2), bench_mtime)
-        cached = _analytics_cache.get(cache_key)
+                     round(rf_eff, 2), bench_mtime,
+                     METHODOLOGY_VERSION)  # version in key: a math change
+        cached = _analytics_cache.get(cache_key)  # must invalidate, not linger
         if cached is not None:
             return {**cached}
         out = compute_series_analytics(
             list(zip(doc["dates"], doc["navs"])),
-            rf_pct=rf if rf > 0 else DEFAULT_RF_PCT,
+            rf_pct=rf_eff,
             bench_series=bench)
         out.update(base)
         out["plan_used"] = plan_used
+        out["rf_pct_assumption"] = rf_eff  # truthful echo of the rf used
         out["benchmark_index"] = bench_name if bench else (
             None if not bench_name else f"{bench_name} (series unavailable)")
         # Per-scheme rolling-1Y series for the details chart [ANA2], and a
@@ -2386,27 +2400,28 @@ class WebDB:
         return out
 
     @staticmethod
-    def _rolling_1y_points(dates: list[str], navs: list[float],                           step_days: int = 7) -> list[list[float]]:
-        """Rolling 1Y return (%) at ~weekly steps for charting [ANA2]."""
-        from datetime import timedelta
+    def _rolling_1y_points(dates: list[str], navs: list[float],
+                           step_days: int = 7) -> list[list[float]]:
+        """Rolling 1Y return (%) at ~weekly steps for charting [ANA2].
 
-        from .analytics import parse_nav_date
-        pts = []
+        [perf-v2.0.0] derived from the SAME engine core as the rolling-1Y KPI
+        cards (analytics.rolling_returns), so chart and stats can never
+        disagree; ``step_days`` strides the OUTPUT by CALENDAR days (the old
+        every-7th-row stride sampled ~9-10 calendar days and missed extremes).
+        """
+
+        from .analytics import parse_nav_date, rolling_returns
         parsed = [(parse_nav_date(d), v) for d, v in zip(dates, navs)]
         parsed = [(d, v) for d, v in parsed if d and v and v > 0]
-        j = 0
-        next_take = 0
-        win = timedelta(days=365)
-        for i, (d, v) in enumerate(parsed):
-            while j < len(parsed) and parsed[j][0] < d - win:
-                j += 1
-            if j >= len(parsed):
-                break
-            bd, bv = parsed[j]
-            gap = (d - bd).days
-            if i >= next_take and gap >= 355 and bv > 0:
-                pts.append([d.isoformat(), round((v / bv - 1.0) * 100.0, 2)])
-                next_take = i + max(1, step_days)
+        if len(parsed) < 2:
+            return []
+        pts = []
+        last_emitted = None
+        for d, ret, _base in rolling_returns(parsed):
+            if last_emitted is not None and (d - last_emitted).days < step_days:
+                continue
+            pts.append([d.isoformat(), round(ret * 100.0, 2)])
+            last_emitted = d
         return pts
 
     def _plan_series(self, scheme_id: int):
@@ -2491,16 +2506,25 @@ class WebDB:
 
         dates_out, values_out = [], []
         last = {sid: None for sid in series_map}
+        bases: dict[int, float] = {}
         for k in grid:
             port = 0.0
             ok = True
             for sid, w in used:
-                v = series_map[sid].get(k) or last[sid]
+                v = series_map[sid].get(k) or last.get(sid)
                 if v is None:
                     ok = False  # this line hadn't launched yet at window start
                     break
+                if sid not in bases:
+                    # [perf-v2.0.0] rebase each scheme at ITS first valued
+                    # grid date. The old `series_map[sid][start_iso]`
+                    # denominator raised KeyError whenever a scheme lacked a
+                    # NAV exactly on the window's first day (AMFI gaps), and
+                    # forward-filled schemes silently joined mid-window with
+                    # a stale denominator.
+                    bases[sid] = v
                 last[sid] = v
-                port += w * v / series_map[sid][start_iso]
+                port += w * v / bases[sid]
             if not ok:
                 continue
             dates_out.append(k)
@@ -2511,11 +2535,12 @@ class WebDB:
             rf = float(_os.environ.get("ANALYTICS_RF_PCT", "") or 0.0)
         except ValueError:
             rf = 0.0
+        rf_eff = rf if rf > 0 else DEFAULT_RF_PCT
         out = compute_series_analytics(
-            list(zip(dates_out, values_out)),
-            rf_pct=rf if rf > 0 else DEFAULT_RF_PCT)
+            list(zip(dates_out, values_out)), rf_pct=rf_eff)
         out.update({
             "kind": "portfolio",
+            "rf_pct_assumption": rf_eff,
             "constituents": [{"scheme_id": sid,
                               "fund_name": self.get_scheme(sid)["fund_name"],
                               "weight": round(w, 2),
@@ -2667,17 +2692,21 @@ class WebDB:
         master_idx = max(range(len(grids)), key=lambda k: len(grids[k]))
         master = grids[master_idx]
 
+        # [perf-v2.0.0] resolve rf ONCE and echo the effective value — the
+        # response used to claim DEFAULT even when ANALYTICS_RF_PCT overrode it.
+        try:
+            _rf_env = float(os.environ.get("ANALYTICS_RF_PCT", "") or 0.0)
+        except ValueError:
+            _rf_env = 0.0
+        rf_eff = _rf_env if _rf_env > 0 else DEFAULT_RF_PCT
+
         out_schemes = []
         for k, (s, plan, doc) in enumerate(picked):
-            try:
-                rf = float(os.environ.get("ANALYTICS_RF_PCT", "") or 0.0)
-            except ValueError:
-                rf = 0.0
             bench_name = self._benchmark_index_for(s)
             bench = self._load_tr_index(bench_name) if bench_name else None
             a = compute_series_analytics(
                 list(zip(doc["dates"], doc["navs"])),
-                rf_pct=rf if rf > 0 else DEFAULT_RF_PCT, bench_series=bench)
+                rf_pct=rf_eff, bench_series=bench)
             a.pop("disclaimer", None)
 
             growth = None
@@ -2716,7 +2745,7 @@ class WebDB:
             "as_of": end.isoformat(),
             "window": {"start": start.isoformat(), "end": end.isoformat(),
                        "common": enough},
-            "rf_pct_assumption": DEFAULT_RF_PCT,
+            "rf_pct_assumption": rf_eff,
             "schemes": out_schemes,
             "disclaimer": "Past performance is not indicative of future returns.",
         }
@@ -3006,7 +3035,9 @@ class WebDB:
                 if band != rat:
                     continue
             if mat:
-                years = (datetime.strptime(b["maturity_date"], "%Y-%m-%d").date() - today).days / 365.0 \
+                # [perf-v2.0.0] one year length platform-wide (conventions)
+                from .analytics import DAYS_PER_YEAR as _DPY
+                years = (datetime.strptime(b["maturity_date"], "%Y-%m-%d").date() - today).days / _DPY \
                     if b.get("maturity_date") else None
                 if years is None:
                     continue
@@ -3320,6 +3351,12 @@ class WebDB:
             weights[sid] = wmap
 
         ids = list(weights.keys())
+        # [perf-v2.0.0] disclosure coverage per scheme: overlap cells compare
+        # RAW %NAV maps, so a partially-disclosed scheme understates its own
+        # self-cell AND every pairwise cell. Flag those pairs instead of
+        # silently mixing bases with fully-disclosed schemes.
+        disclosed_total = {sid: round(sum(weights[sid].values()), 2) for sid in ids}
+        low_cov = {sid for sid in ids if disclosed_total[sid] < 50.0}
         matrix: list[dict] = []
         for i, a in enumerate(ids):
             row = {"scheme": lookup[a]["fund_name"], "id": a}
@@ -3327,6 +3364,8 @@ class WebDB:
                 inter = set(weights[a]) & set(weights[b])
                 ov = round(sum(min(weights[a][k], weights[b][k]) for k in inter), 2)
                 row[f"c_{b}"] = ov
+                if (a in low_cov or b in low_cov) and b != a:
+                    row.setdefault("low_coverage_with", []).append(b)
             row["self"] = round(sum(weights[a].values()), 2)
             matrix.append(row)
 
@@ -3355,6 +3394,13 @@ class WebDB:
             "schemes": [lookup[i] for i in ids],
             "ids": ids,
             "matrix": matrix,
+            "disclosed_total_pct": disclosed_total,
+            "coverage_warnings": [
+                {"id": sid, "scheme": lookup[sid]["fund_name"],
+                 "disclosed_pct": disclosed_total[sid],
+                 "note": ("Only %.2f%% of NAV disclosed; overlap cells for "
+                          "this scheme are understated." % disclosed_total[sid])}
+                for sid in sorted(ids) if sid in low_cov],
             "concentration": concentration,
             "debt_risk": debt_risk,
             "disclaimer": True,
@@ -3494,6 +3540,8 @@ class WebDB:
         stocks: list[dict] = []
         errors: list[dict] = []
         effective: dict[str, dict] = {}
+        disclosure_ledger: dict[str, dict] = {}  # [perf-v2.0.0]
+        _disclosure = disclosure_ledger
         total_weight = 0.0
 
         def _bump(key: str, meta: dict, contrib: float, src_scheme: str | None = None) -> None:
@@ -3530,6 +3578,17 @@ class WebDB:
             pct_rows = [(h, h.get("percent_nav")) for h in hs if h.get("percent_nav") is not None]
             total_pct = sum(p for _, p in pct_rows)
             factor = 100.0 / total_pct if total_pct > 0 else 0.0
+            # [perf-v2.0.0 disclosure ledger] renormalisation policy stays
+            # (partial disclosures scale to 100), but it is now VISIBLE: every
+            # scheme's disclosed total and its amplification factor are
+            # reported so concentration/split figures can carry a warning.
+            _disclosure[src_scheme] = {
+                "scheme": src_scheme, "scheme_id": sid,
+                "disclosed_pct": round(total_pct, 2),
+                "n_disclosed": len(pct_rows),
+                "renormalization_factor": round(factor, 3),
+                "flagged": bool(total_pct > 0 and (factor > 1.5 or total_pct < 50)),
+            }
             for h, pct in pct_rows:
                 contrib = weight * (pct * factor) / 100.0
                 key = (h.get("isin") or "").strip() or (h.get("company") or "").strip()
@@ -3721,12 +3780,26 @@ class WebDB:
 
         debt_analysis = self._debt_analysis(holdings, asset_split)
 
+        # [perf-v2.0.0] disclosure coverage warnings — renormalised schemes
+        # are flagged, never silent (policy: keep renormalize + flag).
+        coverage_warnings = [
+            {**meta, "note": (
+                f"Only {meta['disclosed_pct']:.2f}% of NAV disclosed; weights "
+                f"amplified x{meta['renormalization_factor']:.1f} to 100%. "
+                "Concentration/split figures for this line are indicative.")}
+            for meta in sorted(disclosure_ledger.values(),
+                               key=lambda m: -m["renormalization_factor"])
+            if meta["flagged"]]
+
         return {
             "schemes": schemes,
             "stocks": stocks,
             "total_weight": round(total_weight, 2),
             "effective_total": effective_total,
             "coverage_pct": coverage_pct,
+            "disclosure": sorted(disclosure_ledger.values(),
+                                 key=lambda m: -m["disclosed_pct"]),
+            "coverage_warnings": coverage_warnings,
             "n_holdings": len(holdings),
             "effective_holdings": holdings,
             "top_holdings": [{"label": h["company"], "value": round(h["weight"], 2),
@@ -3785,7 +3858,9 @@ class WebDB:
                 continue
             try:
                 mat_d = datetime.strptime(str(m)[:10], "%Y-%m-%d").date()
-                yrs = (mat_d - datetime.now().date()).days / 365.0
+                # [perf-v2.0.0] one year length platform-wide (conventions)
+                from .analytics import DAYS_PER_YEAR as _DPY
+                yrs = (mat_d - datetime.now().date()).days / _DPY
                 if -1 <= yrs <= 60:
                     mat.append((h["weight"], round(yrs, 2)))
             except Exception:

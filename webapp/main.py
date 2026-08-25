@@ -832,6 +832,15 @@ def build_proposal(wdb: db.WebDB, items: list[dict], replacements: dict,
     out.append("## 1. Current Portfolio Diagnostic")
     out.append("")
     pairs = _top_overlap_pairs(ov["matrix"], k=5) if ov["matrix"] else []
+    # [perf-v2.0.0] disclosure coverage footnote — renormalised schemes are
+    # flagged, never silent (policy: keep renormalize + flag).
+    _cov_warns = pa.get("coverage_warnings") or []
+    if _cov_warns:
+        out.append("**Disclosure coverage note:**")
+        out.append("")
+        for w in _cov_warns:
+            out.append(f"- {w['scheme']}: {w['note']}")
+        out.append("")
     high = [p for p in pairs if p[2] >= 60]
     if high:
         out.append("**High-overlap pairs (>=60% stock overlap):**")

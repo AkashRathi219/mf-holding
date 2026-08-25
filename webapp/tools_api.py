@@ -15,6 +15,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 from . import auth, db as dbm, userdata
+from .analytics import classify_tx_type
 from .db import _cap_bucket
 from .strategy_rules import evaluate_rules, parse_rules
 
@@ -237,23 +238,26 @@ def _cas_json_to_items(doc: dict) -> list[dict]:
     return items
 
 
-# CAS transaction types -> flow direction [ANA3 movement analytics]:
-# unsigned amounts in the source; the TYPE decides the sign.
-_TX_IN = {"PURCHASE", "BUY", "SWITCH_IN", "ADDITIONAL_PURCHASE",
-          "SYSTEMATIC_INVESTMENT", "REINVESTMENT"}
-_TX_OUT = {"REDEEM", "SELL", "SWITCH_OUT", "REDEMPTION",
-           "SYSTEMATIC_WITHDRAWAL"}
-
-
+# CAS transaction types -> flow direction [ANA3 movement analytics].
+# [perf-v2.0.0] the vocabulary/classifier lives in the shared engine
+# (analytics.classify_tx_type) so both apps sign identically:
+#   cash_in  purchase/SIP: amount +, units +
+#   cash_out redemption/SWP: amount -, units -
+#   income   IDCW/dividend PAYOUT: amount - (cash leaves the portfolio),
+#            units forced 0 — TWR treats it as outflow, XIRR as money back
+#   reinvest IDCW/dividend REINVESTMENT / bonus: units +, amount ZEROED —
+#            no external cash ever moved (was mis-signed as a purchase)
+#   internal switch in/out, unknown types: neutralised, never signed
 def parse_cas_transactions(doc) -> list[dict]:
     """Normalise a CAS transaction set to canonical records.
 
     Accepts either a CAS JSON doc carrying a ``transactions`` array, or the
     standalone extraction envelope (same schema — the sample
     CAS_sample_extracted_transactions.txt IS a JSON envelope). Each record is
-    signed by type (PURCHASE/SWITCH_IN +, REDEEM/SWITCH_OUT -), normalised to
-    ISO dates and floats; records without a date, or with zero units AND zero
-    amount, are dropped. Kept records are sorted by date."""
+    classified via ``classify_tx_type`` and signed from the PORTFOLIO's cash
+    perspective; records without a date, or with zero units AND zero amount,
+    are dropped (unknown types are kept neutralised with flow_kind="unknown"
+    so movement analytics can count them). Kept records are sorted by date."""
     raw = doc.get("transactions") if isinstance(doc, dict) else None
     if raw is None:
         try:  # standalone TXT/JSON envelope
@@ -265,9 +269,10 @@ def parse_cas_transactions(doc) -> list[dict]:
         if not isinstance(r, dict):
             continue
         date = str(r.get("date") or "").strip()[:10]
+        ttype = str(r.get("transaction_type") or "").strip().upper()
+        kind = classify_tx_type(ttype)
         if not date:
             continue
-        ttype = str(r.get("transaction_type") or "").strip().upper()
         units = r.get("units")
         amount = r.get("amount")
         try:
@@ -278,13 +283,20 @@ def parse_cas_transactions(doc) -> list[dict]:
             amount = float(amount) if amount not in (None, "") else 0.0
         except (TypeError, ValueError):
             amount = 0.0
-        if units == 0.0 and amount == 0.0:
-            continue
-        if ttype in _TX_IN:
+        if kind == "cash_in":
             sign = 1.0
-        elif ttype in _TX_OUT:
+        elif kind == "cash_out":
             sign = -1.0
-        else:
+        elif kind == "income":
+            sign = -1.0          # portfolio pays the investor
+        elif kind == "reinvest":
+            sign = 1.0           # units arrive; the amount below is zeroed
+        else:                    # internal / unknown -> neutralised record
+            sign = 0.0
+            units, amount = 0.0, 0.0
+        if sign and units == 0.0 and amount == 0.0:
+            # signed kinds must move SOMETHING; internal/unknown records are
+            # kept neutralised so movement analytics can count/report them
             continue
         try:
             nav = float(r.get("nav"))
@@ -293,13 +305,18 @@ def parse_cas_transactions(doc) -> list[dict]:
             nav = None
         if r.get("nav") in (None, ""):
             nav = None
+        amt_signed = abs(amount) * sign if kind in ("cash_in", "cash_out",
+                                                    "income") else 0.0
+        cum_units = units * sign if kind in ("cash_in", "cash_out",
+                                             "reinvest") else 0.0
         out.append({
             "date": date,
             "type": ttype,
+            "flow_kind": kind,
             "sign": sign,
-            "units": units,
-            "amount": abs(amount) * sign,
-            "cum_units": units * sign,
+            "units": units if kind in ("cash_in", "cash_out", "reinvest") else 0.0,
+            "amount": amt_signed,
+            "cum_units": cum_units,
             "isin": str(r.get("isin") or "").strip().upper(),
             "amfi_code": str(r.get("amfi_code") or "").strip(),
             "name": str(r.get("scheme_name") or "").strip(),

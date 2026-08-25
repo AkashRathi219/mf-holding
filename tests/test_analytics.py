@@ -209,7 +209,7 @@ def test_window_dates_emitted_and_complete_flags():
     out = compute_series_analytics(series)
     as_of = d0 + td(days=n - 1)
     assert out["as_of"] == as_of.isoformat()
-    assert out["methodology_version"].startswith("perf-v1.")
+    assert out["methodology_version"].startswith("perf-v2.")
     c = out["cagr_pct"]
     # constant daily rate -> every COMPLETE window annualizes to the same CAGR
     expected_cagr = (1.0005 ** 365.25 - 1) * 100
@@ -239,7 +239,9 @@ def test_window_dates_emitted_and_complete_flags():
     assert roll["window_days"] == 365
     assert roll["first_window_start"] == d0.isoformat()
     assert roll["last_window_end"] == as_of.isoformat()
-    assert roll["n_periods"] == n - 360  # ends at indices 360..1499 (360d min per the -5d tolerance)
+    # slack is ONE platform constant (window - 10): first base qualifies at
+    # day 355 for a 365-day window [perf-v2.0.0]
+    assert roll["n_periods"] == n - 355
     assert roll["pct_positive"] == 100.0
 
 
