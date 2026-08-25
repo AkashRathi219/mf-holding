@@ -30,7 +30,7 @@ def ist_now() -> datetime:
 class MonthlyScheduler:
     def __init__(self, pipeline_fn, settings: dict, base_dir: Path,
                  nav_refresh_fn=None, stock_refresh_fn=None, bond_refresh_fn=None,
-                 amfi_fn=None, preheal_fn=None):
+                 amfi_fn=None, preheal_fn=None, statements_fn=None):
         self.pipeline_fn = pipeline_fn
         self.settings = settings
         self.base_dir = base_dir
@@ -39,6 +39,7 @@ class MonthlyScheduler:
         self.bond_refresh_fn = bond_refresh_fn
         self.amfi_fn = amfi_fn
         self.preheal_fn = preheal_fn
+        self.statements_fn = statements_fn
         self.scheduler = AsyncIOScheduler(timezone="Asia/Kolkata")
 
     def setup(self):
@@ -189,6 +190,28 @@ class MonthlyScheduler:
                 f"{bond_cfg.get('minute', 30):02d} IST"
             )
 
+        # ---- Financial-statements refresh (AI extraction; stale-first) ----
+        stmt_cfg = sched.get("statements_refresh", {})
+        if self.statements_fn and stmt_cfg.get("enabled", True):
+            stmt_trigger = CronTrigger(
+                day_of_week=stmt_cfg.get("day_of_week", "mon"),
+                hour=stmt_cfg.get("hour", 7),
+                minute=stmt_cfg.get("minute", 0),
+                timezone="Asia/Kolkata",
+            )
+            self.scheduler.add_job(
+                self._run_statements,
+                trigger=stmt_trigger,
+                id="statements_refresh",
+                name="Financial Statements Refresh (stale-first)",
+                replace_existing=True,
+                **_JOB_DEFAULTS,
+            )
+            logger.info(
+                f"Statements refresh set: {stmt_cfg.get('day_of_week', 'mon')} "
+                f"{stmt_cfg.get('hour', 7):02d}:{stmt_cfg.get('minute', 0):02d} IST"
+            )
+
         # ---- Monthly AMFI-disclosure fetch (registry verification; holdings
         # arrive via the AMC-website pipeline) [DATA-POLICY: AMFI/AMC/NSE] ----
         amfi_cfg = sched.get("amfi_refresh", {})
@@ -280,6 +303,15 @@ class MonthlyScheduler:
             logger.info(f"Daily bond refresh complete: {summary}")
         except Exception as e:
             logger.error(f"Daily bond refresh failed: {e}")
+
+    async def _run_statements(self):
+        logger.info("Statements refresh triggered")
+        try:
+            summary = await asyncio.to_thread(self.statements_fn)
+            ok = sum(1 for r in (summary or []) if r.get("status") == "ok")
+            logger.info(f"Statements refresh complete: {ok}/{len(summary or [])} ok")
+        except Exception as e:
+            logger.error(f"Statements refresh failed: {e}")
 
     async def _run_amfi(self):
         logger.info("Monthly AMFI fetch triggered")

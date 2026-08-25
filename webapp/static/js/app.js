@@ -947,6 +947,7 @@ async function renderSecurityDetail(isin, container, titleEl) {
       ${buildStockPriceSection(isin, price)}
       ${buildStockActionsSection(actions)}
       ${buildStockReportsSection(reports)}
+      ${buildStockAnalyticsTabs(isin)}
 
       <div class="card">
         <h3>Top weighted in schemes <span class="badge grey">${s.used_in ? s.used_in.length : 0}</span></h3>
@@ -1014,6 +1015,156 @@ function renderStockPriceChart(isin) {
 }
 
 let stockPriceCache = null;
+
+// ---------- stock analytics tabs (technical / fundamentals / statements / factors) ----------
+const STOCK_TABS = [
+  ["technical", "Technical"],
+  ["fundamentals", "Fundamentals"],
+  ["statements", "Statements"],
+  ["factors", "Factors"],
+];
+const stockTabCache = {};
+const stockTabLoaded = {};
+
+function buildStockAnalyticsTabs(isin) {
+  const btn = (id, label) =>
+    `<button class="nav-toggle" style="border:none" data-stab="${id}" onclick="switchStockTab('${isin}','${id}')">${label}</button>`;
+  return `
+    <div class="card" style="margin-bottom:16px">
+      <h3>Stock analytics</h3>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+        ${STOCK_TABS.map(([id, label]) => btn(id, label)).join("")}
+      </div>
+      ${STOCK_TABS.map(([id]) =>
+        `<div id="stab-${id}" hidden><div class="empty"><span class="spin"></span> Loading…</div></div>`).join("")}
+      <div class="page-sub" style="margin-top:10px">Descriptive arithmetic over public data — not investment advice.</div>
+    </div>`;
+}
+
+async function switchStockTab(isin, tab) {
+  document.querySelectorAll("[data-stab]").forEach(b => {
+    const on = b.dataset.stab === tab;
+    b.classList.toggle("active", on);
+  });
+  STOCK_TABS.forEach(([id]) => {
+    const pane = document.getElementById(`stab-${id}`);
+    if (pane) pane.hidden = id !== tab;
+  });
+  const pane = document.getElementById(`stab-${tab}`);
+  if (!pane) return;
+  if (!stockTabLoaded[isin + tab]) {
+    stockTabLoaded[isin + tab] = true;
+    try {
+      const endpoint = tab === "statements" ? "financials" : tab;
+      const data = await App.api(`/securities/${encodeURIComponent(isin)}/${endpoint}`).catch(() => null);
+      if (data) stockTabCache[isin + tab] = data;
+      pane.innerHTML = renderStockTab(tab, stockTabCache[isin + tab]);
+    } catch (e) {
+      stockTabLoaded[isin + tab] = false;
+      pane.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
+    }
+  }
+}
+
+function _kvGrid(pairs) {
+  return `<table class="data" style="min-width:0"><tbody>${pairs.map(
+    ([k, v]) => `<tr><td style="color:var(--text-2);font-weight:600;width:45%">${k}</td><td>${v}</td></tr>`
+  ).join("")}</tbody></table>`;
+}
+
+function renderStockTab(tab, d) {
+  if (!d || d.available === false)
+    return `<div class="empty">${App.esc(d && d.note ? d.note : "Not available for this security.")}</div>`;
+  const num = (v, dp = 2) => v === null || v === undefined ? "—" : App.formatNum(v, dp);
+  const sig = s => !s ? "—" : s === "bullish" ? App.badge(s, "green") : s === "bearish" ? App.badge(s, "red") : App.badge(s, "grey");
+
+  if (tab === "technical") {
+    const t = d.indicators && d.indicators.trend || {};
+    const m = d.indicators && d.indicators.momentum || {};
+    const sc = d.score || {};
+    const comp = sc.components || {};
+    const signals = (d.signals || []).slice(-6).reverse().map(s =>
+      `<tr><td>${App.esc(s.date)}</td><td>${App.esc(s.kind)}</td><td>${sig(s.direction === "up" ? "bullish" : s.direction === "down" ? "bearish" : "neutral")}</td></tr>`).join("");
+    return `
+      <div class="grid auto" style="margin-bottom:12px">
+        <div class="kpi card"><div class="kpi-label">Composite score</div>
+          <div class="kpi-value">${num(sc.composite, 0)}</div>
+          <div class="kpi-sub">${sig(sc.bias)} · trend ${num(comp.trend, 0)} · momentum ${num(comp.momentum, 0)} · volume ${num(comp.volume, 0)}</div></div>
+        <div class="kpi card"><div class="kpi-label">RSI (14)</div><div class="kpi-value">${num(m.rsi_14 && m.rsi_14.value, 1)}</div><div class="kpi-sub">${sig(m.rsi_14 && m.rsi_14.signal)}</div></div>
+        <div class="kpi card"><div class="kpi-label">MACD</div><div class="kpi-value">${num(t.macd && t.macd.histogram, 2)}</div><div class="kpi-sub">histogram · ${sig(t.macd && t.macd.signal)}</div></div>
+        <div class="kpi card"><div class="kpi-label">ADX (14)</div><div class="kpi-value">${num(t.adx && t.adx.value, 1)}</div><div class="kpi-sub">${t.adx && t.adx.trending ? App.badge("trending", "amber") : App.badge("ranging", "grey")} · ${sig(t.adx && t.adx.signal)}</div></div>
+      </div>
+      ${_kvGrid([
+        ["Price vs SMA50 / SMA200", `${sig(t.sma_50 && t.sma_50.signal)} / ${sig(t.sma_200 && t.sma_200.signal)}`],
+        ["Supertrend", `${t.supertrend ? sig(t.supertrend.direction) : "—"} @ ${num(t.supertrend && t.supertrend.value)}`],
+        ["Bollinger %B", num(d.indicators && d.indicators.volatility && d.indicators.volatility.bollinger_20_2 && d.indicators.volatility.bollinger_20_2.percent_b)],
+        ["ATR %", num(d.indicators && d.indicators.volatility && d.indicators.volatility.atr_14 && d.indicators.volatility.atr_14.atr_pct)],
+        ["52w position", d.indicators && d.indicators.structure && d.indicators.structure.week_52 ? `${num(d.indicators.structure.week_52.position_pct, 1)}% (H ${num(d.indicators.structure.week_52.high_52w)} / L ${num(d.indicators.structure.week_52.low_52w)})` : "—"],
+      ])}
+      ${signals ? `<h3 style="margin-top:12px">Recent signals</h3><table class="data"><thead><tr><th>Date</th><th>Event</th><th>Read</th></tr></thead><tbody>${signals}</tbody></table>` : ""}`;
+  }
+
+  if (tab === "fundamentals") {
+    const pr = d.profitability || {}, va = d.valuation || {}, gr = d.growth || {};
+    const lv = d.leverage || {}, ps = d.per_share || {}, pf = d.piotroski_f || {};
+    return `
+      <div class="grid auto" style="margin-bottom:12px">
+        <div class="kpi card"><div class="kpi-label">P/E (TTM)</div><div class="kpi-value">${num(va.pe, 1)}</div><div class="kpi-sub">EPS ₹${num(ps.eps)}</div></div>
+        <div class="kpi card"><div class="kpi-label">P/B</div><div class="kpi-value">${num(va.pb, 2)}</div><div class="kpi-sub">BVPS ₹${num(ps.bvps)}</div></div>
+        <div class="kpi card"><div class="kpi-label">EV/EBITDA</div><div class="kpi-value">${num(va.ev_ebitda, 1)}</div><div class="kpi-sub">EV ₹${num(ps.ev_cr, 0)} cr</div></div>
+        <div class="kpi card"><div class="kpi-label">ROE / ROCE</div><div class="kpi-value">${num(pr.roe_pct, 1)}%</div><div class="kpi-sub">ROCE ${num(pr.roce_pct, 1)}% · NPM ${num(pr.net_margin_pct, 1)}%</div></div>
+        <div class="kpi card"><div class="kpi-label">Piotroski F</div><div class="kpi-value">${pf.score !== undefined ? pf.score : "—"}/9</div><div class="kpi-sub">${pf.evaluable || 0} tests evaluable</div></div>
+        <div class="kpi card"><div class="kpi-label">Altman Z</div><div class="kpi-value">${d.altman_z ? num(d.altman_z.z, 2) : "—"}</div><div class="kpi-sub">${d.altman_z ? App.badge(d.altman_z.zone, d.altman_z.zone === "safe" ? "green" : d.altman_z.zone === "grey" ? "amber" : "red") : ""}</div></div>
+      </div>
+      ${_kvGrid([
+        ["Revenue growth (YoY / 3y CAGR)", `${num(gr.revenue_yoy * 100, 1)}% / ${num(gr.revenue_cagr_3y * 100, 1)}%`],
+        ["PAT growth (YoY)", num(gr.pat_yoy * 100, 1) + "%"],
+        ["Debt/Equity · Interest cover", `${num(lv.debt_to_equity)} · ${num(lv.interest_coverage, 1)}×`],
+        ["Dividend yield", num(va.dividend_yield_pct, 2) + "%"],
+        ["As of / basis", `${App.esc(d.as_of || "—")} · ${App.esc(d.basis || "")}`],
+      ])}`;
+  }
+
+  if (tab === "statements") {
+    const b = d.consolidated || d.standalone;
+    if (!b) return `<div class="empty">No parsed statements yet.</div>`;
+    const ttm = b.ttm || {};
+    const qs = (b.quarters || []).filter(q => !q.cumulative).slice(-8).reverse();
+    const row = q => `<tr><td>${App.esc(q.period_end)}</td>
+      <td class="num">${num(q.revenue_from_operations, 0)}</td>
+      <td class="num">${num(q.ebitda, 0)}</td>
+      <td class="num">${num(q.pat, 0)}</td>
+      <td class="num">${num(q.cfo, 0)}</td></tr>`;
+    return `
+      <div class="grid auto" style="margin-bottom:12px">
+        <div class="kpi card"><div class="kpi-label">Revenue (TTM)</div><div class="kpi-value">${num(ttm.revenue_from_operations, 0)}</div><div class="kpi-sub">₹ crore · ${App.esc(ttm.window_start || "")} → ${App.esc(ttm.window_end || "")}</div></div>
+        <div class="kpi card"><div class="kpi-label">EBITDA (TTM)</div><div class="kpi-value">${num(ttm.ebitda, 0)}</div><div class="kpi-sub">margin ${ttm.revenue_from_operations ? num(ttm.ebitda / ttm.revenue_from_operations * 100, 1) : "—"}%</div></div>
+        <div class="kpi card"><div class="kpi-label">PAT (TTM)</div><div class="kpi-value">${num(ttm.pat, 0)}</div><div class="kpi-sub">EPS ₹${num(ttm.eps_basic)}</div></div>
+        <div class="kpi card"><div class="kpi-label">CFO − capex</div><div class="kpi-value">${num((ttm.cfo || 0) - (ttm.capex || 0), 0)}</div><div class="kpi-sub">FCF ₹ crore</div></div>
+      </div>
+      <div class="table-wrap" style="max-height:40vh;overflow:auto">
+      <table class="data"><thead><tr><th>Quarter end</th><th class="r">Revenue</th><th class="r">EBITDA</th><th class="r">PAT</th><th class="r">CFO</th></tr></thead>
+      <tbody>${qs.map(row).join("") || '<tr><td colspan="5" class="empty">No discrete quarters.</td></tr>'}</tbody></table></div>
+      <div class="page-sub" style="margin-top:8px">₹ crore · ${d.validation ? `confidence ${d.validation.confidence}` : ""} · sources trace via sha256 in file</div>`;
+  }
+
+  if (tab === "factors") {
+    const fs = d.factor_scores || {};
+    const bar = (label, v) => `<tr><td style="color:var(--text-2);font-weight:600;width:45%">${label}</td>
+      <td><div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;height:8px;background:var(--bg-3);border-radius:4px;overflow:hidden">
+          <div style="width:${v === null || v === undefined ? 0 : v}%;height:100%;background:var(--primary)"></div></div>
+        <span class="mono">${v === null || v === undefined ? "—" : Math.round(v)}</span></div></td></tr>`;
+    return `
+      <table class="data" style="min-width:0"><tbody>
+        ${bar("Value", fs.value)}${bar("Quality", fs.quality)}
+        ${bar("Momentum", fs.momentum)}${bar("Low volatility", fs.lowvol)}
+        ${bar("Multi-factor", d.multi_factor)}
+      </tbody></table>
+      <div class="page-sub" style="margin-top:8px">Percentile rank across the tracked universe (100 = strongest of the factor). Value/quality need parsed financials.</div>`;
+  }
+  return `<div class="empty">Unknown tab.</div>`;
+}
 
 function buildStockActionsSection(actions) {
   if (!actions || actions.available === false) return "";
@@ -2868,7 +3019,7 @@ async function loadApiSamples() {
 }
 
 // ---------------- superadmin: data ops ----------------
-const ADMIN_PIPELINES = ["nav_daily", "amfi_fetch", "bond_refresh", "stock_refresh"];
+const ADMIN_PIPELINES = ["nav_daily", "amfi_fetch", "bond_refresh", "stock_refresh", "financial_statements"];
 let adminTimer = null;
 
 function initAdmin() {

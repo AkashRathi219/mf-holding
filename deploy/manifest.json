@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-24T21:12:01Z",
+  "generated_at": "2026-08-25T09:15:51Z",
   "schema": 1,
   "files": [
     {
@@ -30434,8 +30434,8 @@
     },
     {
       "path": "reference/isin_latest_nav.json",
-      "size": 584038,
-      "sha256": "97ff39ffc455a31c8bba60d9dc4f72eb2d005e7282c2d4d916ae29a612d7ef3a"
+      "size": 579269,
+      "sha256": "d8264ac390f77896019dc3a71efa7f285081a88c8ddb4d76039039781793353e"
     },
     {
       "path": "reference/nav_completeness.json",
@@ -43525,7 +43525,7 @@
     {
       "path": "webapp.db",
       "size": 41263104,
-      "sha256": "5a04d6c3f365cdf38cd718c9c7e735a60be20a7f3eee939350785733121bc3b1"
+      "sha256": "defe3e01e3ac274088cdde96d7e24c2af574814f6d02669712dc8409731c358e"
     },
     {
       "path": "webapp_auth.db",
@@ -43533,5 +43533,5 @@
       "sha256": "c856b304795a2d7531f6b127798d6cbca6be767d1f603f801be3fb6d6f729d6b"
     }
   ],
-  "total_bytes": 849020199
+  "total_bytes": 849015430
 }

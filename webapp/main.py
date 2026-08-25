@@ -22,6 +22,12 @@ from .log import get_logger, request_logging_middleware
 from .ratelimit import (AUTH_LOGIN_LIMITER, AUTH_REGISTER_LIMITER,  # [H1]
                         SlidingWindowRateLimiter, enforce)
 from .remote_store import ensure as remote_ensure
+from .factor_scores import FACTOR_VERSION, screen as factor_screen
+from .stock_technical import TECH_VERSION, compute_technical
+
+NOT_ADVICE = ("Factor and technical scores are descriptive arithmetic over "
+              "past public price data. They are not investment advice, not "
+              "forecasts, and make no performance claims.")
 from src.stock_refresh import refresh_all  # stdlib-only chain; scheduler wiring
 from .tools_api import router as tools_router
 
@@ -170,6 +176,26 @@ def _preheal_job() -> dict:
     return preheal_nav_stubs(limit=500)
 
 
+def _statements_job() -> list[dict]:
+    """Weekly stale-first statements refresh; returns per-stock summaries.
+
+    The heavy-extraction module is resolved at call time (its pymupdf/Pillow
+    deps live outside requirements-slim, so it must stay off the static boot
+    graph); any failure degrades to telemetry, never a dead scheduler."""
+    try:
+        from src.refresh_log import track
+        with track("financial_statements") as meta:
+            import importlib
+            mod = importlib.import_module("src.financial_statements")
+            results = mod.refresh_stale(limit=12)
+            meta["ok"] = sum(1 for r in results if r.get("status") == "ok")
+            log.info("statements refresh: %d/%d ok", meta["ok"], len(results))
+            return results
+    except Exception as e:
+        log.error("statements refresh failed: %s", e)
+        return []
+
+
 def _start_scheduler_thread() -> None:
     """Run the cron jobs inside the web process when ENABLE_SCHEDULER=1.
 
@@ -205,6 +231,7 @@ def _start_scheduler_thread() -> None:
                     bond_refresh_fn=_bond_job,
                     amfi_fn=_amfi_job,
                     preheal_fn=_preheal_job,
+                    statements_fn=_statements_job,
                 )
                 sched.start()
             except Exception:
@@ -551,6 +578,138 @@ def api_security_reports(isin: str, request: Request):
         raise HTTPException(status_code=404, detail="Security not found.")
     data = get_db().stock_reports(isin.upper())
     return data or {"isin": isin.upper(), "available": False}
+
+
+@app.get("/api/securities/{isin}/technical")
+def api_security_technical(isin: str, request: Request):
+    """[tech-v1.0.0] Full technical payload: indicator readings + signals,
+    patterns, composite score and chart overlay series (trailing window).
+
+    Descriptive arithmetic over past prices — never advice; renderers must
+    show the standard disclaimer beside it."""
+    _require_user(request)
+    isin = isin.upper()
+    if not get_db().get_security(isin):
+        raise HTTPException(status_code=404, detail="Security not found.")
+    try:
+        window = max(30, min(int(request.query_params.get("window") or 260), 2000))
+    except ValueError:
+        window = 260
+    ohlcv = get_db().stock_ohlcv(isin)
+    if not ohlcv:
+        return {"isin": isin, "available": False,
+                "methodology_version": TECH_VERSION}
+    payload = compute_technical(ohlcv, window=window)
+    payload["isin"] = isin
+    payload["symbol"] = ohlcv.get("symbol", "")
+    payload["name"] = ohlcv.get("name", "")
+    payload["available"] = "error" not in payload
+    return payload
+
+
+@app.get("/api/securities/{isin}/financials")
+def api_security_financials(isin: str, request: Request):
+    """[stmt-v1.0.0] Normalised quarterly/annual/TTM statements parsed from
+    NSE result filings (consolidated preferred)."""
+    _require_user(request)
+    isin = isin.upper()
+    if not get_db().get_security(isin):
+        raise HTTPException(status_code=404, detail="Security not found.")
+    doc = get_db().stock_financials(isin)
+    if not doc:
+        return {"isin": isin, "available": False,
+                "note": "no parsed statements yet — run "
+                        "python -m src.financial_statements"}
+    doc["isin"] = isin
+    doc["available"] = True
+    return doc
+
+
+@app.get("/api/securities/{isin}/fundamentals")
+def api_security_fundamentals(isin: str, request: Request):
+    """[fund-v1.0.0] Fundamental ratios, DuPont, valuation and composite
+    scores (Piotroski F / Altman Z / Beneish M) from filed accounts."""
+    _require_user(request)
+    isin = isin.upper()
+    if not get_db().get_security(isin):
+        raise HTTPException(status_code=404, detail="Security not found.")
+    payload = get_db().stock_fundamentals(isin)
+    if payload.get("available"):
+        payload["disclaimer"] = NOT_ADVICE
+    return payload
+
+
+@app.get("/api/factors/universe")
+def api_factors_universe(request: Request):
+    """[factor-v1.0.0] Cross-sectional factor scores over the tracked
+    equity universe (TTL-cached). Rankings are descriptive only."""
+    _require_user(request)
+    payload = get_db().factor_universe_scores()
+    return {
+        "methodology_version": payload["methodology_version"],
+        "as_of": payload.get("as_of"),
+        "benchmark": payload.get("benchmark"),
+        "universe_n": payload["universe_n"],
+        "coverage": payload["coverage"],
+    }
+
+
+@app.get("/api/securities/{isin}/factors")
+def api_security_factors(isin: str, request: Request):
+    _require_user(request)
+    isin = isin.upper()
+    sec = get_db().get_security(isin)
+    if not sec:
+        raise HTTPException(status_code=404, detail="Security not found.")
+    scores = get_db().factor_universe_scores()
+    fs = (scores.get("factor_scores") or {}).get(isin)
+    if fs is None:
+        return {"isin": isin, "available": False,
+                "methodology_version": scores["methodology_version"],
+                "note": "no scoreable price history for this ISIN"}
+    multi = (scores.get("multi_factor") or {}).get(isin)
+    sector_rel = (scores.get("sector_relative") or {}).get(isin)
+    components = {group: {comp: ranks.get(isin)
+                          for comp, ranks in comps.items()}
+                  for group, comps in (scores.get("component_ranks")
+                                       or {}).items()}
+    return {
+        "methodology_version": scores["methodology_version"],
+        "as_of": scores.get("as_of"),
+        "available": True,
+        "isin": isin,
+        "name": sec.get("name"),
+        "sector": sec.get("sector"),
+        "factor_scores": fs,
+        "multi_factor": multi,
+        "sector_relative": sector_rel,
+        "component_ranks": components,
+        "disclaimer": NOT_ADVICE,
+    }
+
+
+@app.post("/api/factors/screen")
+def api_factors_screen(request: Request, body: dict):
+    _require_user(request)
+    factor = (body.get("factor") or "multi").lower()
+    if factor not in ("value", "quality", "momentum", "lowvol", "multi"):
+        raise HTTPException(status_code=400,
+                            detail="factor must be value/quality/momentum/"
+                                   "lowvol/multi")
+    wdb = get_db()
+    scores = wdb.factor_universe_scores()
+    rows = factor_screen(scores, factor=factor,
+                         top_n=int(body.get("top_n") or 20),
+                         ascending=bool(body.get("ascending")))
+    out = []
+    for row in rows:
+        sec = wdb.get_security(row["isin"])
+        out.append({**row, "name": sec.get("name") if sec else "",
+                    "sector": sec.get("sector") if sec else "",
+                    "cap": sec.get("cap") if sec else ""})
+    return {"methodology_version": scores["methodology_version"],
+            "as_of": scores.get("as_of"), "factor": factor,
+            "rows": out, "disclaimer": NOT_ADVICE}
 
 
 @app.post("/api/overlap")
@@ -1118,6 +1277,7 @@ def _admin_jobs() -> dict:
         "amfi_fetch": _amfi_job,
         "bond_refresh": _bond_job,
         "stock_refresh": lambda: refresh_all(daily=True),
+        "financial_statements": _statements_job,
     }
 
 

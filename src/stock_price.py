@@ -1,7 +1,13 @@
-"""Stock daily closing-price history agent (NSE bhavcopy primary).
+"""Stock daily closing-price history agent (pure-NSE pipeline).
 
 Produces ``data/stock_history/<ISIN>.json`` = ``{isin, symbol, name, currency,
 source, fetched_at, history: [{date, close, open, high, low, volume}]}``.
+
+[PLAN_STOCK_DATA_NSE_CLEANUP] De-Yahoo'd: every stored point comes from an
+official NSE source on its own raw scale — NO cross-source split-adjustment
+stitching (the old Yahoo-era normalization was the root cause of phantom
++-50-100% jumps at segment boundaries). Total-return math stays downstream
+(chatapp ``total_return_price`` adjusts on the fly from the actions file).
 
 Fetch chain per stock (first success wins, later sources fill gaps):
 1. **Manual CSV** - ``data/raw/stock_manual/<ISIN or SYMBOL>.csv``
@@ -9,14 +15,18 @@ Fetch chain per stock (first success wins, later sources fill gaps):
 2. **NSE bhavcopy archives (primary)** - one daily file covers every NSE-listed
    symbol (OHLC). Primary endpoint: ``sec_bhavdata_full`` CSV on
    ``archives.nseindia.com``; fallback: the UDiFF Common Bhavcopy ZIP on
-   ``nsearchives.nseindia.com`` (official archive since NSE deprecated legacy
-   formats). Files are downloaded by a parallel pool of workers and cached
-   under ``data/stock_bhavcopy/``. Coverage starts ~2020; older dates come
-   from the existing Yahoo history.
-3. **Google Finance (daily incremental only)** - latest close as a fast
-   top-up before the heavier Yahoo range call.
-4. **Yahoo Finance** - history/gap filler: pre-2020 depth, symbols the
-   bhavcopy misses (delisted/odd series), full daily close for ``<SYMBOL>.NS``.
+   ``nsearchives.nseindia.com``. Coverage starts ~2020.
+3. **NSE historical cm/equity API (pre-2020 depth)** - symbol-level JSON
+   covering 1994+, fetched in paced 1-year chunks via a Chrome-impersonated
+   session. Access is IP/geo-dependent (503s in some environments): when
+   unavailable the series honestly starts at BHAVCOPY_START instead of
+   mixing scales. Set ``STOCK_ALLOW_YAHOO=1`` ONLY as a documented
+   last-resort to retain legacy deep history.
+4. **Google Finance (daily incremental only)** - latest close as a fast
+   top-up.
+5. **Yahoo Finance (flag-gated last resort)** - requires
+   ``STOCK_ALLOW_YAHOO=1``; kept solely for emergency recovery of symbols
+   absent from every NSE source.
 
 For a backfill, the daily bhavcopy files are downloaded ONCE and reused for all
 stocks (``run()`` builds an in-memory ``{date: {symbol: row}}`` index), so 868
@@ -24,10 +34,18 @@ stocks cost ~1,700 file downloads in total rather than 868 per-symbol calls.
 
 Run::
 
+    python -m src.stock_price --download-only   # PLAN phase-0 raw download:
+                                                # bhavcopy top-up; NO stock_history writes
+    python -m src.stock_price --dump-nse-history [--symbols X,Y]
+                                                # PLAN phase-0 raw download:
+                                                # pre-2020 points -> data/raw/nse_historical/
     python -m src.stock_price                # backfill (bhavcopy primary)
     python -m src.stock_price --daily        # incremental append (daily)
     python -m src.stock_price --symbols ADANIENT,RELIANCE
     python -m src.stock_price --workers 12   # parallel bhavcopy downloaders
+    python -m src.stock_price --rebackfill-nse [--symbols X,Y]
+                                             # PLAN_STOCK_DATA_NSE_CLEANUP
+                                             # phase-3 corruption eraser
 """
 
 from __future__ import annotations
@@ -36,6 +54,7 @@ import argparse
 import csv
 import io
 import json
+import os
 import re
 import sys
 import time
@@ -59,10 +78,30 @@ BHAVCOPY_UDIFF_URL = ("https://nsearchives.nseindia.com/content/cm/"
 # Earliest reliably available "sec_bhavdata_full" file.
 BHAVCOPY_START = date(2020, 1, 1)
 
+# NSE historical cm/equity API (pre-2020 depth; IP/geo-dependent availability).
+NSE_HISTORICAL_URL = ("https://www.nseindia.com/api/historical/cm/equity"
+                      "?symbol={sym}&series=%22EQ%22&from={frm}&to={to}")
+NSE_HIST_CHUNK_DAYS = 365          # 1-year windows, paced
+NSE_HIST_PACING_S = 1.5            # Akamai politeness between chunks
+
 YAHOO_CRUMB_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb"
 YAHOO_CHART_URL = ("https://query1.finance.yahoo.com/v8/finance/chart/{sym}?period1={p1}"
                    "&period2={p2}&interval=1d&crumb={crumb}")
 GOOGLE_QUOTE_URL = "https://www.google.com/finance/quote/{sym}:NSE"
+
+REBACKFILL_STATUS = BHAVCOPY_CACHE_DIR / "nse_backfill_status.json"
+
+# Phase-0 raw dumps [PLAN_STOCK_DATA_NSE_CLEANUP]: pre-2020 points land here as
+# plain JSON, one file per symbol; extraction into stock_history/ happens later.
+NSE_HIST_RAW_DIR = Path(__file__).resolve().parent.parent / "data" / "raw" / "nse_historical"
+NSE_HIST_STATUS = NSE_HIST_RAW_DIR / "_status.json"
+NSE_HIST_START = date(1994, 1, 1)
+HIST_END = BHAVCOPY_START - timedelta(days=1)
+
+
+def yahoo_allowed() -> bool:
+    """Yahoo is a FLAG-GATED last resort [PLAN_STOCK_DATA_NSE_CLEANUP]."""
+    return os.environ.get("STOCK_ALLOW_YAHOO", "").strip() == "1"
 
 
 def _num(v):
@@ -215,10 +254,13 @@ def _parse_bhavcopy_day(d: date) -> dict[str, dict]:
                 sym = (r.get("TckrSymb" if ud else "SYMBOL") or "").strip()
                 if not sym:
                     continue
-                if ud:
-                    # equity series only; skip indices/ETF-units/debt rows
-                    if (r.get("SctySrs") or "").strip() not in {"EQ", "BE", "BZ", "SM", "ST", "SZ"}:
-                        continue
+                srs = (r.get("SctySrs" if ud else "SERIES") or "").strip()
+                # equity series only; skip indices/ETF-units/debt rows AND
+                # when-issued duplicates ('W1'/'W2'/'W3' during mergers) whose
+                # prices are on a different share basis - e.g. HDFCBANK traded
+                # ~1644 EQ alongside a phantom ~612 W3 row in Jul/Aug-2023.
+                if srs and srs not in {"EQ", "BE", "BZ", "SM", "ST", "SZ"}:
+                    continue
                 close = _num(r.get("ClsPric" if ud else "CLOSE_PRICE"))
                 # suspended/blank rows must never overwrite a good stored close
                 if close is None or close <= 0:
@@ -256,7 +298,269 @@ def _bhav_series(index: dict[str, dict[str, dict]], symbol: str) -> list[dict]:
 
 
 # --------------------------------------------------------------------------
-# Yahoo Finance (pre-2020 / coverage-gap fallback)
+# NSE historical cm/equity API (pre-2020 depth; availability varies by env)
+# --------------------------------------------------------------------------
+class _NseHistoricalSession:
+    """Chrome-impersonated session for www.nseindia.com JSON APIs.
+
+    The plain urllib opener is fingerprint-blocked on some endpoints; the
+    repo already ships curl_cffi for exactly this class of host
+    (pdf_downloader). Session + cookies are created lazily and reused."""
+
+    _session = None
+
+    @classmethod
+    def session(cls):
+        if cls._session is None:
+            from curl_cffi import requests as cffi
+            s = cffi.Session(impersonate="chrome124")
+            try:
+                r = s.get("https://www.nseindia.com/", timeout=30)
+                if r.status_code != 200:
+                    raise RuntimeError(f"warm {r.status_code}")
+            except Exception:
+                pass                      # cookies may still be set
+            cls._session = s
+        return cls._session
+
+
+def _nse_historical_chunk(symbol: str, frm: date, tod: date) -> list[dict]:
+    """One [frm, tod] window from the historical API -> raw points.
+
+    Never raises: any failure returns [] so callers degrade to bhavcopy-only
+    coverage instead of crashing a multi-hour backfill."""
+    url = NSE_HISTORICAL_URL.format(
+        sym=symbol, frm=frm.strftime("%d-%m-%Y"), to=tod.strftime("%d-%m-%Y"))
+    try:
+        s = _NseHistoricalSession.session()
+        r = s.get(url, headers={
+            "Referer": "https://www.nseindia.com/market-data/"
+                       "historical-data-equity-index",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+        }, timeout=60)
+        if r.status_code != 200:
+            return []
+        data = json.loads(r.content.decode("utf-8", "replace"))
+    except Exception:
+        return []
+    rows = data.get("data") if isinstance(data, dict) else None
+    out: list[dict] = []
+    for row in rows or []:
+        # field names observed: chTrdPrices / CH_TRADE_HIGH_PRICE etc.
+        d_s = str(row.get("chTimestamp") or row.get("timestamp")
+                  or row.get("date") or "")
+        close = _num(row.get("chClosingPrice") or row.get("closePrice")
+                     or row.get("close"))
+        if not d_s or close is None or close <= 0:
+            continue
+        d = norm_date(d_s[:11]) or ""
+        if not re.match(r"^\d{2}-[A-Za-z]{3}-\d{4}$", d):
+            continue
+        out.append({
+            "date": d,
+            "open": _num(row.get("chOpeningPrice") or row.get("openPrice")),
+            "high": _num(row.get("chHighPrice") or row.get("highPrice")),
+            "low": _num(row.get("chLowPrice") or row.get("lowPrice")),
+            "close": close,
+            "volume": _num(row.get("chTotTradedQty") or row.get("totalTradedQuantity")),
+        })
+    return out
+
+
+def fetch_nse_historical(symbol: str, start: date, end: date,
+                         pacing_s: float = NSE_HIST_PACING_S) -> list[dict] | None:
+    """Full history in paced 1-year chunks. Returns None when the endpoint
+    itself is unavailable (caller keeps whatever NSE coverage exists);
+    [] when reachable but empty."""
+    if not symbol or end < start:
+        return [] if symbol else None
+    chunks: list[tuple[date, date]] = []
+    cur = end
+    while cur >= start:
+        c_from = max(start, cur - timedelta(days=NSE_HIST_CHUNK_DAYS - 1))
+        chunks.append((c_from, cur))
+        cur = c_from - timedelta(days=1)
+
+    ok_any = False
+    points: list[dict] = []
+    for c_from, c_to in reversed(chunks):          # oldest first
+        got = _nse_historical_chunk(symbol, c_from, c_to)
+        if got:
+            ok_any = True
+            points.extend(got)
+        time.sleep(pacing_s)                       # Akamai politeness
+    if not ok_any:
+        return None                                # endpoint unavailable
+    return _dedupe_sort(points)
+
+
+def download_only(workers: int = 10) -> dict:
+    """Phase-0 [PLAN_STOCK_DATA_NSE_CLEANUP]: fill the raw-data folders only.
+
+    Bhavcopy range top-up into ``data/stock_bhavcopy/``; no refresh_stock()
+    calls — nothing is written into ``stock_history/`` here (fill is the LAST
+    action of the pipeline)."""
+    got = download_bhavcopy_range(BHAVCOPY_START, date.today(), workers)
+    cached = sum(1 for d in trading_days(BHAVCOPY_START, date.today())
+                 if _bhav_path(d).exists())
+    return {"range": f"{BHAVCOPY_START.isoformat()}..{date.today().isoformat()}",
+            "fetched_this_run": len(got), "files_cached": cached}
+
+
+def _nse_hist_status() -> dict:
+    return load_json(NSE_HIST_STATUS, {}) or {}
+
+
+def dump_nse_history(symbols: list[str] | None = None,
+                     pacing_s: float = NSE_HIST_PACING_S) -> dict:
+    """Phase-0 [PLAN_STOCK_DATA_NSE_CLEANUP]: pre-2020 depth -> raw JSON dumps.
+
+    Writes ``data/raw/nse_historical/<SYMBOL>.json`` per symbol + a resumable
+    checkpoint at ``_status.json``. Never touches ``stock_history/``. When the
+    endpoint proves unavailable the run stops immediately instead of pacing
+    through every remaining symbol against a blocked host."""
+    ident = load_identity()
+    if symbols:
+        wanted = {s.upper() for s in symbols}
+        target = {i: v for i, v in ident.items() if (v.get("symbol") or "") in wanted}
+    else:
+        target = {i: v for i, v in ident.items() if v.get("symbol")}
+    status = _nse_hist_status()
+    NSE_HIST_RAW_DIR.mkdir(parents=True, exist_ok=True)
+    out = {"fetched": 0, "skipped": 0, "empty": 0, "unavailable": False,
+           "total": len(target)}
+    for n, (isin, row) in enumerate(target.items(), 1):
+        symbol = row.get("symbol") or ""
+        if not symbol or (status.get(symbol) or {}).get("status") in {"ok", "empty"}:
+            out["skipped"] += 1
+            continue
+        points = fetch_nse_historical(symbol, NSE_HIST_START, HIST_END, pacing_s)
+        if points is None:
+            out["unavailable"] = True
+            status[symbol] = {"status": "unavailable", "checked_at": now_iso()}
+            save_json(NSE_HIST_STATUS, status)
+            break
+        doc = {"symbol": symbol, "isin": isin,
+               "source": "NSE historical cm/equity", "fetched_at": now_iso(),
+               "history": points}
+        save_json(NSE_HIST_RAW_DIR / f"{symbol}.json", doc)
+        status[symbol] = {"status": "empty" if not points else "ok",
+                          "points": len(points), "dumped_at": now_iso()}
+        save_json(NSE_HIST_STATUS, status)
+        out["empty" if not points else "fetched"] += 1
+        if n % 25 == 0:
+            print(f"  [{n}/{len(target)}] {symbol}", flush=True)
+        time.sleep(pacing_s / 2)
+    return out
+
+
+# --------------------------------------------------------------------------
+# PLAN_STOCK_DATA_NSE_CLEANUP phase-3: the corruption eraser (local-only fill)
+# --------------------------------------------------------------------------
+def _load_nse_hist_dump(symbol: str) -> list[dict]:
+    """Pre-2020 raw points from the phase-0 dump
+    ``data/raw/nse_historical/<SYMBOL>.json`` ({symbol, history:[points]}).
+    [] when absent (dump folder may still be empty - geo-blocked endpoint)."""
+    if not symbol:
+        return []
+    doc = load_json(NSE_HIST_RAW_DIR / f"{symbol}.json", {}) or {}
+    out: list[dict] = []
+    for p in doc.get("history") or []:
+        d = norm_date(str(p.get("date") or ""))
+        close = _num(p.get("close"))
+        if not re.match(r"^\d{2}-[A-Za-z]{3}-\d{4}$", d) or close is None or close <= 0:
+            continue
+        out.append({"date": d,
+                    "open": _num(p.get("open")),
+                    "high": _num(p.get("high")),
+                    "low": _num(p.get("low")),
+                    "close": close,
+                    "volume": _num(p.get("volume"))})
+    return out
+
+
+def rebackfill_nse(symbols: list[str] | None = None, workers: int = 10,
+                   limit: int | None = None, force: bool = False) -> dict:
+    """Rebuild ``data/stock_history/<ISIN>.json`` purely from LOCAL downloads.
+
+    Erases the Yahoo-stitched scale corruption at its root: the old chain
+    merged raw bhavcopy points onto Yahoo-adjusted history (with
+    ``_apply_split_adjustments`` scaling between them), producing phantom
+    +-50-100% jumps at segment boundaries. Here each ISIN is instead:
+
+      1. refilled from the two local raw sources only - pre-2020 depth from
+         ``data/raw/nse_historical/<SYMBOL>.json`` (1994->2019, when the
+         phase-0 dump exists) + 2020->today from the cached daily bhavcopy
+         files (missing cache dates are simply skipped);
+      2. merged with bhavcopy authoritative on overlap, deduped+sorted via
+         ``_dedupe_sort``;
+      3. kept on the RAW scale - no split adjustment, no cross-source
+         normalization (total-return math stays downstream in chatapp);
+      4. wipe-and-written as a fresh document (the legacy
+         ``splits_applied_through`` watermark is gone);
+      5. checkpointed into ``REBACKFILL_STATUS`` so a multi-hour run is
+         resumable/idempotent: 'ok'/'no_source' ISINs are skipped on resume
+         unless ``force``; 'failed' is always retried.
+
+    Safety: when BOTH local segments come up empty the existing file is left
+    UNTOUCHED and the ISIN is marked 'no_source' - never wipe without a
+    replacement. No network calls happen during the fill itself; refresh the
+    bhavcopy cache beforehand with ``--download-only`` if needed."""
+    ident = load_identity()
+    if symbols:
+        wanted = {s.upper() for s in symbols}
+        target = {i: v for i, v in ident.items() if (v.get("symbol") or "") in wanted}
+    else:
+        target = {i: v for i, v in ident.items() if v.get("symbol")}
+    if limit:
+        target = dict(list(target.items())[:limit])
+
+    # Local-only index: parse whatever daily files are already cached.
+    dates = [d for d in trading_days(BHAVCOPY_START, date.today())
+             if _bhav_path(d).exists()]
+    bhav_index = build_bhavcopy_index(dates)
+
+    status = load_json(REBACKFILL_STATUS, {}) or {}
+    out = {"total": len(target), "ok": 0, "no_source": 0, "failed": 0,
+           "skipped_resume": 0, "bhavcopy_dates": len(dates),
+           "checkpoint": str(REBACKFILL_STATUS)}
+    for n, (isin, row) in enumerate(target.items(), 1):
+        symbol = row.get("symbol") or ""
+        prev = status.get(isin) or {}
+        if not force and prev.get("status") in {"ok", "no_source"}:
+            out["skipped_resume"] += 1
+            continue
+        try:
+            hist_seg = _load_nse_hist_dump(symbol)          # 1994 -> 2019
+            bhav_seg = _bhav_series(bhav_index, symbol)     # 2020 -> today
+            # bhavcopy listed FIRST => setdefault keeps it on overlap dates.
+            merged = _dedupe_sort(bhav_seg + hist_seg)
+            if merged:
+                doc = {"isin": isin, "symbol": symbol,
+                       "name": row.get("name") or "", "currency": "INR",
+                       "source": "NSE local re-backfill",
+                       "fetched_at": now_iso(), "history": merged}
+                save_json(HISTORY_DIR / f"{isin}.json", doc)
+                status[isin] = {"status": "ok", "points": len(merged),
+                                "symbol": symbol, "refilled_at": now_iso()}
+                out["ok"] += 1
+            else:
+                status[isin] = {"status": "no_source", "points": 0,
+                                "symbol": symbol, "refilled_at": now_iso()}
+                out["no_source"] += 1
+        except Exception as e:
+            status[isin] = {"status": "failed", "points": 0, "symbol": symbol,
+                            "error": str(e)[:200], "refilled_at": now_iso()}
+            out["failed"] += 1
+        save_json(REBACKFILL_STATUS, status)
+        if n % 25 == 0:
+            print(f"  [{n}/{len(target)}] {symbol}", flush=True)
+    return out
+
+
+# --------------------------------------------------------------------------
+# Yahoo Finance (FLAG-GATED last resort — see yahoo_allowed())
 # --------------------------------------------------------------------------
 def _yahoo_session():
     opener = make_opener(cookies=True)
@@ -508,7 +812,28 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=None, help="max stocks to process")
     parser.add_argument("--workers", type=int, default=10,
                         help="parallel bhavcopy download agents")
+    parser.add_argument("--download-only", action="store_true",
+                        help="Phase-0 raw download: bhavcopy top-up only; no stock_history writes")
+    parser.add_argument("--dump-nse-history", action="store_true",
+                        help="Phase-0 raw download: pre-2020 points -> data/raw/nse_historical/<SYMBOL>.json")
+    parser.add_argument("--rebackfill-nse", action="store_true",
+                        help="PLAN phase-3: rebuild stock_history from LOCAL downloads only "
+                             "(bhavcopy + nse_historical dumps; corruption eraser)")
+    parser.add_argument("--force", action="store_true",
+                        help="--rebackfill-nse: redo ISINs already marked ok/no_source in the checkpoint")
     args = parser.parse_args()
+    if args.download_only or args.dump_nse_history:
+        symbols = [s.strip() for s in args.symbols.split(",") if s.strip()] or None
+        result = download_only(args.workers) if args.download_only \
+            else dump_nse_history(symbols)
+        print(json.dumps(result, indent=2))
+        return 1 if isinstance(result, dict) and result.get("unavailable") else 0
+    if args.rebackfill_nse:
+        symbols = [s.strip() for s in args.symbols.split(",") if s.strip()] or None
+        result = rebackfill_nse(symbols=symbols, workers=args.workers,
+                                limit=args.limit, force=args.force)
+        print(json.dumps(result, indent=2))
+        return 0
     ident = load_identity()
     symbols = [s.strip() for s in args.symbols.split(",") if s.strip()] or None
     results = run(ident=ident, symbols=symbols, daily=args.daily,

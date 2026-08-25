@@ -9,3 +9,5 @@ pdfplumber>=0.11.0
 pyyaml>=6.0
 apscheduler>=3.10.0
 httpx>=0.27.0
+# NSE JSON APIs (historical backfill) need Chrome impersonation via stock_price [PLAN_STOCK_DATA_NSE_CLEANUP]:
+curl_cffi>=0.16.0

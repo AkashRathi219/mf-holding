@@ -38,6 +38,7 @@ INDEX_RESOLVED_JSON = DATA_DIR / "reference" / "index_resolved_holdings.json"
 NAV_HISTORY_DIR = DATA_DIR / "nav_history"
 STOCK_HISTORY_DIR = DATA_DIR / "stock_history"
 STOCK_ACTIONS_DIR = DATA_DIR / "stock_actions"
+STOCK_FINANCIALS_DIR = DATA_DIR / "stock_financials"
 STOCK_REPORTS_DIR = DATA_DIR / "stock_reports"
 DISCOVERY_NEEDED_CSV = DATA_DIR / "reference" / "discovery_needed.csv"
 NO_DISCLOSURE_CSV = DATA_DIR / "reference" / "no_disclosure.csv"
@@ -2874,6 +2875,57 @@ class WebDB:
             "closes": closes,
         }
 
+    _TECH_CACHE: dict = {}
+
+    def stock_ohlcv(self, isin: str) -> dict | None:
+        """Aligned OHLCV arrays for the technical engine.
+
+        Yahoo-era bars carry close only (open/high/low/volume -> None), so
+        price-only indicators run everywhere while H/L/volume indicators
+        honestly degrade — exactly what stock_technical expects.
+        Result cached per ISIN (files are append-mostly daily).
+        """
+        isin = (isin or "").upper()
+        path = STOCK_HISTORY_DIR / f"{isin}.json"
+        if not path.exists():
+            remote_store.ensure(f"stock_history/{isin}.json")
+        if not path.exists():
+            return None
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return None
+        cached = self._TECH_CACHE.get(isin)
+        if cached and cached[0] == mtime:
+            return cached[1]
+        try:
+            with open(path, encoding="utf-8") as fh:
+                doc = json.load(fh)
+        except Exception:
+            return None
+        history = doc.get("history") or []
+        if len(history) < 30:
+            return None
+
+        def col(key):
+            out = []
+            for h in history:
+                v = h.get(key)
+                try:
+                    out.append(float(v) if v is not None else None)
+                except (TypeError, ValueError):
+                    out.append(None)
+            return out
+
+        data = {
+            "dates": [h.get("date", "") for h in history],
+            "open": col("open"), "high": col("high"), "low": col("low"),
+            "close": col("close"), "volume": col("volume"),
+            "symbol": doc.get("symbol", ""), "name": doc.get("name", ""),
+        }
+        self._TECH_CACHE[isin] = (mtime, data)
+        return data
+
     @staticmethod
     def _load_stock_actions(isin: str) -> dict | None:
         path = STOCK_ACTIONS_DIR / f"{isin}.json"
@@ -2905,6 +2957,179 @@ class WebDB:
 
     def stock_reports(self, isin: str) -> dict | None:
         return self._load_stock_reports(isin)
+
+    @staticmethod
+    def _load_stock_financials(isin: str) -> dict | None:
+        """Statement file produced by src/financial_statements.py (may not
+        exist yet for most stocks — callers must treat None as 'no coverage',
+        never as zeros)."""
+        path = STOCK_FINANCIALS_DIR / f"{isin}.json"
+        if not path.exists():
+            remote_store.ensure(f"stock_financials/{isin}.json")
+        if not path.exists():
+            return None
+        try:
+            with open(path, encoding="utf-8") as fh:
+                doc = json.load(fh)
+        except Exception:
+            return None
+        if not isinstance(doc, dict):
+            return None
+        return doc if (doc.get("consolidated") or doc.get("standalone")
+                       or doc.get("quarters")) else None
+
+    _FACTOR_CACHE: dict = {"key": None, "payload": None}
+
+    def factor_universe_scores(self, max_stale_hours: float = 6.0) -> dict:
+        """Cross-sectional factor scores [factor-v1.0.0] over every tracked
+        equity that has a price history. TTL-cached; heavy on first call."""
+        import time as _time
+        from .factor_scores import (
+            compute_factor_scores, lowvol_metrics, momentum_metrics,
+            value_metrics, quality_metrics)
+        rows = self.con.execute(
+            "SELECT isin, name, sector, cap FROM securities "
+            "WHERE confirmed_equity=1 ORDER BY name").fetchall()
+        stamp = _time.time()
+        cached = self._FACTOR_CACHE
+        if cached["payload"] is not None and cached["key"] is not None \
+                and stamp - cached["key"] < max_stale_hours * 3600:
+            return cached["payload"]
+        bench = self._load_tr_index("NIFTY 500") or []
+        raw: dict[str, dict] = {}
+        sectors: dict[str, str] = {}
+        for r in rows:
+            isin = r["isin"]
+            ohlcv = self.stock_ohlcv(isin)
+            if not ohlcv:
+                continue
+            closes, dates = ohlcv["close"], ohlcv["dates"]
+            tail = closes[-400:]
+            rec = {
+                "name": r["name"], "sector": r["sector"], "cap": r["cap"],
+                "points": sum(1 for v in closes if v is not None),
+                "momentum": momentum_metrics(tail),
+                "lowvol": lowvol_metrics(tail, bench,
+                                         dates[-len(tail):] if bench else None),
+            }
+            price = closes[-1] if closes and closes[-1] else None
+            fin_doc = self._load_stock_financials(isin)
+            if fin_doc and price:
+                snap = self.fundamental_snapshot(fin_doc)
+                if snap:
+                    rec["value"] = value_metrics(price, snap.get("value"))
+                    rec["quality"] = quality_metrics(snap.get("quality"))
+            raw[isin] = rec
+            sectors[isin] = r["sector"] or ""
+        payload = compute_factor_scores(raw, sectors)
+        payload["as_of"] = dates[-1] if rows and raw else None
+        payload["benchmark"] = "NIFTY 500 TR"
+        self._FACTOR_CACHE["key"] = stamp
+        self._FACTOR_CACHE["payload"] = payload
+        return payload
+
+    def fundamental_snapshot(self, fin_doc: dict) -> dict | None:
+        """Per-share basics for factor scoring from a statement document.
+
+        Prefers consolidated, falls back to standalone. Returns
+        {"value": {...per-share...}, "quality": {...series...}} or None.
+        """
+        block = fin_doc.get("consolidated") or fin_doc.get("standalone")
+        if not isinstance(block, dict):
+            return None
+        quarters = block.get("quarters") or []
+        annual = block.get("annual") or []
+        if not quarters and not annual:
+            return None
+
+        def f(row, key):
+            v = (row or {}).get(key)
+            try:
+                return float(v) if v is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        ttm = block.get("ttm") or {}
+        eps = f(ttm, "eps")
+        shares = None
+        for row in reversed(quarters + annual):
+            sh = f(row, "shares_outstanding")
+            if sh:
+                shares = sh
+                break
+        latest_bs = (block.get("latest_balance_sheet") or {})
+        total_equity = f(latest_bs, "total_equity")
+        bvps = (total_equity * 1e7 / shares) if (total_equity and shares) else None
+        revenue_ttm = f(ttm, "revenue_from_operations")
+        cfo_ttm = f(ttm, "cfo")
+        ebitda_ttm = f(ttm, "ebitda")
+        net_debt_cr = None
+        debt = f(latest_bs, "total_debt")
+        cash = f(latest_bs, "cash_equivalents")
+        if debt is not None:
+            net_debt_cr = debt - (cash or 0.0)
+        dps = f(ttm, "dps")
+
+        roe_series = []
+        margins = []
+        for row in annual[-5:]:
+            pat = f(row, "pat")
+            eq = f(row, "total_equity")
+            rev = f(row, "revenue_from_operations")
+            if pat is not None and eq:
+                roe_series.append(pat / eq)
+            if pat is not None and rev:
+                margins.append(pat / rev)
+        accruals = None
+        ni = f(ttm, "pat")
+        if ni is not None and cfo_ttm is not None and total_equity is not None \
+                and total_equity != 0:
+            accruals = (ni - cfo_ttm) / abs(total_equity)
+        leverage = None
+        if debt is not None and total_equity not in (None, 0):
+            leverage = debt / total_equity
+        value = {
+            "eps": eps,
+            "bvps": bvps,
+            "sps": (revenue_ttm * 1e7 / shares) if (revenue_ttm and shares) else None,
+            "cfps": (cfo_ttm * 1e7 / shares) if (cfo_ttm and shares) else None,
+            "ebitda_total": (ebitda_ttm * 1e7 / shares)
+            if (ebitda_ttm and shares) else None,
+            "net_debt_total": (net_debt_cr * 1e7 / shares)
+            if (net_debt_cr is not None and shares) else None,
+            "dps_ttm": dps,
+        }
+        quality = {
+            "roe_series": roe_series,
+            "margin_series": margins,
+            "accruals": accruals,
+            "leverage": leverage,
+        }
+        return {"value": value, "quality": quality}
+
+    def stock_fundamentals(self, isin: str) -> dict:
+        """[fund-v1.0.0] Ratio/score payload from the statements file +
+        latest close. available=False when either side is missing."""
+        from .stock_fundamental import compute_fundamentals, FUND_VERSION
+        doc = self._load_stock_financials(isin)
+        if not doc:
+            return {"methodology_version": FUND_VERSION,
+                    "available": False,
+                    "note": "no parsed statements for this ISIN yet"}
+        ohlcv = self.stock_ohlcv(isin)
+        price = None
+        if ohlcv and ohlcv["close"]:
+            tail = [c for c in ohlcv["close"] if c is not None]
+            price = tail[-1] if tail else None
+        payload = compute_fundamentals(doc, price)
+        payload["isin"] = isin
+        payload["symbol"] = doc.get("symbol", "")
+        payload["name"] = doc.get("name", "")
+        return payload
+
+    def stock_financials(self, isin: str) -> dict | None:
+        """Raw normalised statements (quarters/annual/TTM) for UI tables."""
+        return self._load_stock_financials(isin)
 
     def list_securities(self, q=None, confirmed_equity=None, cap=None, sector=None,
                         limit=100, offset=0) -> dict:

@@ -31,6 +31,7 @@ RUNTIME_DIRS = [
     "stock_history",     # stocks : daily closes per ISIN
     "stock_actions",     # stocks : dividends / splits per ISIN
     "stock_reports",     # stocks : financial-report announcements per ISIN
+    "stock_financials",  # stocks : parsed quarterly/annual statements per ISIN
     "stocks",            # stocks : identity.json (ISIN -> NSE symbol)
     "reference",         # bonds/bonds_catalog.json + isin_latest_nav.json + misc
     "nifty",             # nifty/weights.json (index fund weights)

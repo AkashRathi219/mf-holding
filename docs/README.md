@@ -49,6 +49,7 @@ Everything documented lives here (`docs/`). Root keeps only `README.md` and
 | [PLAN_TRY_APP.md](plans/PLAN_TRY_APP.md) | READY TO BUILD — retail trial micro-app (CAS upload → report card → WhatsApp loop) |
 | [PLAN_TASK_BACKLOG.md](plans/PLAN_TASK_BACKLOG.md) | AUDIT 23-Aug-2026 — incomplete tasks & priority order |
 | [PLAN_PERFORMANCE_ANALYTICS.md](plans/PLAN_PERFORMANCE_ANALYTICS.md) | QUEUED — rolling returns / Sharpe / Sortino / IR engine |
+| [PLAN_STOCK_DATA_NSE_CLEANUP.md](plans/PLAN_STOCK_DATA_NSE_CLEANUP.md) | PLANNED — deferred: pure-NSE stock pipeline (de-Yahoo + re-backfill; stock data cleanliness) |
 
 ## Website deliverables (`../website/`) — GHOST pages for search/AI discovery
 

@@ -68,6 +68,14 @@ scheduler:
     enabled: true
     hour: 21
     minute: 30
+  # Weekly financial-statements refresh [stmt-v1.0.0]: AI-assisted extraction
+  # of NSE result filings, most-held equities first (stale-first, bounded).
+  # Sunday early morning IST — off market hours, before the AMFI fetch window.
+  statements_refresh:
+    enabled: true
+    day_of_week: sun
+    hour: 6
+    minute: 30
   # Monthly AMFI/mfdata portfolio-disclosure fetch (tier-1 holdings source).
   # Runs days 8-12 (disclosures publish ~day 10); retries daily until done.
   amfi_refresh:

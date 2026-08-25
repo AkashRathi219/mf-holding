@@ -22,6 +22,7 @@ ALLOWED = {
     "yaml",          # pyyaml        [S2a]
     "apscheduler",   #               [S2a]
     "httpx",         #               [S2a]
+    "curl_cffi",     # NSE APIs Chrome impersonation [PLAN_STOCK_DATA_NSE_CLEANUP]
 }
 LOCAL_PACKAGES = {"webapp", "src"}
 GUARDING_EXC = {"Exception", "BaseException", "ImportError", "ModuleNotFoundError"}

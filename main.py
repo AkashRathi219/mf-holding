@@ -1285,11 +1285,13 @@ def schedule_start():
 
     async def _start():
         config = load_config()
+        from src.financial_statements import refresh_stale as statements_refresh
         scheduler = MonthlyScheduler(run_pipeline, config, base_dir=BASE_DIR,
                                      nav_refresh_fn=update_latest_navs,
                                      stock_refresh_fn=refresh_all,
                                      bond_refresh_fn=bond_refresh_daily,
-                                     amfi_fn=run_amfi_monthly)
+                                     amfi_fn=run_amfi_monthly,
+                                     statements_fn=statements_refresh)
         scheduler.start()
 
         next_run = scheduler.get_next_run()
