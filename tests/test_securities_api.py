@@ -109,3 +109,31 @@ def test_app_js_maps_statements_tab_to_financials_route():
     assert "/${tab}`" not in src.split("function switchStockTab")[1]
     # the UI keeps its own tab id / cache key: only the URL segment changes
     assert '["statements", "Statements"]' in src
+
+
+def test_technical_requires_auth(client):
+    assert client.get(f"/api/securities/{ISIN}/technical").status_code == 401
+
+
+def test_technical_unknown_isin_404(client, auth):
+    r = client.get("/api/securities/INE999999999/technical", headers=auth)
+    assert r.status_code == 404
+
+
+def test_security_analytics_page_contract():
+    """Full-page analytics view (#security/<ISIN>/analytics): hash route,
+    screen section, lazy tab loader and the entry-point links from the
+    directory row + the security-detail card must all stay wired."""
+    js = (ROOT / "webapp" / "static" / "js" / "app.js").read_text(
+        encoding="utf-8")
+    html = (ROOT / "webapp" / "static" / "app.html").read_text(
+        encoding="utf-8")
+    assert "/^security\\/([A-Z0-9]+)\\/analytics$/i" in js
+    assert 'id="screen-secanalytics"' in html
+    assert 'id="secAnalyticsBody"' in html
+    assert "renderSecurityAnalytics(" in js
+    assert "switchAnalyticsTab(" in js
+    assert "renderAnalyticsTab(" in js
+    # entry points: detail-page card button + per-row shortcut
+    assert "/analytics\"" in js or "/analytics`" in js
+    assert "Open full analytics" in js

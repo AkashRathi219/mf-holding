@@ -51,6 +51,18 @@ function route() {
     window.scrollTo(0, 0);
     return;
   }
+  const secAnMatch = hash.match(/^security\/([A-Z0-9]+)\/analytics$/i);
+  if (secAnMatch) {
+    document.querySelectorAll(".screen").forEach(s => s.style.display = "none");
+    document.getElementById("screen-secanalytics").style.display = "";
+    document.querySelectorAll("#nav a").forEach(a => a.classList.remove("active"));
+    document.getElementById("pageTitle").textContent = "Stock Analytics";
+    document.getElementById("pageSub").textContent = "Technicals, fundamentals, statements & factor scores — full page";
+    renderSecurityAnalytics(secAnMatch[1].toUpperCase(), document.getElementById("secAnalyticsBody"),
+                            document.getElementById("secAnalyticsTitle"));
+    window.scrollTo(0, 0);
+    return;
+  }
   const secMatch = hash.match(/^security\/([A-Z0-9]+)$/i);
   if (secMatch) {
     document.querySelectorAll(".screen").forEach(s => s.style.display = "none");
@@ -700,7 +712,8 @@ async function loadSecurities() {
         <td>${App.capBadge(x.cap)}</td>
         <td>${App.esc(x.sector)}</td>
         <td class="num">${App.formatNum(x.source_count)}</td>
-        <td><button class="btn btn-outline btn-sm">Details</button></td>
+        <td style="white-space:nowrap"><button class="btn btn-outline btn-sm">Details</button>
+          <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();location.hash='#security/${App.esc(x.isin)}/analytics'">Analytics</button></td>
       </tr>`;
     }).join("");
   } catch (e) {
@@ -1031,7 +1044,10 @@ function buildStockAnalyticsTabs(isin) {
     `<button class="nav-toggle" style="border:none" data-stab="${id}" onclick="switchStockTab('${isin}','${id}')">${label}</button>`;
   return `
     <div class="card" style="margin-bottom:16px">
-      <h3>Stock analytics</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <h3 style="margin:0">Stock analytics</h3>
+        <a class="btn btn-primary btn-sm" href="#security/${App.esc(isin)}/analytics">Open full analytics →</a>
+      </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
         ${STOCK_TABS.map(([id, label]) => btn(id, label)).join("")}
       </div>
@@ -1162,6 +1178,153 @@ function renderStockTab(tab, d) {
         ${bar("Multi-factor", d.multi_factor)}
       </tbody></table>
       <div class="page-sub" style="margin-top:8px">Percentile rank across the tracked universe (100 = strongest of the factor). Value/quality need parsed financials.</div>`;
+  }
+  return `<div class="empty">Unknown tab.</div>`;
+}
+
+// ---------- full-page stock analytics (#security/<isin>/analytics) ----------
+let secAnalyticsIsin = "";
+const secAnCache = {};
+const secAnLoaded = {};
+
+async function renderSecurityAnalytics(isin, container, titleEl) {
+  const reqHash = `#security/${isin}/analytics`;   // staleness token [BUG-M15 pattern]
+  container.innerHTML = `<div class="empty"><span class="spin"></span> Loading…</div>`;
+  try {
+    const s = await App.api(`/securities/${encodeURIComponent(isin)}`);
+    if (location.hash !== reqHash) return;  // a newer view took over
+    secAnalyticsIsin = s.isin;
+    if (titleEl) titleEl.textContent = `${s.name} · ${s.isin}`;
+    const type = s.confirmed_equity === 1 ? "Pure listed stock" : s.confirmed_equity === 0.5 ? "Mixed (REIT/InvIT/preference/convertible)" : "Non-equity (bond/CP/ETF)";
+    const typeTone = s.confirmed_equity === 1 ? "green" : s.confirmed_equity === 0.5 ? "amber" : "grey";
+    const tabBtn = (id, label) =>
+      `<button class="nav-toggle" style="border:none" data-antab="${id}" onclick="switchAnalyticsTab('${isin}','${id}')">${label}</button>`;
+    container.innerHTML = `
+      <h2 style="margin-bottom:2px">${App.esc(s.name)} ${App.badge(type, typeTone)}</h2>
+      <div class="mono page-sub" style="margin-bottom:16px">${App.esc(s.isin)}${s.sector ? " · " + App.esc(s.sector) : ""}${s.cap ? " · " + App.esc(s.cap) + " cap" : ""}</div>
+      <div class="card">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px">
+          ${STOCK_TABS.map(([id, label]) => tabBtn(id, label)).join("")}
+        </div>
+        ${STOCK_TABS.map(([id]) =>
+          `<div id="an-pane-${id}" hidden style="margin-top:12px"><div class="empty"><span class="spin"></span> Loading…</div></div>`).join("")}
+        <div class="page-sub" style="margin-top:12px">Descriptive arithmetic over public data — not investment advice.</div>
+      </div>`;
+    await switchAnalyticsTab(isin, "technical");   // open with technicals by default
+  } catch (e) {
+    container.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
+  }
+}
+
+async function switchAnalyticsTab(isin, tab) {
+  document.querySelectorAll("#screen-secanalytics [data-antab]").forEach(b =>
+    b.classList.toggle("active", b.dataset.antab === tab));
+  STOCK_TABS.forEach(([id]) => {
+    const pane = document.getElementById(`an-pane-${id}`);
+    if (pane) pane.hidden = id !== tab;
+  });
+  const pane = document.getElementById(`an-pane-${tab}`);
+  if (!pane) return;
+  if (!secAnLoaded[isin + tab]) {
+    secAnLoaded[isin + tab] = true;
+    try {
+      const endpoint = tab === "statements" ? "financials" : tab;
+      const data = await App.api(`/securities/${encodeURIComponent(isin)}/${endpoint}`).catch(() => null);
+      if (data) secAnCache[isin + tab] = data;
+      pane.innerHTML = renderAnalyticsTab(tab, secAnCache[isin + tab]);
+      if (tab === "technical") mountTechnicalOverlay(isin);
+    } catch (e) {
+      secAnLoaded[isin + tab] = false;
+      pane.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
+    }
+  }
+}
+
+// Price + SMA overlays from the technical payload's trailing-window series.
+function mountTechnicalOverlay(isin) {
+  const el = document.getElementById("an-tech-chart");
+  const d = secAnCache[isin + "technical"];
+  const s = d && d.series;
+  if (!el || !s || !s.dates || !s.close || s.close.length < 2) return;
+  const mk = (name, color, arr) => ({ name, color, dates: s.dates, values: arr || [] });
+  Charts.mountMultiLine(el, [
+    mk("Close", "@primary", s.close),
+    mk("SMA 20", "@chart-4", s.sma_20),
+    mk("SMA 50", "@chart-5", s.sma_50),
+    mk("SMA 200", "@chart-6", s.sma_200),
+  ], { height: 320, formatValue: v => App.formatNum(v, 2) });
+}
+
+// Extended renderers for the full-page view — reuse the compact tab bodies
+// and append the sections that only fit a dedicated page.
+function renderAnalyticsTab(tab, d) {
+  if (!d || d.available === false)
+    return `<div class="empty">${App.esc(d && d.note ? d.note : "Not available for this security.")}</div>`;
+  const num = (v, dp = 2) => v === null || v === undefined ? "—" : App.formatNum(v, dp);
+  const sig = s => !s ? "—" : s === "bullish" ? App.badge(s, "green") : s === "bearish" ? App.badge(s, "red") : App.badge(s, "grey");
+
+  if (tab === "technical") {
+    const s = d.series || {};
+    const chart = s.dates && s.close && s.close.length > 1
+      ? `<div id="an-tech-chart"></div>`
+      : `<div class="page-sub" style="margin-bottom:10px">Overlay series unavailable for this security.</div>`;
+    const pats = (d.patterns || []).slice(-6).reverse().map(p =>
+      `<tr><td>${App.esc(p.date)}</td><td>${App.esc(String(p.name || "").replace(/_/g, " "))}</td>
+        <td>${sig(p.direction === "bullish" ? "bullish" : p.direction === "bearish" ? "bearish" : "neutral")}</td></tr>`).join("");
+    return `${chart}
+      ${renderStockTab("technical", d)}
+      ${pats ? `<h3 style="margin-top:14px">Recent candlestick patterns</h3><table class="data"><thead><tr><th>Date</th><th>Pattern</th><th>Read</th></tr></thead><tbody>${pats}</tbody></table>` : ""}`;
+  }
+
+  if (tab === "fundamentals") {
+    const dp = d.dupont || {}, lq = d.liquidity || {}, ef = d.efficiency || {},
+          cfq = d.cashflow_quality || {}, bm = d.beneish_m || null;
+    return `${renderStockTab("fundamentals", d)}
+      <h3 style="margin-top:16px">DuPont decomposition</h3>
+      ${dp.npm !== undefined ? _kvGrid([
+        ["Net profit margin", num(dp.npm * 100, 1) + "%"],
+        ["Asset turnover", num(dp.asset_turnover, 3)],
+        ["Equity multiplier", num(dp.equity_multiplier, 2)],
+        ["ROE check (NPM × turnover × leverage)", num((dp.roe_check || 0) * 100, 1) + "%"],
+        ...(dp.roe_5way !== undefined ? [["5-way ROE (tax × interest × NPM × ATO × EM)", num(dp.roe_5way * 100, 1) + "%"]] : []),
+      ]) : `<div class="page-sub">Inputs missing — DuPont not evaluable.</div>`}
+      <h3 style="margin-top:16px">Liquidity · efficiency · cash-flow quality</h3>
+      ${_kvGrid([
+        ["Current / quick / cash ratio", `${num(lq.current_ratio)} / ${num(lq.quick_ratio)} / ${num(lq.cash_ratio)}`],
+        ["Working capital to sales", num(lq.wc_to_sales_pct, 1) + "%"],
+        ["Inventory days · receivable days · payable days", `${num(ef.inventory_days, 0)} · ${num(ef.receivable_days, 0)} · ${num(ef.payable_days, 0)}`],
+        ["Cash conversion cycle", num(ef.cash_conversion_cycle, 0) + " days"],
+        ["FCF (₹ cr) · FCF margin", `${num(cfq.fcf_cr, 0)} · ${num(cfq.fcf_margin_pct, 1)}%`],
+        ["OCF / PAT · capex to sales", `${num(cfq.ocf_to_pat)}× · ${num(cfq.capex_to_sales_pct, 1)}%`],
+        ...(bm && bm.m_score !== undefined ? [["Beneish M-score", `${num(bm.m_score, 2)} ${bm.flagged ? App.badge("flagged", "red") : App.badge("ok", "green")} <span class="page-sub">${App.esc(bm.note || "")}</span>`]] : []),
+      ])}`;
+  }
+
+  if (tab === "statements") {
+    const b = d.consolidated || d.standalone;
+    if (!b) return `<div class="empty">No parsed statements yet.</div>`;
+    const annuals = (b.annual || []).slice(-5).reverse();
+    const arow = a => `<tr><td>${App.esc(a.period_end)}</td>
+      <td class="num">${num(a.revenue_from_operations, 0)}</td>
+      <td class="num">${num(a.ebitda, 0)}</td>
+      <td class="num">${num(a.pat, 0)}</td>
+      <td class="num">${num(a.eps_basic)}</td></tr>`;
+    return `${renderStockTab("statements", d)}
+      ${annuals.length ? `<h3 style="margin-top:14px">Annual (₹ crore)</h3><div class="table-wrap"><table class="data">
+        <thead><tr><th>FY end</th><th class="r">Revenue</th><th class="r">EBITDA</th><th class="r">PAT</th><th class="r">EPS ₹</th></tr></thead>
+        <tbody>${annuals.map(arow).join("")}</tbody></table></div>` : ""}`;
+  }
+
+  if (tab === "factors") {
+    const ranks = d.component_ranks || {};
+    const rows = Object.entries(ranks).flatMap(([group, comps]) =>
+      Object.entries(comps || {}).map(([comp, r]) =>
+        `<tr><td>${App.esc(group)}</td><td>${App.esc(String(comp).replace(/_/g, " "))}</td>
+          <td class="num">${r === null || r === undefined ? "—" : Math.round(r)}</td></tr>`));
+    return `${renderStockTab("factors", d)}
+      ${rows.length ? `<h3 style="margin-top:14px">Component percentile ranks</h3><div class="table-wrap" style="max-height:40vh;overflow:auto"><table class="data">
+        <thead><tr><th>Factor group</th><th>Component</th><th class="r">Rank (0–100)</th></tr></thead>
+        <tbody>${rows.join("")}</tbody></table></div>` : ""}`;
   }
   return `<div class="empty">Unknown tab.</div>`;
 }
