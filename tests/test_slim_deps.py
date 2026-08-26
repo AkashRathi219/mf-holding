@@ -32,6 +32,10 @@ GUARDING_EXC = {"Exception", "BaseException", "ImportError", "ModuleNotFoundErro
 PER_FILE_ALLOW: dict[str, set[str]] = {
     "webapp/amfi_fetch.py": {"click"},  # its __main__ CLI block only
     "src/stock_identity.py": {"click"},  # its __main__ CLI block only
+    # pandas is imported lazily inside load_ter_schemes/load_universe — used by
+    # the offline TER mapping pipeline & webapp.db's one-shot TER id-index build,
+    # never executed on the server boot path ([F&O-v1]/[TER-v2]).
+    "src/amfi_ter.py": {"pandas"},
 }
 
 

@@ -476,7 +476,29 @@ def api_scheme_detail(scheme_id: int, request: Request, holdings: int = 0):
     except Exception:
         pass
     if holdings:
-        out["holdings"] = get_db().scheme_holdings(scheme_id)
+        rows = get_db().scheme_holdings(scheme_id)
+        out["holdings"] = rows
+        # [F&O-v1] hedged-sleeve summary: gross vs net (unhedged) equity and the
+        # aggregate F&O weight, so hybrid/equity-savings schemes expose their
+        # derivative usage at a glance.
+        try:
+            hedged = sum(float(r.get("pct_nav_hedged") or 0) for r in rows
+                         if r.get("asset_class") == "stocks")
+            if not hedged:
+                fo = [r for r in rows if r.get("asset_class") == "future_options"]
+                hedged = sum(float(r.get("percent_nav") or 0) for r in fo)
+            unhedged = sum(float(r.get("percent_nav_effective")
+                                 if r.get("percent_nav_effective") is not None
+                                 else (r.get("percent_nav") or 0))
+                           for r in rows if r.get("asset_class") == "stocks"
+                           and r.get("percent_nav_raw") is not None)
+            out["hedge_summary"] = {
+                "hedged_pct": round(hedged, 4) or None,
+                "unhedged_pct": round(unhedged, 4) or None,
+                "present": bool(hedged),
+            }
+        except Exception:
+            pass
     return out
 
 

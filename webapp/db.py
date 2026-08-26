@@ -293,6 +293,9 @@ def _as_of_date(value) -> str:
 
 def _fingerprint() -> str:
     h = hashlib.sha256()
+    # [F&O-v1] logic/schema version salt — bump to force a clean rebuild when
+    # holdings schema or classification semantics change.
+    h.update(b"fo-v1:hedge-cols+derivative-split")
     files: list[Path] = [
         UNIVERSE_CSV, EQUITY_ISINS_CSV, INDEX_RESOLVED_JSON,
         DISCOVERY_NEEDED_CSV, NO_DISCLOSURE_CSV,
@@ -303,6 +306,10 @@ def _fingerprint() -> str:
     for d in (AMC_WEBSITES_DIR, ADVISORKHOJ_DIR, AMFI_DIR):
         if d.is_dir():
             files += sorted(p for p in d.rglob("*.json") if not p.name.startswith("report_"))
+    # [TER-v2] a freshly downloaded TER export must invalidate the cache.
+    _ter_export = _latest_ter_export()
+    if _ter_export:
+        files.append(_ter_export)
     for p in files:
         try:
             st = p.stat()
@@ -384,7 +391,14 @@ def _load_amc_website_schemes() -> Iterable[tuple[str, str, str, dict]]:
         schemes = doc.get("schemes")
         if not isinstance(schemes, dict) or not schemes:
             continue
-        amc = (doc.get("amc_name") or p.parent.name).replace("_", " ").strip()
+        # AMC comes from a top-level stamp when the writer provided one;
+        # otherwise infer from the managed folder (…/amc_websites/<AMC>/YYYY/MM)
+        # instead of the month directory — leaf-level '07' AMCs are useless.
+        try:
+            fallback_amc = p.relative_to(AMC_WEBSITES_DIR).parts[0]
+        except ValueError:
+            fallback_amc = p.parent.name
+        amc = ((doc.get("amc_name") or "") or fallback_amc).replace("_", " ").strip()
         for code, payload in schemes.items():
             if not isinstance(payload, dict):
                 continue
@@ -401,6 +415,10 @@ def _load_amc_website_code_schemes() -> Iterable[tuple[str, str, str, dict, str]
     """Like _load_amc_website_schemes but only for sheet-code-keyed schemes."""
     for amc, source, as_of, payload, fund, code in _load_amc_website_schemes():
         if _is_junk_scheme_name(code, "amc_website"):
+            # [F&O-v1] when the payload carries a real fund name the main loop
+            # seeds it directly — resolving it again here would double-insert.
+            if not _is_junk_scheme_name(fund, "amc_website"):
+                continue
             yield amc, source, as_of, payload, code
 
 
@@ -539,13 +557,18 @@ def _load_index_schemes() -> Iterable[tuple[str, str, str, dict]]:
 def _infer_category(fund_name: str) -> str:
     n = norm_name(fund_name)
     kw = {
+        # Hybrid FIRST: its tokens are multi-word and specific, and a generic
+        # Equity keyword ("equity") would otherwise swallow "equity savings".
+        "Hybrid": ["hybrid", "balanced", "asset allocation", "aggressive", "conservative",
+                   "equity savings", "equity savings fund", "multi asset",
+                   # norm_name strips spaces - keep compact twins
+                   "equitysavings", "multiasset"],
         "Equity": ["equity", "elss", "index", "etf", "infrastructure", "banking", "psu",
                    "consumption", "flexicap", "midcap", "largecap", "smallcap", "multicap",
                    "value", "growth", "dividend", "momentum", "focussed", "sector"],
         "Debt": ["liquid", "gilt", "bond", "money market", "overnight", "arbitrage",
                  "short duration", "low duration", "medium duration", "long duration",
                  "dynamic bond", "credit risk", "corporate bond", "floating", "treasury"],
-        "Hybrid": ["hybrid", "balanced", "asset allocation", "aggressive", "conservative"],
     }
     for cat, kws in kw.items():
         if any(k in n for k in kws):
@@ -641,6 +664,9 @@ def _create_schema(cur: sqlite3.Cursor) -> None:
             quantity TEXT,
             market_value REAL,
             percent_nav REAL,
+            pct_nav_hedged REAL,
+            pct_nav_unhedged REAL,
+            coupon_pct REAL,
             yield TEXT,
             sector TEXT,
             section TEXT,
@@ -911,6 +937,212 @@ def _load_navall_plan_codes() -> dict[str, dict]:
     return out
 
 
+# --------------------------------------------------------------------------
+# TER from the official AMFI export, resolved ID-first [F&O-v1 / TER-v2].
+#
+# The AMFI TER file (data/reference/ter_*_schemes.csv) is the sole TER source;
+# the Combined-NAV universe CSV no longer feeds ter/ter_regular/ter_direct.
+# The export carries no ISIN/AMFI codes — only NSDL RTA codes + scheme names —
+# so a one-time canonicalization pass maps each clean AMFI name onto NAVALL
+# plan codes; the resulting per-fund record is persisted under ALL of that
+# fund's ISINs and AMFI codes (data/reference/ter_by_isin.json) and every
+# later build resolves schemes ID-first with name matching as fallback only.
+# --------------------------------------------------------------------------
+
+TER_REFERENCE_DIR = DATA_DIR / "reference"
+TER_EXPORT_DIR = DATA_DIR / "raw" / "ter"
+TER_ID_CACHE_JSON = TER_REFERENCE_DIR / "ter_by_isin.json"
+
+
+def _latest_ter_export() -> Path | None:
+    candidates = sorted(TER_EXPORT_DIR.glob("TER_*.xlsx"))
+    return candidates[-1] if candidates else None
+
+
+def _clean_ter_value(raw) -> float | None:
+    """A published 0.00 in a plan's column means 'no such plan' (ETF rows etc.)
+    — treat non-positive as absent so fake zeros never surface as real TER."""
+    n = _num(raw)
+    if n is None or n <= 0:
+        return None
+    return round(n, 6)
+
+
+def _build_ter_records(export: Path) -> tuple[list[dict], list[str]]:
+    """Canonicalize every row of the AMFI TER export into per-fund records."""
+    records: dict[str, dict] = {}
+    unresolved: list[str] = []
+    navall = _load_navall_plan_codes()
+    navall_keys = list(navall.keys())
+    try:
+        sys.path.insert(0, str(BASE_DIR))
+        from src.amfi_ter import (load_ter_schemes, COL_NAME, COL_R,
+                                  COL_D, COL_DATE)
+    except ImportError as e:  # [slim-deps] pandas lives outside requirements-slim
+        print(f"WARNING: TER export parsing unavailable ({e}); build the TER id "
+              "index in the full environment instead", file=sys.stderr)
+        return [], []
+    df = load_ter_schemes(export)
+
+    for _, row in df.iterrows():
+        name = str(row.get(COL_NAME, "") or "").strip()
+        if not name or name.lower() == "nan":
+            continue
+        reg = _clean_ter_value(row.get(COL_R))
+        dr = _clean_ter_value(row.get(COL_D))
+        if not name or (reg is None and dr is None):
+            continue
+        # Export spellings carry rename notes & AMFI marks ('X (Formerly known
+        # as Y)^') — clean BEFORE canonicalizing so renames still bridge.
+        key_src = re.sub(r"\(formerly known as[^)]*\)", "", name, flags=re.I).rstrip("^ ").strip()
+        key = _navall_fund_key(key_src)
+        entry = navall.get(key)
+        if entry is None:
+            # one-shot containment fallback against NAVALL fund keys
+            k = norm_name(name)
+            best_key, best_len = None, 0
+            if len(k) >= 12:
+                for cand in navall_keys:
+                    if abs(len(cand) - len(k)) > 25:
+                        continue
+                    short = min(k, cand, key=len)
+                    long = max(k, cand, key=len)
+                    if short in long and len(short) >= 12 and \
+                            len(short) / len(long) >= 0.6 and len(short) > best_len:
+                        best_key, best_len = cand, len(short)
+            entry = navall.get(best_key) if best_key else None
+        tdate = row.get(COL_DATE)
+        try:
+            date_s = tdate.strftime("%Y-%m-%d") if hasattr(tdate, "strftime") else ""
+        except ValueError:  # NaT
+            date_s = ""
+        rec = {
+            "name": name, "key": key,
+            "amfi_regular": (entry or {}).get("amfi_regular"),
+            "amfi_direct": (entry or {}).get("amfi_direct"),
+            "isin_regular": (entry or {}).get("isin_regular"),
+            "isin_direct": (entry or {}).get("isin_direct"),
+            "regular": reg, "direct": dr,
+            "date": date_s,
+        }
+        ident = key or norm_name(name)
+        prev = records.get(ident)
+        if prev is None:
+            records[ident] = rec
+        else:  # duplicate fund rows across sub-series: keep the richer one
+            prev["regular"] = prev["regular"] or rec["regular"]
+            prev["direct"] = prev["direct"] or rec["direct"]
+        if entry is None:
+            unresolved.append(name)
+    return list(records.values()), unresolved
+
+
+def _load_ter_id_index() -> dict:
+    """Load (building once per export revision) the id-first TER index.
+
+    Shape returned to callers:
+      {"by_isin": {ISIN: rec}, "by_amfi": {code: rec}, "by_key": {fund_key: rec},
+       "month": <csv stem>, "n_unresolved": int}
+    """
+    export = _latest_ter_export()
+    if export is None:
+        return {"by_isin": {}, "by_amfi": {}, "by_key": {}, "month": None,
+                "n_unresolved": 0}
+
+    cache_valid = False
+    payload = None
+    _CACHE_V = 2  # bump to invalidate after canonicalization-rule changes
+    if TER_ID_CACHE_JSON.exists():
+        try:
+            payload = json.loads(TER_ID_CACHE_JSON.read_text(encoding="utf-8"))
+            st = export.stat()
+            cache_valid = (payload.get("csv") == export.name
+                           and payload.get("mtime_ns") == st.st_mtime_ns
+                           and payload.get("v") == _CACHE_V
+                           and isinstance(payload.get("records"), list))
+        except Exception:
+            payload = None
+
+    if not cache_valid:
+        recs, unresolved = _build_ter_records(export)
+        payload = {
+            "v": _CACHE_V,
+            "csv": export.name,
+            "mtime_ns": export.stat().st_mtime_ns,
+            "built": datetime.now().isoformat(timespec="seconds"),
+            "records": recs,
+            "unresolved": unresolved[:500],
+        }
+        try:
+            TER_ID_CACHE_JSON.write_text(
+                json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        except OSError as e:
+            print(f"WARNING: TER id-cache write failed: {e}", file=sys.stderr)
+
+    by_isin: dict[str, dict] = {}
+    by_amfi: dict[str, dict] = {}
+    by_key: dict[str, dict] = {}
+    for rec in payload.get("records", []):
+        slim = {"name": rec.get("name"),
+                "regular": rec.get("regular"), "direct": rec.get("direct"),
+                "date": rec.get("date", "")}
+        for fld, bucket in (("isin_regular", by_isin), ("isin_direct", by_isin),
+                            ("amfi_regular", by_amfi), ("amfi_direct", by_amfi)):
+            v = (rec.get(fld) or "").strip().upper() if isinstance(rec.get(fld), str) else rec.get(fld)
+            if v:
+                bucket.setdefault(v, slim)
+        if rec.get("key"):
+            by_key.setdefault(rec["key"], slim)
+    return {
+        "by_isin": by_isin, "by_amfi": by_amfi, "by_key": by_key,
+        "month": payload.get("csv"), "n_unresolved": len(payload.get("unresolved") or []),
+    }
+
+
+def _resolve_scheme_ter_record(fund_name: str, navall_codes: dict,
+                               ter_idx: dict) -> dict | None:
+    """ID-first TER resolution chain for one scheme during seeding.
+
+    1. The scheme's NAVALL plan IDs → ``by_isin`` / ``by_amfi`` exact hits.
+    2. Fund-level canonical key → ``by_key``.
+    3. Containment fallback over export names (≥12 chars, ratio ≥0.6).
+    """
+    if not ter_idx or not any(ter_idx.get(k) for k in ("by_isin", "by_amfi", "by_key")):
+        return None
+
+    def _hit(rec: dict | None) -> dict | None:
+        if rec and (rec.get("regular") or rec.get("direct")):
+            return rec
+        return None
+
+    nk = _navall_fund_key(fund_name)
+    nc = navall_codes.get(nk) or {}
+    for ids, bucket in ((("isin_regular", "isin_direct"), ter_idx.get("by_isin") or {}),
+                        (("amfi_regular", "amfi_direct"), ter_idx.get("by_amfi") or {})):
+        for fld in ids:
+            v = (nc.get(fld) or "").strip().upper() if isinstance(nc.get(fld), str) else nc.get(fld)
+            if not v:
+                continue
+            hit = _hit(bucket.get(v))
+            if hit:
+                return hit
+
+    hit = _hit(ter_idx["by_key"].get(nk))
+    if hit:
+        return hit
+
+    # fuzzy containment fallback (logless here; unresolved surfaces at build)
+    if len(nk) >= 12:
+        for cand_rec_key, rec in ter_idx["by_key"].items():
+            if abs(len(cand_rec_key) - len(nk)) > 25:
+                continue
+            short, long = min(nk, cand_rec_key, key=len), max(nk, cand_rec_key, key=len)
+            if short in long and len(short) >= 12 and len(short) / len(long) >= 0.6:
+                if _hit(rec):
+                    return rec
+    return None
+
+
 # Data-source priority for the holdings snapshot shown per scheme. Lower number
 # wins. AMFI (official SEBI/AMFI monthly disclosure) is authoritative, then the
 # individual AMC websites' own monthly portfolio, then advisorkhoj (a third-party
@@ -929,6 +1161,15 @@ def _seed_schemes_and_holdings(cur: sqlite3.Cursor) -> None:
     coverage = _coverage_statuses()
     nifty_weights = _load_nifty_weights()
     navall_codes = _load_navall_plan_codes()
+    # [TER-v2] official AMFI export is the sole TER source; universe CSV no
+    # longer feeds ter/ter_regular/ter_direct.
+    ter_idx = _load_ter_id_index()
+    if not ter_idx.get("by_key"):
+        print("WARNING: no AMFI TER export/index available - TER columns will "
+              "be empty for this build", file=sys.stderr)
+    elif ter_idx.get("n_unresolved"):
+        print(f"NOTE: TER canonicalization left {ter_idx['n_unresolved']} export "
+              "rows unlinked to NAVALL ids (name-fallback only)", file=sys.stderr)
 
     # plan-stripped fund index so plan-level universe rows link to fund-level schemes
     uni_stripped: dict[str, list[dict]] = {}
@@ -961,18 +1202,30 @@ def _seed_schemes_and_holdings(cur: sqlite3.Cursor) -> None:
         universe_match_by_key[sid] = uni_match or {}
         # [perf-v2.0.0] stored-unit guardrail: universe rate metrics are
         # FRACTIONS; percent-scale sources are rescaled once at this boundary.
+
         def _uni(kind, field):
             return _normalize_metric((uni_match or {}).get(field), kind,
                                      source=f"universe:{fund[:48]}")
+
+        # [TER-v2] ID-first resolution against the AMFI export index.
+        ter_rec = _resolve_scheme_ter_record(fund, navall_codes, ter_idx)
+        plan_low = (plan or "").lower()
+        ter_reg_raw = ter_rec.get("regular") if ter_rec else None
+        ter_dir_raw = ter_rec.get("direct") if ter_rec else None
+
+        def _t(v):
+            return _normalize_metric(v, "ter", source=f"amfi_ter:{fund[:48]}")
+
+        own_plan_ter = _t(ter_dir_raw if plan_low == "direct" else ter_reg_raw)
+        headline = own_plan_ter or _t(ter_reg_raw) or _t(ter_dir_raw)
+
         scheme_rows[key] = {
             "id": sid, "key": key, "amc": amc, "fund_name": fund, "source": source,
             "as_of": _clean_holdings_date(as_of or (uni_match or {}).get("as_of") or ""),
             "category": category, "plan": plan,
-            "nav": (uni_match or {}).get("nav"), "ter": _uni("ter", "ter"),
-            "ter_regular": _normalize_metric(_ter_by_plan(uni_match, "regular"),
-                                             "ter", source=f"universe:{fund[:48]}"),
-            "ter_direct": _normalize_metric(_ter_by_plan(uni_match, "direct"),
-                                            "ter", source=f"universe:{fund[:48]}"),
+            "nav": (uni_match or {}).get("nav"), "ter": headline,
+            "ter_regular": _t(ter_reg_raw),
+            "ter_direct": _t(ter_dir_raw),
             "amfi_regular": None, "amfi_direct": None,
             "isin_regular": None, "isin_direct": None,
             "aum": (uni_match or {}).get("aum"),
@@ -1002,9 +1255,13 @@ def _seed_schemes_and_holdings(cur: sqlite3.Cursor) -> None:
 
     # AMC website parses (clean scheme-indexed payloads; skip sheet-code-KEYED
     # schemes — e.g. PPFAS 'PPFCF' — they are resolved to real funds later by
-    # the ISIN-overlap pass)
+    # the ISIN-overlap pass). [F&O-v1] When the payload itself carries a proper
+    # fund_name, prefer it over the sheet-code junk gate: modern parser output
+    # keys sheets by code but stamps the real name, and dropping those rows
+    # silently discards derivative/unhedged splits no other source carries.
     for amc, source, as_of, payload, fund, code in _load_amc_website_schemes():
-        if _is_junk_scheme_name(code, "amc_website"):
+        if (_is_junk_scheme_name(code, "amc_website")
+                and _is_junk_scheme_name(fund, "amc_website")):
             continue
         sid = ensure_scheme(amc, fund, source, as_of, payload)
         _insert_holdings(holding_buf[sid].setdefault(source, {}), sid, amc, fund,
@@ -1093,8 +1350,6 @@ def _seed_schemes_and_holdings(cur: sqlite3.Cursor) -> None:
             srow["aum"] = r.get("aum")
         if srow.get("nav") is None:
             srow["nav"] = r.get("nav")
-        if srow.get("ter") is None:
-            srow["ter"] = r.get("ter")
         if srow.get("ytm") is None:
             srow["ytm"] = r.get("ytm")
         if srow.get("duration") is None:
@@ -1105,15 +1360,11 @@ def _seed_schemes_and_holdings(cur: sqlite3.Cursor) -> None:
             srow["category"] = r.get("category") or srow.get("category")
         if not srow.get("as_of"):
             srow["as_of"] = _clean_holdings_date(r.get("as_of") or "")
+        # [TER-v2] TER intentionally NOT taken from universe rows — official
+        # AMFI export feeds ter/ter_regular/ter_direct exclusively.
         plan = (r.get("plan") or "").lower()
-        if plan == "regular":
+        if plan == "regular" and srow.get("n_holdings"):
             srow["plan"] = "Regular"
-            if r.get("ter") is not None:
-                srow["ter_regular"] = r.get("ter")
-                srow["ter"] = r.get("ter")
-        elif plan == "direct":
-            if r.get("ter") is not None:
-                srow["ter_direct"] = r.get("ter")
 
     # track which universe rows we've merged to avoid re-merging duplicates
     merged_universe: set[int] = set()
@@ -1237,7 +1488,12 @@ def _seed_schemes_and_holdings(cur: sqlite3.Cursor) -> None:
             with_pct = sum(1 for a in rows if a["percent_nav"] is not None)
             isin = sum(1 for a in rows if a["isin"])
             prio = _SOURCE_PRIORITY.get(kv[0], 9) + (0 if _weight_valid(kv) else 2)
-            return (-prio, with_pct / n, with_pct, isin, len(rows))
+            # [F&O-v1] a snapshot carrying hedge/unhedged splits (AMC-site parses)
+            # must beat a leaner-priority snapshot without them, otherwise the
+            # hedged-equity sleeve silently disappears from the stored scheme.
+            has_hedge = any(a.get("pct_nav_hedged") is not None
+                            or a.get("pct_nav_unhedged") is not None for a in rows)
+            return (has_hedge, -prio, with_pct / n, with_pct, isin, len(rows))
         best_src = max(src_map.items(), key=_src_score)
         agg = list(best_src[1].values())
         srow["source"] = best_src[0]
@@ -1311,7 +1567,9 @@ def _seed_schemes_and_holdings(cur: sqlite3.Cursor) -> None:
             srow["cash_pct"] = round(sum(p for p in pcts if p <= 0), 4) or None
         holding_rows.extend(
             (a["sid"], a["amc"], a["fund"], a["company"], a["isin"], a["quantity"],
-             a["market_value"], a["percent_nav"], a["yield"], a["sector"], a["section"],
+             a["market_value"], a["percent_nav"],
+             a.get("pct_nav_hedged"), a.get("pct_nav_unhedged"), a.get("coupon_pct"),
+             a["yield"], a["sector"], a["section"],
              a["asset_class"], a["source"], a["as_of"])
             for a in agg)
 
@@ -1327,11 +1585,28 @@ def _seed_schemes_and_holdings(cur: sqlite3.Cursor) -> None:
         [_row_tuple(scheme_rows[key]) for key in scheme_rows],
     )
 
+    # [TER-v2] surface residual TER gaps honestly (stderr + meta row) instead of
+    # silently carrying wrong values.
+    cur.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
+    ter_misses = sorted(
+        s["fund_name"] for s in scheme_rows.values()
+        if s.get("ter_regular") is None and s.get("ter_direct") is None)
+    if ter_misses:
+        print(f"NOTE: {len(ter_misses)} schemes have no TER from the AMFI export "
+              f"(index month={ter_idx.get('month')})", file=sys.stderr)
+        for nm in ter_misses[:15]:
+            print(f"       no-TER: {nm}", file=sys.stderr)
+    cur.execute(
+        "INSERT OR REPLACE INTO meta (key, value) VALUES ('ter_misses', ?)",
+        (json.dumps({"month": ter_idx.get("month"), "count": len(ter_misses),
+                     "names": ter_misses[:500]}),))
+
     cur.executemany(
         """INSERT INTO holdings (
             scheme_id, amc, fund_name, company, isin, quantity, market_value,
-            percent_nav, yield, sector, section, asset_class, source, as_of
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            percent_nav, pct_nav_hedged, pct_nav_unhedged, coupon_pct,
+            yield, sector, section, asset_class, source, as_of
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         holding_rows,
     )
 
@@ -1350,17 +1625,10 @@ def _row_tuple(r: dict) -> tuple:
     )
 
 
-def _ter_by_plan(uni_match: dict | None, plan: str) -> float | None:
-    """TER for a specific plan from a single matched universe row."""
-    if not uni_match:
-        return None
-    if (uni_match.get("plan") or "").lower() == plan:
-        return uni_match.get("ter")
-    return None
-
-
 def _section_is_equity(section: str) -> bool:
     s = (section or "").lower()
+    if any(k in s for k in ("derivative", "future", "option", "swap")):
+        return False
     return "debt" not in s and "cash" not in s and "net" not in s and "receivable" not in s
 
 
@@ -1525,37 +1793,110 @@ def _insert_holdings(rows, sid, amc, fund, holdings, source, as_of) -> None:
     # corrupt the fraction-vs-percent scale detection), then normalize weights
     clean = [h for h in holdings if isinstance(h, dict) and _looks_like_holding(h)]
     norm_holdings = _normalize_pct_scale(clean)
-    for h in norm_holdings:
-        key = (h.get("isin") or "").strip() or (h.get("company") or h.get("stock_name") or "").strip()
-        if not key:
-            continue
-        # Each source contributes its own holdings snapshot for a scheme; the
-        # caller merges per-source snapshots and keeps the most complete one
-        # (merging %NAV across different as-of dates would be incorrect).
-        if key in rows:
-            existing = rows[key]
-            # within one source, dedupe identical securities
-            p = _num(h.get("percent_nav") or h.get("pct_nav"))
-            mv = _num(h.get("market_value") or h.get("value"))
-            if p is not None:
-                existing["percent_nav"] = (existing["percent_nav"] or 0) + p
-            if mv is not None:
-                existing["market_value"] = (existing["market_value"] or 0) + mv
-            continue
-        rows[key] = {
+
+    def _mkrow(h: dict) -> dict:
+        return {
             "sid": sid, "amc": amc, "fund": fund,
             "company": (h.get("company") or h.get("stock_name") or "").strip(),
             "isin": (h.get("isin") or "").strip(),
             "quantity": str(h.get("quantity") or ""),
             "market_value": _num(h.get("market_value") or h.get("value")),
             "percent_nav": _num(h.get("percent_nav") or h.get("pct_nav")),
+            "pct_nav_hedged": _num(h.get("derivative_pct_nav")
+                                   if h.get("derivative_pct_nav") not in ("", None)
+                                   else h.get("pct_nav_hedged")),
+            "pct_nav_unhedged": _num(h.get("unhedged_pct_nav")
+                                     if h.get("unhedged_pct_nav") not in ("", None)
+                                     else h.get("pct_nav_unhedged")),
+            "coupon_pct": _num(h.get("coupon")
+                               if h.get("coupon") not in ("", None)
+                               else h.get("coupon_pct")),
             "yield": str(h.get("yield") or ""),
             "sector": (h.get("sector") or h.get("industry") or h.get("rating") or "").strip(),
             "section": (h.get("section") or "").strip(),
-            "asset_class": classify_asset(h.get("section") or "", h.get("company") or h.get("stock_name") or "", h.get("isin") or ""),
+            "asset_class": classify_asset(
+                h.get("section") or "",
+                h.get("company") or h.get("stock_name") or "", h.get("isin") or ""),
             "source": source,
             "as_of": as_of or "",
         }
+
+    # Stage this snapshot, aggregating intra-document duplicate securities.
+    pending: dict[str, dict] = {}
+    for h in norm_holdings:
+        key = (h.get("isin") or "").strip() or (
+            h.get("company") or h.get("stock_name") or "").strip()
+        if not key:
+            continue
+        row = _mkrow(h)
+        prev = pending.get(key)
+        if prev is not None:
+            p = row["percent_nav"]
+            mv = row["market_value"]
+            if p is not None:
+                prev["percent_nav"] = (prev["percent_nav"] or 0) + p
+            if mv is not None:
+                prev["market_value"] = (prev["market_value"] or 0) + mv
+            for fld in ("pct_nav_hedged", "pct_nav_unhedged"):
+                v = row[fld]
+                if v is not None:
+                    prev[fld] = (prev.get(fld) or 0) + v
+            if prev.get("coupon_pct") is None and row.get("coupon_pct") is not None:
+                prev["coupon_pct"] = row["coupon_pct"]
+            for fld in ("section", "sector", "asset_class"):
+                if not prev.get(fld) and row.get(fld):
+                    prev[fld] = row[fld]
+            continue
+        pending[key] = row
+
+    if not pending:
+        return
+
+    # [F&O-v1] Same-document shadow guard. A scheme can receive two parses of
+    # the SAME disclosure through this source (e.g. a per-scheme file plus the
+    # AMC's combined monthly archive). Legacy behaviour would sum weights of
+    # every overlapping key — doubling exposures — while a hedge-carrying newer
+    # parse could land either side of the leaner one. Compare snapshots first:
+    ex_hedge = sum(1 for r in rows.values() if r.get("pct_nav_hedged") is not None)
+    inc_hedge = sum(1 for r in pending.values() if r.get("pct_nav_hedged") is not None)
+    inter = sum(1 for k in pending if k in rows)
+    overlap = inter / max(len(pending), 1)
+    same_doc = bool(rows) and overlap >= 0.85
+    if same_doc and inc_hedge == 0 and len(pending) <= len(rows):
+        # incoming adds nothing (no hedge data) — never double-count it.
+        return
+    if same_doc and inc_hedge > 0 and ex_hedge == 0:
+        # richer parse supersedes its leaner twin wholesale.
+        rows.update(pending)
+        return
+
+    for key, row in pending.items():
+        # Each source contributes its own holdings snapshot for a scheme; the
+        # caller merges per-source snapshots and keeps the most complete one
+        # (merging %NAV across different as-of dates would be incorrect).
+        if key in rows:
+            existing = rows[key]
+            # within one source, dedupe identical securities
+            p = row["percent_nav"]
+            mv = row["market_value"]
+            if p is not None:
+                existing["percent_nav"] = (existing["percent_nav"] or 0) + p
+            if mv is not None:
+                existing["market_value"] = (existing["market_value"] or 0) + mv
+            hd = row.get("pct_nav_hedged")
+            un = row.get("pct_nav_unhedged")
+            cp = row.get("coupon_pct")
+            if hd is not None:
+                existing["pct_nav_hedged"] = (existing.get("pct_nav_hedged") or 0) + hd
+            if un is not None:
+                existing["pct_nav_unhedged"] = (existing.get("pct_nav_unhedged") or 0) + un
+            if cp is not None and existing.get("coupon_pct") is None:
+                existing["coupon_pct"] = cp
+            for fld in ("section", "sector", "asset_class"):
+                if not existing.get(fld) and row.get(fld):
+                    existing[fld] = row[fld]
+            continue
+        rows[key] = row
 
 
 def _normalize_pct_scale(holdings: list[dict]) -> list[dict]:
@@ -2183,6 +2524,8 @@ class WebDB:
             args.append(limit)
         rows = [dict(r) for r in self.con.execute(q, args).fetchall()]
         eq_isins = self._equity_isin_set()
+        hedge_total = 0.0
+        hedge_seen = False
         for r in rows:
             r["asset_class"] = refine_asset_class(
                 r.get("asset_class") or "", r.get("confirmed_equity"), r.get("isin") or "")
@@ -2197,6 +2540,40 @@ class WebDB:
                 r.update(_debt_details(r.get("company") or "", r.get("yield") or "",
                                        r.get("sector") or ""))
                 self._enrich_bond_fields(r)
+            # [F&O-v1] equity-savings/hybrid hedged sleeve split: percent_nav is
+            # GROSS exposure; "Derivative % to NAV" is the slice carried via
+            # short futures/options. Present net (unhedged) as the effective
+            # stock weight and surface the hedge as one aggregated
+            # futures_options entry so allocations stay economically honest.
+            if r["asset_class"] == "stocks":
+                gross = _num(r.get("percent_nav"))
+                hed = _num(r.get("pct_nav_hedged")) or 0.0
+                unh = _num(r.get("pct_nav_unhedged"))
+                has_split = bool(hed) or unh is not None
+                if gross is not None and has_split:
+                    hedge_seen = True
+                    r["percent_nav_raw"] = gross
+                    if unh is None:
+                        unh = max(gross - hed, 0.0)
+                    elif abs((unh + hed) - gross) > max(0.02, 0.01 * gross):
+                        # inconsistent disclosure — trust the explicit columns
+                        unh = min(unh, max(gross - hed, 0.0))
+                    r["percent_nav_effective"] = round(unh, 6)
+                    r["percent_nav"] = round(unh, 6)
+                    hedge_total += hed
+
+        if hedge_seen and hedge_total > 1e-9:
+            rows.append({
+                "id": None, "scheme_id": scheme_id,
+                "company": "Futures & Options (hedged equity leg)",
+                "isin": "", "quantity": "", "market_value": None,
+                "percent_nav": round(hedge_total, 6),
+                "percent_nav_effective": round(hedge_total, 6),
+                "yield": "", "sector": "Derivatives",
+                "section": "Derivatives",
+                "asset_class": "future_options", "cap": "",
+                "confirmed_equity": None, "derived_row": True,
+            })
         # [BUG-M12] fraction-vs-percent decided per SCHEME batch: a source that
         # exports true fractions has EVERY yield < 1; an isolated genuine
         # 0.85% quote among normal 5-9% yields must stay 0.85, not become 85.

@@ -23,13 +23,16 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
-import pandas as pd
 
-from src.amfi_nav import fund_name_from_nav, norm
+from src.amfi_nav import fund_name_from_nav
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:  # [slim-deps] pandas stays out of the runtime/boot graph
+    import pandas as pd
 
 BASE_URL = "https://www.amfiindia.com"
 TER_DATA_PATH = "/api/populate-te-rdata-revised"
@@ -142,6 +145,10 @@ def load_ter_schemes(xlsx_path: Path) -> pd.DataFrame:
     AMFI publishes the same TER for every day of the disclosure month, so we
     keep the last available day for each scheme.
     """
+    # [slim-deps] pandas is only needed by the TER CLI/mapping pipeline, never
+    # at server boot; import lazily so importing this module stays slim-safe.
+    import pandas as pd
+
     df = pd.read_excel(xlsx_path)
     df.columns = [c.strip() for c in df.columns]
     df[COL_DATE] = pd.to_datetime(df[COL_DATE])
@@ -332,7 +339,6 @@ def map_universe_to_ter(
       ter_scheme   : the TER export scheme name that was matched
     """
     ter_lookup = {row["_key"]: row for _, row in ter.iterrows()}
-    nav_keys = {k: fund_name_from_nav(v) if v else None for k, v in navall.items()}
 
     out = universe.copy()
     codes = out["Amficode"].dropna().astype(int).astype(str)
@@ -394,10 +400,6 @@ def build_report(
     missing_funds = total_funds - matched_funds
 
     miss = mapped[~mapped["ter_matched"]]
-    by_type = miss.groupby("_fund")["ter_status"].first().to_dict()
-    missing_by_fund_type = miss.groupby(
-        mapped.loc[miss.index, "Category"]
-    ).size().to_dict()
 
     return {
         "total_rows": total_rows,
