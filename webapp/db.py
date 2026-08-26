@@ -1652,10 +1652,14 @@ def classify_asset(section: str, company: str, isin: str) -> str:
     company = (company or "").lower()
     isin = (isin or "").upper()
 
-    # Futures / Options / derivatives (also derivative expiry codes like 'AUG26')
+    # Futures / Options / derivatives (also derivative expiry codes like 'AUG26').
+    # Company-text fallback must NOT fire on plan names ("Growth Option") —
+    # only derivative-specific phrasing counts.
     if re.match(r"^[A-Z]{3}\d{2}$", isin) \
             or any(k in section for k in ("derivative", "futures", "option", "contract", "swap")) \
-            or "future" in company or "option" in company:
+            or "future" in company \
+            or re.search(r"(?:\bcall\b|\bput\b)\s+option|\boptions?\b\s*(?:trading|book)"
+                         r"|\bf&o\b|\bstrike\b", company):
         return "future_options"
     # Cash equivalents
     if any(k in section for k in ("cash", "treps", "reverse repo", "short term deposit",
