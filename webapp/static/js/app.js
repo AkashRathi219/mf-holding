@@ -3,6 +3,7 @@
 const screens = {
   schemes: { key: "schemes", title: "Scheme Explorer", sub: "Filter 6,400+ schemes across 50+ AMCs", init: initSchemes },
   securities: { key: "securities", title: "Security Directory", sub: "3,941 unique ISINs · 846 pure listed stocks", init: initSecurities },
+  screener: { key: "screener", title: "Factor Screener", sub: "Momentum, low-volatility, value, quality & composite ranks across the tracked equity universe", init: initScreener },
   bonds: { key: "bonds", title: "Bonds", sub: "NSE debt market: G-Sec, SDL, T-Bills & corporate bonds with YTM", init: initBonds },
   compare: { key: "compare", title: "Compare Schemes", sub: "Performance & risk, side by side — factual AMFI-NAV math only", init: initCompare },
   models: { key: "models", title: "Model Portfolios", sub: "Strategies, clients, client portfolios & compliance", init: initModels },
@@ -719,6 +720,114 @@ async function loadSecurities() {
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="7" class="empty">${App.esc(e.message)}</td></tr>`;
   }
+}
+
+// ---------- factor screener ----------
+const SCR_FACTORS = [
+  ["multi", "Composite"],
+  ["momentum", "Momentum"],
+  ["lowvol", "Low vol"],
+  ["value", "Value"],
+  ["quality", "Quality"],
+];
+const scrState = { rows: [], loaded: false, loading: false,
+                   sortKey: "multi", sortDir: -1 };
+
+function initScreener() {
+  wireOnce("screener", () => {
+    ["scrSector", "scrCap"].forEach(id =>
+      document.getElementById(id).addEventListener("change", () => renderScreenerTable()));
+    document.getElementById("scrMinComposite").addEventListener("input",
+      App.debounce(() => renderScreenerTable(), 250));
+    document.getElementById("scrReset").addEventListener("click", () => {
+      document.getElementById("scrSector").value = "";
+      document.getElementById("scrCap").value = "";
+      document.getElementById("scrMinComposite").value = "";
+      scrState.sortKey = "multi"; scrState.sortDir = -1;
+      renderScreenerTable();
+    });
+  });
+  if (!scrState.loaded && !scrState.loading) loadScreenerUniverse();
+}
+
+async function loadScreenerUniverse() {
+  const tbody = document.getElementById("scrTbody");
+  scrState.loading = true;
+  if (tbody) tbody.innerHTML = `<tr><td colspan="9" class="empty"><span class="spin"></span> Loading…</td></tr>`;
+  try {
+    const resps = await Promise.all(SCR_FACTORS.map(([f]) =>
+      App.api("/factors/screen", { method: "POST", body: JSON.stringify({ factor: f, top_n: 200 }) })));
+    const byIsin = new Map();
+    resps.forEach((r, i) => {
+      if (!i) scrState.asOf = r.as_of || "";
+      (r.rows || []).forEach(row => {
+        let cur = byIsin.get(row.isin);
+        if (!cur) {
+          cur = { isin: row.isin, name: row.name || "", sector: row.sector || "", cap: row.cap || "" };
+          byIsin.set(row.isin, cur);
+        }
+        cur[SCR_FACTORS[i][0]] = row.score;
+      });
+    });
+    scrState.rows = [...byIsin.values()];
+    fillSelect("scrSector", [...new Set(scrState.rows.map(r => r.sector).filter(Boolean))].sort());
+    fillSelect("scrCap", [...new Set(scrState.rows.map(r => r.cap).filter(Boolean))].sort());
+    scrState.loaded = true;
+    renderScreenerTable();
+  } catch (e) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="9" class="empty">${App.esc(e.message)}</td></tr>`;
+  } finally {
+    scrState.loading = false;
+  }
+}
+
+function scrSortBy(key) {
+  if (scrState.sortKey === key) scrState.sortDir = -scrState.sortDir;
+  else { scrState.sortKey = key; scrState.sortDir = key === "isin" || key === "name" || key === "sector" || key === "cap" ? 1 : -1; }
+  renderScreenerTable();
+}
+
+function renderScreenerTable() {
+  const headRow = document.getElementById("scrHeadRow");
+  const tbody = document.getElementById("scrTbody");
+  const countEl = document.getElementById("scrCount");
+  if (!headRow || !tbody) return;
+  const th = (key, label) =>
+    `<th style="cursor:pointer" onclick="scrSortBy('${key}')">${label}${scrState.sortKey === key ? (scrState.sortDir < 0 ? " ▾" : " ▴") : ""}</th>`;
+  headRow.innerHTML = [th("isin", "ISIN"), th("name", "Name"), th("sector", "Sector"), th("cap", "Cap")]
+    .concat(SCR_FACTORS.map(([k, l]) => th(k, l))).join("");
+  const sec = document.getElementById("scrSector").value;
+  const cap = document.getElementById("scrCap").value;
+  const minC = parseFloat(document.getElementById("scrMinComposite").value);
+  let rows = scrState.rows.filter(r =>
+    (!sec || r.sector === sec) && (!cap || r.cap === cap) &&
+    (!(minC > 0) || ((r.multi == null ? -1 : r.multi) >= minC)));
+  rows.sort((a, b) => {
+    const k = scrState.sortKey;
+    const va = a[k], vb = b[k];
+    const missA = va == null || va === "", missB = vb == null || vb === "";
+    if (missA && missB) return 0;
+    if (missA) return 1;
+    if (missB) return -1;
+    const cmp = typeof va === "number" && typeof vb === "number"
+      ? va - vb
+      : String(va).localeCompare(String(vb));
+    return scrState.sortDir < 0 ? -cmp : cmp;
+  });
+  countEl.textContent = App.formatNum(rows.length) + " of " + App.formatNum(scrState.rows.length) + " scored";
+  if (!rows.length) {
+    tbody.innerHTML = !scrState.rows.length
+      ? `<tr><td colspan="9" class="empty">Not available — no factor scores yet for this universe.</td></tr>`
+      : `<tr><td colspan="9" class="empty">No securities match your filters.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `<tr class="clickable" onclick="location.hash='#security/${App.esc(r.isin)}'">
+      <td class="mono">${App.esc(r.isin)}</td>
+      <td><strong>${App.esc(r.name || "—")}</strong></td>
+      <td>${App.esc(r.sector || "—")}</td>
+      <td>${App.capBadge(r.cap)}</td>
+      ${SCR_FACTORS.map(([k]) => `<td class="num mono">${r[k] != null ? App.formatNum(r[k], 0) : "—"}</td>`).join("")}
+    </tr>`).join("");
 }
 
 // ---------- bonds (NSE debt market) ----------
@@ -3193,7 +3302,7 @@ async function loadApiSamples() {
 }
 
 // ---------------- superadmin: data ops ----------------
-const ADMIN_PIPELINES = ["nav_daily", "amfi_fetch", "bond_refresh", "stock_refresh", "financial_statements"];
+const ADMIN_PIPELINES = ["nav_daily", "nav_preheal", "amfi_fetch", "bond_refresh", "stock_refresh", "financial_statements"];
 let adminTimer = null;
 
 function initAdmin() {
@@ -3213,6 +3322,11 @@ function initAdmin() {
       <h3 style="margin-bottom:4px">NAV freshness <span id="nfBadge" class="badge grey">…</span></h3>
       <div class="page-sub">Every scheme's latest NAV vs the AMFI publication calendar (day-T NAVs publish ~23:00 IST; nothing on weekends/holidays) · expected latest <b id="nfExpected">…</b> <button class="btn btn-outline btn-sm" style="margin-left:10px" onclick="refreshFreshnessData(true)">Live sample</button></div>
       <div id="nfBody" style="margin-top:10px"><span class="spin"></span> Loading…</div>
+    </div>
+    <div id="stockStatusCard" class="card" style="margin-bottom:16px">
+      <h3 style="margin-bottom:4px">Stock backfill <span id="sbOverall" class="badge grey">…</span></h3>
+      <div class="page-sub">Price / corporate-action / report coverage over the confirmed-equity universe (<b id="sbTotal">…</b> stocks) · latest price date <b id="sbLatest">…</b></div>
+      <div id="sbBody" style="margin-top:10px"><span class="spin"></span> Loading…</div>
     </div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <h3 style="margin:0">Refresh pipelines <span id="admSched" class="badge grey"></span></h3>
@@ -3401,6 +3515,44 @@ async function refreshFreshnessData(liveSample = false) {
   }
 }
 
+async function refreshStockStatusData() {
+  const body = document.getElementById("sbBody");
+  if (!body) return;
+  try {
+    const s = await App.api("/stocks/status");
+    const total = s.total_stocks || 0;
+    const srcs = [
+      ["Price history", s.price_done, s.price_pct, s.missing && s.missing.price],
+      ["Corp actions", s.actions_done, s.actions_pct, s.missing && s.missing.actions],
+      ["Reports", s.reports_done, s.reports_pct, s.missing && s.missing.reports],
+    ].filter(x => x[2] != null);
+    const avgPct = srcs.length ? Math.round(srcs.reduce((a, x) => a + x[2], 0) / srcs.length * 10) / 10 : null;
+    const tone = avgPct == null ? "grey" : avgPct >= 80 ? "green" : avgPct >= 55 ? "amber" : "red";
+    const badge = document.getElementById("sbOverall");
+    if (badge) {
+      badge.className = "badge " + tone;
+      badge.textContent = avgPct != null ? avgPct + "% done" : "N/A";
+    }
+    const totalEl = document.getElementById("sbTotal");
+    if (totalEl) totalEl.textContent = App.formatNum(total);
+    const latestEl = document.getElementById("sbLatest");
+    if (latestEl) latestEl.textContent = s.price_latest_date || "—";
+    body.innerHTML = srcs.map(([label, done, pct, missing]) => `
+      <div style="display:flex;align-items:center;gap:10px;margin:6px 0">
+        <div style="width:170px;font-size:.8rem">${label}</div>
+        <div style="flex:1;background:var(--surface-2);border-radius:4px;height:8px;overflow:hidden">
+          <div style="width:${Math.max(0, Math.min(100, pct || 0))}%;height:100%;background:${dhBandColor(tone)}"></div>
+        </div>
+        <div class="mono" style="width:150px;text-align:right;font-size:.78rem">${App.formatNum(done)} / ${App.formatNum(total)} · ${pct}%</div>
+        ${(missing && missing.length) ? `<span class="badge amber" title="${App.esc(missing.slice(0, 12).join(", "))}${missing.length > 12 ? " …" : ""}">${missing.length} missing</span>` : ""}
+      </div>`).join("") || `<div class="empty">Not available.</div>`;
+  } catch (e) {
+    const o = document.getElementById("sbOverall");
+    if (o) { o.className = "badge grey"; o.textContent = "N/A"; }
+    body.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
+  }
+}
+
 function dhBucketColor(bucket) {
   const tone = (NF_BUCKET_META[bucket] || {}).tone;
   return { green: "var(--success)", amber: "var(--warning)",
@@ -3426,6 +3578,7 @@ async function refreshAdminData() {
   try {
     refreshHealthData();
     refreshFreshnessData();
+    refreshStockStatusData();
     const [sum, logs] = await Promise.all([
       App.api("/admin/refresh-summary"),
       App.api("/admin/refresh-logs?limit=200"),

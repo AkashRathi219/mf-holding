@@ -108,11 +108,19 @@ def _xbrl_download_one(row: dict) -> tuple[str, bool]:
         return seq, False
     if dest.exists() and dest.stat().st_size > 256:
         return seq, True
-    try:
-        raw = http_get(url, opener=nse_session(), timeout=60, retries=2)
-    except Exception:
-        return seq, False
-    if raw[:5] != b"<?xml" and b"<xbrl" not in raw[:600]:
+    raw = None
+    for attempt in range(3):                     # NSE throttles bursts into
+        try:                                     # empty/blocked bodies — a
+            raw = http_get(url, opener=nse_session(),  # quiet retry beats a
+                           timeout=60, retries=1)      # permanent hole in the
+        except Exception:                            # corpus [stmt-v1.0.1]
+            raw = None
+        if raw and (raw[:5] == b"<?xml" or b"<xbrl" in raw[:600]):
+            break
+        raw = None
+        if attempt < 2:
+            time.sleep(2.0 * (attempt + 1) ** 2)     # 2s, then 8s
+    if raw is None:
         return seq, False
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(raw)
@@ -164,7 +172,7 @@ def download_financial_results_xbrl(symbols: list[str] | None = None,
     todo = [r for r in meta.values() if r.get("xbrl") and not _dest(r).exists()]
     no_link = sum(1 for r in meta.values() if not r.get("xbrl"))
     fetched = failed = 0
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+    with ThreadPoolExecutor(max_workers=max(1, min(workers, 2))) as pool:
         futs = {pool.submit(_xbrl_download_one, r): r for r in todo}
         for n, fut in enumerate(as_completed(futs), 1):
             seq, ok = fut.result()
@@ -172,7 +180,7 @@ def download_financial_results_xbrl(symbols: list[str] | None = None,
             failed += not ok
             if n % 250 == 0:
                 print(f"  [dl {n}/{len(todo)}]", flush=True)
-            time.sleep(0.15)
+            time.sleep(0.5)
 
     status = {"as_of": now_iso(), "symbols": len(wanted),
               "filings_kept": len(meta), "downloads_attempted": len(todo),
@@ -191,19 +199,28 @@ def _is_result_announcement(text: str) -> bool:
 
 
 def fetch_result_announcements(symbol: str, pages: int = 3) -> list[dict]:
-    """Deeper-than-stock_reports pull of financial-result announcements."""
+    """Deeper-than-stock_reports pull of financial-result announcements.
+
+    NSE throttles the announcements API after a few rapid calls and answers
+    with empty/blocked bodies — indistinguishable from 'no results' unless
+    retried. Each page therefore backs off twice (2s, 6s) before the symbol
+    is declared to have no announcements."""
     seen: set[str] = set()
     out: list[dict] = []
     for page_no in range(max(1, pages)):
-        try:
-            raw = http_get(NSE_ANNOUNCE_URL.format(sym=symbol, page=page_no),
-                           headers={"Referer": "https://www.nseindia.com/"},
-                           timeout=20, opener=nse_session(), retries=1)
-            data = json.loads(raw.decode("utf-8", "replace"))
-        except Exception:
+        data = None
+        for attempt in range(3):
+            try:
+                raw = http_get(NSE_ANNOUNCE_URL.format(sym=symbol, page=page_no),
+                               headers={"Referer": "https://www.nseindia.com/"},
+                               timeout=20, opener=nse_session(), retries=1)
+                data = json.loads(raw.decode("utf-8", "replace"))
+                break
+            except Exception:
+                if attempt < 2:
+                    time.sleep(2.0 * (attempt + 1) ** 2)   # 2s, then 8s
+        if data is None or not isinstance(data, list):
             continue
-        if not isinstance(data, list):
-            break
         fresh = False
         for a in data:
             url = a.get("attchmntFile") or ""
@@ -456,8 +473,12 @@ def _row_values(line: list[dict], anchors: list[float]
     return label, pairs
 
 
-_TABLE_END = re.compile(r"notes?|significative|accounting ratios|"
-                        r"shareholding pattern", re.I)
+# A table ends at a NOTES BLOCK ("Notes:", "Notes to accounts", "1 Notes"),
+# never at an inline reference — bank filings wrap "(Refer Note 6)" across
+# lines mid-table, and a singular "Note 6)" fragment is a continuation, not
+# a block start, so the bare form requires the plural.
+_TABLE_END = re.compile(r"^(?:[\d\.\)\s]*notes\b|notes?\s+to|significative|"
+                        r"accounting ratios|shareholding pattern)", re.I)
 _SKIP_LINE = re.compile(r"^(as at|as on|figures?|see |note )", re.I)
 
 
@@ -509,23 +530,35 @@ def parse_table_pages(pdf_path: Path, max_pages: int = 12,
                 centers = sorted(centers[i] for i in ranked)
             while len(centers) < len(slots):
                 slots = slots[:-1] or slots
-            started = False
+            pending = ""      # wrapped label awaiting its figures line
             for line in lines[header_idx:]:
                 joined = " ".join(w["text"] for w in line)
-                if not started:
-                    if re.search(r"income|revenue|particulars", joined,
-                                 re.I):
-                        started = True
-                    continue
                 if _TABLE_END.search(joined):
                     break
                 if _SKIP_LINE.match(joined):
                     continue
                 label, pairs = _row_values(line, centers[:len(slots)])
-                if not label or not pairs:
-                    # continuation of a wrapped label: nothing to do here
+                if not label and not pairs:
                     continue
-                canon, score = ss.match_label(label)
+                if label and not pairs:
+                    # wrapped label: its figures sit on the next line
+                    pending = (pending + " " + label).strip()
+                    continue
+                if not label and pairs:
+                    if not pending:
+                        continue
+                    label, pending = pending, ""   # classic wrapped label
+                else:
+                    pending = ""   # new row has its own label: fragment junk
+                # drop leading enumerators — "(a) Employees Cost" must
+                # fuzzy-match like "Employees Cost" does; "- Basic (not
+                # annualised)" like "Basic ..."; also unwrap a carried
+                # "(Refer Note 6)" fragment glued by the join
+                match_key = re.sub(
+                    r"^\(?(?:refer\s+)?note\b[\d\)\.\s]*", "",
+                    re.sub(r"^\(?[a-z0-9ivx-]{1,4}[\)\.]\s+", "", label,
+                           flags=re.I), flags=re.I)
+                canon, score = ss.match_label(match_key)
                 values = {}
                 scale_eff = 1.0 if canon in ss.PER_SHARE_KEYS else scale
                 for col_idx, amount in pairs:
@@ -537,7 +570,7 @@ def parse_table_pages(pdf_path: Path, max_pages: int = 12,
                     "label_raw": label[:160],
                     "canon": canon,
                     "match_score": round(score, 3),
-                    "exact": bool(ss.is_exact_label(label)),
+                    "exact": bool(ss.is_exact_label(match_key)),
                     "face_value": _extract_face_value(label),
                     "values": values,
                     "page": pno,
@@ -857,8 +890,12 @@ def build_section_records(raw_rows: list[dict]) -> dict[str, dict[tuple, dict]]:
                     rec.setdefault("_rank", {})[row["canon"]] = rank
             if row.get("face_value"):
                 rec["_face_value"] = row["face_value"]
-        # derived keys (ebitda / total_debt / net_worth / total_liabilities)
-        # are filled once per period after all of its raw rows landed
+    # derived keys (ebitda / total_debt / net_worth / total_liabilities /
+    # bank revenue) are filled ONCE per period after ALL of its raw rows
+    # have landed — deriving mid-stream bakes incomplete sums (e.g. bank
+    # revenue = interest earned without its other-income add-on) into the
+    # record, and the final pass then skips the already-filled key
+    for sec in sections.values():
         for k in list(sec.keys()):
             sec[k] = ss.derive_ebitda(sec[k])
     return sections
@@ -973,11 +1010,14 @@ def compute_ttm(quarters: list[dict]) -> dict | None:
                     and k not in ("period_end", "fy", "kind", "quarter",
                                   "cumulative", "derived"))
     skip_per_share = ss.PER_SHARE_KEYS
+    # balance-sheet items are STOCKS: summing them across a TTM window
+    # fabricates nonsense (share capital x4, cash x4) — latest reading wins
+    stock_keys = frozenset(ss.BALANCE_SHEET_ITEMS)
     ttm: dict = {"window_start": window[0]["period_end"],
                  "window_end": window[-1]["period_end"]}
     for k in sorted(keys):
-        if k in skip_per_share:
-            # per-share items must NEVER be summed across a window
+        if k in skip_per_share or k in stock_keys:
+            # per-share and balance-sheet items must NEVER be summed
             ttm[k] = window[-1].get(k)      # latest reading wins
             continue
         vals = [r.get(k) for r in window]
@@ -1047,15 +1087,24 @@ def process_stock(isin: str, ident_row: dict,
             continue
         # PRIMARY: vision-model extraction (handles scans + OCR noise);
         # FALLBACK: deterministic word-position parser (offline / no key).
+        # BOTH tiers always run and their raw rows are concatenated —
+        # build_section_records' rank logic keeps the better reading per
+        # line item, so a partial AI pass no longer starves the parser of
+        # the rows it can read (bank filings: AI often misses the
+        # balance-sheet page entirely).
+        tiers: list[str] = []
         raw = ai_extract_document(pdf_path)
-        tier = "ai"
-        if raw is None:
-            raw = parse_table_pages(pdf_path, primary_period=primary)
-            tier = "deterministic"
         if raw:
             all_raw.extend(raw)
+            tiers.append("ai")
+        det = parse_table_pages(pdf_path, primary_period=primary)
+        if det:
+            all_raw.extend(det)
+            tiers.append("deterministic")
+        if tiers:
             sources.append({"url": a["url"], "date": a["date"],
-                            "sha256": sha256_file(pdf_path), "tier": tier})
+                            "sha256": sha256_file(pdf_path),
+                            "tier": "+".join(tiers)})
     summary["documents"] = len(sources)
     if not all_raw:
         summary["status"] = "extraction_failed"
@@ -1154,7 +1203,7 @@ def refresh_stale(limit: int = 12) -> list[dict]:
     for isin in target:
         res = process_stock(isin, ident[isin])
         out.append(res)
-        _t.sleep(0.3)
+        _t.sleep(1.5)
     return out
 
 
@@ -1191,7 +1240,9 @@ def run(symbols: list[str] | None = None, limit: int | None = None) -> list[dict
         if n % 5 == 0 or res.get("status") != "ok":
             print(f"  [{n}/{len(target)}] {res.get('symbol')} "
                   f"{res.get('status')}", flush=True)
-        time.sleep(0.3)
+        # NSE throttles rapid announcement queries into empty responses;
+        # a slow walk keeps the batch reliable end-to-end
+        time.sleep(1.5)
     return out
 
 

@@ -26,6 +26,7 @@
       <a href="#securities" data-screen="securities"><span class="ico">⬡</span><span class="lbl">Security Directory</span></a>
       <a href="#bonds" data-screen="bonds"><span class="ico">⚲</span><span class="lbl">Bonds</span></a>
       <a href="#compare" data-screen="compare"><span class="ico">∿</span><span class="lbl">Compare</span></a>
+      <a href="#screener" data-screen="screener"><span class="ico">⊞</span><span class="lbl">Screener</span></a>
       <div class="nav-label">Tools</div>
       <a href="#models" data-screen="models"><span class="ico">🗂</span><span class="lbl">Model Portfolios</span></a>
       <a href="#admin" data-screen="admin" id="navAdminLink" style="display:none"><span class="ico">⚙</span><span class="lbl">Superadmin</span></a>
@@ -247,6 +248,32 @@
           <span class="pill-count" id="secPageInfo"></span>
           <button class="btn btn-outline btn-sm" id="secNext">Next →</button>
         </div>
+      </section>
+
+      <!-- Factor Screener (routed by #screener) -->
+      <section id="screen-screener" class="screen" style="display:none">
+        <div class="toolbar">
+          <div class="field">
+            <select id="scrSector"><option value="">All sectors</option></select>
+          </div>
+          <div class="field">
+            <select id="scrCap"><option value="">All market caps</option></select>
+          </div>
+          <div class="field">
+            <input type="number" id="scrMinComposite" min="0" max="100" step="1" placeholder="Min composite (0–100)">
+          </div>
+          <button class="btn btn-outline btn-sm" id="scrReset">Reset</button>
+          <div class="spacer"></div>
+          <span class="pill-count" id="scrCount"></span>
+        </div>
+        <div class="table-wrap">
+          <table class="data" id="scrTable">
+            <thead><tr id="scrHeadRow"></tr></thead>
+            <tbody id="scrTbody"><tr><td colspan="9" class="empty"><span class="spin"></span> Loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="page-sub" style="margin-top:10px">Percentile rank across the tracked universe (100 = strongest of the factor · top 200 names per factor family are merged into one table). Value/quality need parsed financials.</div>
+        <div class="page-sub">Descriptive statistics over public data — not investment advice.</div>
       </section>
 
       <!-- Security detail (routed by #security/<isin>) -->
