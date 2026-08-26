@@ -1057,7 +1057,14 @@ function buildStockAnalyticsTabs(isin) {
     </div>`;
 }
 
-async function switchStockTab(isin, tab) {
+// Shared tab-error panel: show the real failure text + a retry affordance
+// instead of swallowing the error into a misleading generic message.
+function _tabErrorHtml(msg, retryCall) {
+  return `<div class="empty">${App.esc(msg || "Request failed")}
+    <div style="margin-top:10px"><button class="btn btn-outline btn-sm" onclick="${retryCall}">Retry</button></div></div>`;
+}
+
+async function switchStockTab(isin, tab, force) {
   document.querySelectorAll("[data-stab]").forEach(b => {
     const on = b.dataset.stab === tab;
     b.classList.toggle("active", on);
@@ -1068,16 +1075,18 @@ async function switchStockTab(isin, tab) {
   });
   const pane = document.getElementById(`stab-${tab}`);
   if (!pane) return;
+  if (force) delete stockTabLoaded[isin + tab];
   if (!stockTabLoaded[isin + tab]) {
     stockTabLoaded[isin + tab] = true;
     try {
       const endpoint = tab === "statements" ? "financials" : tab;
-      const data = await App.api(`/securities/${encodeURIComponent(isin)}/${endpoint}`).catch(() => null);
-      if (data) stockTabCache[isin + tab] = data;
-      pane.innerHTML = renderStockTab(tab, stockTabCache[isin + tab]);
+      const data = await App.api(`/securities/${encodeURIComponent(isin)}/${endpoint}`)
+        .catch(e => { throw new Error(e && e.message || "Request failed"); });
+      stockTabCache[isin + tab] = data;
+      pane.innerHTML = renderStockTab(tab, data);
     } catch (e) {
       stockTabLoaded[isin + tab] = false;
-      pane.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
+      pane.innerHTML = _tabErrorHtml(e.message, `switchStockTab('${isin}','${tab}',true)`);
     }
   }
 }
@@ -1216,7 +1225,7 @@ async function renderSecurityAnalytics(isin, container, titleEl) {
   }
 }
 
-async function switchAnalyticsTab(isin, tab) {
+async function switchAnalyticsTab(isin, tab, force) {
   document.querySelectorAll("#screen-secanalytics [data-antab]").forEach(b =>
     b.classList.toggle("active", b.dataset.antab === tab));
   STOCK_TABS.forEach(([id]) => {
@@ -1225,17 +1234,19 @@ async function switchAnalyticsTab(isin, tab) {
   });
   const pane = document.getElementById(`an-pane-${tab}`);
   if (!pane) return;
+  if (force) delete secAnLoaded[isin + tab];
   if (!secAnLoaded[isin + tab]) {
     secAnLoaded[isin + tab] = true;
     try {
       const endpoint = tab === "statements" ? "financials" : tab;
-      const data = await App.api(`/securities/${encodeURIComponent(isin)}/${endpoint}`).catch(() => null);
-      if (data) secAnCache[isin + tab] = data;
-      pane.innerHTML = renderAnalyticsTab(tab, secAnCache[isin + tab]);
+      const data = await App.api(`/securities/${encodeURIComponent(isin)}/${endpoint}`)
+        .catch(e => { throw new Error(e && e.message || "Request failed"); });
+      secAnCache[isin + tab] = data;
+      pane.innerHTML = renderAnalyticsTab(tab, data);
       if (tab === "technical") mountTechnicalOverlay(isin);
     } catch (e) {
       secAnLoaded[isin + tab] = false;
-      pane.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
+      pane.innerHTML = _tabErrorHtml(e.message, `switchAnalyticsTab('${isin}','${tab}',true)`);
     }
   }
 }

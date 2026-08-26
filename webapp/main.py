@@ -246,12 +246,32 @@ def _start_scheduler_thread() -> None:
     _job_runner_started = True
 
 
+def _warm_factor_cache() -> None:
+    """Pre-compute the cross-sectional factor scores [factor-v1.0.0] in the
+    background so the first user click on the Factors tab is instant — a cold
+    compute walks every tracked equity (tens of seconds, longer on a fresh
+    container pulling history files from R2). Failures degrade silently: the
+    endpoint then simply computes on demand."""
+    def _loop() -> None:
+        try:
+            get_db().factor_universe_scores()
+            log.info("factor universe cache warmed")
+        except Exception:
+            log.exception("factor cache warm-up failed; will compute on demand")
+
+    threading.Thread(target=_loop, name="factor-warmup", daemon=True).start()
+
+
 @app.on_event("startup")
 def _on_startup() -> None:
     try:  # [S2b] a dead scheduler must degrade, never brick the deployment
         _start_scheduler_thread()
     except Exception:
         log.exception("scheduler startup failed; web tier continues without it")
+    try:
+        _warm_factor_cache()
+    except Exception:
+        log.exception("factor warm-up kickoff failed; web tier continues")
     try:  # [H4] surface a missing SECRET_KEY at boot, not on first login
         auth._get_secret()
     except auth.SecretNotConfiguredError as e:

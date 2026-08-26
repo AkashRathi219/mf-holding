@@ -56,6 +56,23 @@ INVERTED_COMPONENTS = frozenset((
 
 # ---- per-stock raw metrics -----------------------------------------------------
 
+_MONTHS = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+           "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12}
+
+
+def _iso_date(d: str) -> str:
+    """``DD-Mon-YYYY`` (stock history stamp) -> ``YYYY-MM-DD`` (TR CSV key).
+
+    Locale-free month map — ``%b`` parsing silently breaks under non-English
+    locales, and an unmatched stamp passes through (lookup then misses, beta
+    degrades honestly instead of crashing)."""
+    try:
+        dd, mon, yy = d.split("-")
+        return f"{int(yy):04d}-{_MONTHS[mon.lower()[:3]]:02d}-{int(dd):02d}"
+    except (ValueError, KeyError, AttributeError):
+        return d
+
+
 def _daily_returns(closes: list[float]) -> list[float]:
     return [b / a - 1.0 for a, b in zip(closes, closes[1:])
             if a > 0 and b > 0]
@@ -125,7 +142,22 @@ def momentum_metrics(closes: list[float | None]) -> dict:
 def lowvol_metrics(closes: list[float | None],
                    bench_closes: list[tuple[str, float]] | None = None,
                    stock_dates: list[str] | None = None) -> dict:
-    vals = [v for v in closes if v is not None][-252:]
+    """Trailing 252-bar low-volatility metrics.
+
+    ``stock_dates`` must align 1:1 with ``closes`` (the caller's window).
+    Null closes drop out TOGETHER WITH their dates before the trailing
+    window is taken, so a gap in the middle can never shift the remaining
+    dates against the closes [factor-v1.0.1]. Benchmark lookup normalises
+    both sides to ISO: stock history carries ``DD-Mon-YYYY`` stamps while
+    the NIFTY TR CSVs are ``YYYY-MM-DD``."""
+    if stock_dates and len(stock_dates) != len(closes):
+        stock_dates = None   # misaligned caller input: degrade, never guess
+    if stock_dates:
+        paired = [(d, v) for d, v in zip(stock_dates, closes)
+                  if v is not None][-252:]
+    else:
+        paired = [(None, v) for v in closes if v is not None][-252:]
+    vals = [v for _, v in paired]
     out = {k: None for k in LOWVOL_COMPONENTS}
     if len(vals) < MIN_BARS:
         return out
@@ -141,9 +173,9 @@ def lowvol_metrics(closes: list[float | None],
     if bench_closes and stock_dates:
         bmap = {d: v for d, v in bench_closes}
         pairs_s, pairs_b = [], []
-        for d, c in zip(stock_dates[-253:], vals):
-            bv = bmap.get(d)
-            if bv is not None and c is not None:
+        for d, c in paired:
+            bv = bmap.get(_iso_date(d))
+            if bv is not None:
                 pairs_s.append(c)
                 pairs_b.append(bv)
         sr, br = _daily_returns(pairs_s), _daily_returns(pairs_b)

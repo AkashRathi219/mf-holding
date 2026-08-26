@@ -2979,6 +2979,10 @@ class WebDB:
                        or doc.get("quarters")) else None
 
     _FACTOR_CACHE: dict = {"key": None, "payload": None}
+    # Cold compute walks every tracked equity (hundreds of file reads, tens
+    # of seconds); concurrent first requests must share one computation
+    # instead of stampeding [factor-v1.0.0].
+    _FACTOR_LOCK = threading.Lock()
 
     def factor_universe_scores(self, max_stale_hours: float = 6.0) -> dict:
         """Cross-sectional factor scores [factor-v1.0.0] over every tracked
@@ -2987,46 +2991,57 @@ class WebDB:
         from .factor_scores import (
             compute_factor_scores, lowvol_metrics, momentum_metrics,
             value_metrics, quality_metrics)
-        rows = self.con.execute(
-            "SELECT isin, name, sector, cap FROM securities "
-            "WHERE confirmed_equity=1 ORDER BY name").fetchall()
-        stamp = _time.time()
-        cached = self._FACTOR_CACHE
-        if cached["payload"] is not None and cached["key"] is not None \
-                and stamp - cached["key"] < max_stale_hours * 3600:
-            return cached["payload"]
-        bench = self._load_tr_index("NIFTY 500") or []
-        raw: dict[str, dict] = {}
-        sectors: dict[str, str] = {}
-        for r in rows:
-            isin = r["isin"]
-            ohlcv = self.stock_ohlcv(isin)
-            if not ohlcv:
-                continue
-            closes, dates = ohlcv["close"], ohlcv["dates"]
-            tail = closes[-400:]
-            rec = {
-                "name": r["name"], "sector": r["sector"], "cap": r["cap"],
-                "points": sum(1 for v in closes if v is not None),
-                "momentum": momentum_metrics(tail),
-                "lowvol": lowvol_metrics(tail, bench,
-                                         dates[-len(tail):] if bench else None),
-            }
-            price = closes[-1] if closes and closes[-1] else None
-            fin_doc = self._load_stock_financials(isin)
-            if fin_doc and price:
-                snap = self.fundamental_snapshot(fin_doc)
-                if snap:
-                    rec["value"] = value_metrics(price, snap.get("value"))
-                    rec["quality"] = quality_metrics(snap.get("quality"))
-            raw[isin] = rec
-            sectors[isin] = r["sector"] or ""
-        payload = compute_factor_scores(raw, sectors)
-        payload["as_of"] = dates[-1] if rows and raw else None
-        payload["benchmark"] = "NIFTY 500 TR"
-        self._FACTOR_CACHE["key"] = stamp
-        self._FACTOR_CACHE["payload"] = payload
-        return payload
+
+        def _fresh() -> bool:
+            c = self._FACTOR_CACHE
+            now = _time.time()
+            return (c["payload"] is not None and c["key"] is not None
+                    and now - c["key"] < max_stale_hours * 3600)
+
+        if _fresh():
+            return self._FACTOR_CACHE["payload"]
+        with self._FACTOR_LOCK:
+            if _fresh():          # another thread finished the cold compute
+                return self._FACTOR_CACHE["payload"]
+            bench = self._load_tr_index("NIFTY 500") or []
+            raw: dict[str, dict] = {}
+            sectors: dict[str, str] = {}
+            as_of = None
+            for r in self.con.execute(
+                    "SELECT isin, name, sector, cap FROM securities "
+                    "WHERE confirmed_equity=1 ORDER BY name").fetchall():
+                isin = r["isin"]
+                ohlcv = self.stock_ohlcv(isin)
+                if not ohlcv:
+                    continue
+                closes, dates = ohlcv["close"], ohlcv["dates"]
+                tail = closes[-400:]
+                rec = {
+                    "name": r["name"], "sector": r["sector"], "cap": r["cap"],
+                    "points": sum(1 for v in closes if v is not None),
+                    "momentum": momentum_metrics(tail),
+                    "lowvol": lowvol_metrics(tail, bench,
+                                             dates[-len(tail):] if bench else None),
+                }
+                if dates:
+                    as_of = dates[-1]
+                price = closes[-1] if closes and closes[-1] else None
+                fin_doc = self._load_stock_financials(isin)
+                if fin_doc and price:
+                    snap = self.fundamental_snapshot(fin_doc)
+                    if snap:
+                        rec["value"] = value_metrics(price, snap.get("value"))
+                        rec["quality"] = quality_metrics(snap.get("quality"))
+                raw[isin] = rec
+                sectors[isin] = r["sector"] or ""
+            payload = compute_factor_scores(raw, sectors)
+            # as_of comes from the loop (never from a leaked loop variable —
+            # an empty universe must yield None, not a NameError)
+            payload["as_of"] = as_of
+            payload["benchmark"] = "NIFTY 500 TR"
+            self._FACTOR_CACHE["key"] = _time.time()
+            self._FACTOR_CACHE["payload"] = payload
+            return payload
 
     def fundamental_snapshot(self, fin_doc: dict) -> dict | None:
         """Per-share basics for factor scoring from a statement document.

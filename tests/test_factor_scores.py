@@ -84,6 +84,43 @@ def test_ols_beta_exact_linear_relation():
     assert _ols_beta(ys, xs) == pytest.approx(1.5, rel=1e-9)
 
 
+def test_iso_date_normalizer():
+    from webapp.factor_scores import _iso_date
+    assert _iso_date("26-Aug-2026") == "2026-08-26"
+    assert _iso_date("01-Jan-1999") == "1999-01-01"
+    assert _iso_date("2026-08-26") == "2026-08-26"   # already ISO: pass through
+    assert _iso_date("garbage") == "garbage"          # unmatched: pass through
+
+
+def test_lowvol_beta_aligns_stock_stamps_vs_iso_bench():
+    """Stock history carries DD-Mon-YYYY stamps, the NIFTY TR CSV is ISO —
+    beta must still pair on common dates (regression: coverage was 0/857)."""
+    from datetime import date, timedelta
+
+    d0 = date(2025, 1, 1)
+    bench, closes, stamps = [], [], []
+    level = 100.0
+    for i in range(220):
+        level *= 1.0 + 0.002 * math.sin(i)
+        iso = (d0 + timedelta(days=i)).isoformat()
+        bench.append((iso, round(level, 4)))
+        closes.append(round(level, 4))          # stock == bench -> beta exactly 1
+        stamps.append((d0 + timedelta(days=i)).strftime("%d-%b-%Y"))
+    closes[10] = None                            # mid-series gaps drop out
+    closes[100] = None                           # together with their dates
+    out = lowvol_metrics(closes, bench, stamps)
+    assert out["beta"] == pytest.approx(1.0, rel=1e-9)
+    assert out["vol_252"] is not None
+    assert out["max_drawdown"] is not None
+
+
+def test_lowvol_misaligned_dates_degrade_not_guess():
+    closes = [100.0 + i for i in range(200)]
+    out = lowvol_metrics(closes, [("2025-01-01", 100.0)], ["01-Jan-2025"] * 7)
+    assert out["beta"] is None                   # wrong length: no pairing
+    assert out["vol_252"] is not None            # closes-only stats still run
+
+
 def test_value_metrics_yields_and_inversion():
     snap = {"eps": 10.0, "bvps": 500.0, "sps": 800.0, "cfps": 20.0,
             "ebitda_total": 30.0, "net_debt_total": 70.0, "dps_ttm": 5.0}
@@ -209,3 +246,17 @@ def test_screen_orders_and_clamps():
     assert asc[0]["score"] <= asc[-1]["score"]
     huge = screen(payload, factor="multi", top_n=99_999)
     assert len(huge) <= len(payload["multi_factor"])
+
+
+def test_factor_universe_empty_history_is_honest():
+    """No stock has a readable history -> empty universe must yield
+    as_of=None, not a NameError from a leaked loop variable."""
+    from webapp.db import WebDB
+
+    WebDB._FACTOR_CACHE["key"] = None
+    WebDB._FACTOR_CACHE["payload"] = None
+    payload = WebDB().factor_universe_scores()
+    assert payload["as_of"] is None
+    assert payload["universe_n"] == 0
+    assert payload["factor_scores"] == {}
+    assert payload["benchmark"] == "NIFTY 500 TR"
