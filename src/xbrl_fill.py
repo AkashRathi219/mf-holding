@@ -534,7 +534,8 @@ def select_facts(parsed: list[tuple[dict, dict]]) -> dict[tuple, dict]:
     for row, ff in parsed:
         header, fv = ff["header"], ff.get("face_value")
         _aud, con = filing_preference(row, header)
-        section = "consolidated" if con else "standalone"
+        # con is a preference RANK (0 = consolidated, 1 = standalone)
+        section = "consolidated" if con == 0 else "standalone"
         dur_kinds: dict[str, set[str]] = defaultdict(set)
         for cls, key in ff["periods"]:
             if cls == "D":

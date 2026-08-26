@@ -25,7 +25,8 @@ SCHEMA_VERSION = "stmt-v1.0.0"
 # ---- canonical line items ------------------------------------------------------
 
 INCOME_ITEMS = (
-    "revenue_from_operations", "other_income", "total_income",
+    "revenue_from_operations", "interest_earned", "other_income",
+    "total_income",
     "cost_of_materials", "purchases_stock_in_trade", "changes_in_inventories",
     "employee_benefits", "finance_costs", "depreciation_amortisation",
     "other_expenses", "total_expenses", "ebitda",        # ebitda derived
@@ -96,6 +97,8 @@ def _norm(s: str) -> str:
 _alias("revenue_from_operations", "revenue from operations", "net sales",
        "sales", "income from operations", "total income from operations",
        "operating revenue")
+_alias("interest_earned", "interest earned", "interest and dividend income",
+       "income from interest")
 _alias("other_income", "other income", "other operating income")
 _alias("total_income", "total income", "total revenue")
 _alias("cost_of_materials", "cost of materials consumed",
@@ -110,7 +113,8 @@ _alias("changes_in_inventories", "increases/decreases in inventories",
 _alias("employee_benefits", "employee benefits expense", "employee costs",
        "personnel expenses", "employees expense", "staff cost")
 _alias("finance_costs", "finance costs", "finance cost", "interest expense",
-       "interest and finance charges", "borrowing costs", "interest cost")
+       "interest and finance charges", "borrowing costs", "interest cost",
+       "interest expended")
 _alias("depreciation_amortisation",
        "depreciation and amortisation expense",
        "depreciation & amortization", "depreciation",
@@ -122,7 +126,8 @@ _alias("exceptional_items", "exceptional items", "extraordinary items")
 _alias("pbt", "profit before tax", "profit/(loss) before tax",
        "profit before exceptional items and tax",
        "profit before tax and exceptional items",
-       "profit before share of associates and tax")
+       "profit before share of associates and tax",
+       "profit from ordinary activities before tax")
 _alias("tax_expense", "tax expense", "current tax", "total tax expense",
        "provision for taxation", "taxation", "income tax expense")
 _alias("pat", "profit after tax", "profit/(loss) after tax", "net profit",
@@ -139,9 +144,10 @@ _alias("total_comprehensive_income", "total comprehensive income",
        "total comprehensive income for the period")
 _alias("eps_basic", "basic eps", "earnings per share basic",
        "basic earnings per share", "eps basic", "basic eps (rs)",
-       "earnings per equity share basic")
+       "earnings per equity share basic", "basic not annualised")
 _alias("eps_diluted", "diluted eps", "earnings per share diluted",
-       "diluted earnings per share", "earnings per equity share diluted")
+       "diluted earnings per share", "earnings per equity share diluted",
+       "diluted not annualised")
 
 _alias("share_capital", "share capital", "equity share capital",
        "paid-up share capital", "paid up equity share capital")
@@ -321,6 +327,13 @@ _DATE_PATTERNS = (
                r"[,\s]*(\d{4})", re.I),
     # 30-06-2026 / 30/06/2026
     re.compile(r"^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$"),
+    # 31-Mar-26 / 30th June 26 (day-first, 2-digit year — common column
+    # header form; without this the shorthand pattern below silently
+    # drops the day and every column collapses to day=1)
+    re.compile(r"(\d{1,2})(?:st|nd|rd|th)?[-/\. ]+"
+               r"(january|february|march|april|may|june|july|august|"
+               r"september|october|november|december|jan|feb|mar|apr|jun|"
+               r"jul|aug|sept|sep|oct|nov|dec)[-/\.\s]*(\d{2,4})\b", re.I),
     # Jun'26 / Jun-26 / Jun.26 (header shorthand, no day)
     re.compile(r"(january|february|march|april|may|june|july|august|"
                r"september|october|november|december|jan|feb|mar|apr|jun|"
@@ -361,6 +374,10 @@ def parse_period_date(text: str) -> tuple[int, int, int] | None:
         elif pi == 2:                        # DD-MM-YYYY
             month_n, day_n = int(groups[1]), int(groups[0])
             year = groups[2]
+        elif pi == 3:                        # DD-Mon-YY (day-first, short year)
+            day_g, mon_g, year_g = groups
+            month_n = _MONTH_NUM.get(mon_g.lower(), 0)
+            day_n, year = int(day_g), year_g
         else:                                # Mon'YY shorthand -> day=1
             mon_g, year = groups
             day_n = 1
@@ -449,7 +466,10 @@ def validate_statement(rec: dict) -> list[str]:
 
 def derive_ebitda(rec: dict) -> dict:
     """Fill derived keys honestly: ebitda = total_income − total_expenses
-    (+ exceptional add-back) when inputs exist; total_debt = LT + ST."""
+    (+ exceptional add-back) when inputs exist; total_debt = LT + ST;
+    bank revenue = interest earned + other income (bank P&Ls have no
+    'revenue from operations' line); net worth = capital + reserves when
+    the filing prints no 'total equity' row."""
     out = dict(rec)
 
     def g(k):
@@ -469,6 +489,18 @@ def derive_ebitda(rec: dict) -> dict:
         lt, st = g("borrowings_non_current"), g("borrowings_current")
         if lt is not None or st is not None:
             out["total_debt"] = (lt or 0.0) + (st or 0.0)
+    if g("revenue_from_operations") is None:
+        # bank-format P&L: revenue = interest earned + other income; fires
+        # only when an explicit interest-earned row exists, never for a
+        # manufacturing statement whose 'total income' already contains
+        # non-operating income
+        ie = g("interest_earned")
+        if ie is not None:
+            out["revenue_from_operations"] = ie + (g("other_income") or 0.0)
+    if g("total_equity") is None:
+        cap, res = g("share_capital"), g("reserves_surplus")
+        if cap is not None and res is not None:
+            out["total_equity"] = cap + res
     if g("net_worth") is None and g("total_equity") is not None:
         out["net_worth"] = g("total_equity")
     if g("total_liabilities") is None:
