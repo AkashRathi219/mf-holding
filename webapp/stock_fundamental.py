@@ -1,4 +1,4 @@
-"""Fundamental-analysis engine [fund-v1.0.0].
+"""Fundamental-analysis engine [fund-v1.1.0].
 
 Pure functions over a normalised statement document (data/stock_financials/
 <ISIN>.json produced by src/financial_statements.py) plus the latest close
@@ -12,14 +12,23 @@ from the price history. House rules:
   outstanding are derived from the EPS bridge (PAT / basic EPS) and never
   invented when either side is missing.
 
+v1.1.0 adds ``build_annual_table``: the three statements collapsed to the
+available audited fiscal years (up to five, gaps left honest), per-year
+computed metrics inside the same grid, and a multi-year analysis block
+below it (CAGR / averages & consistency / volatility / trend). Each table
+payload carries consistency ``checks``, ``warnings`` and the documented
+``assumptions`` the numbers rest on.
+
 Compliance: descriptive accounting arithmetic on filed public statements.
 Not advice; callers render the standard disclaimer.
 """
 from __future__ import annotations
 
 import math
+import statistics
 
-FUND_VERSION = "fund-v1.0.0"
+FUND_VERSION = "fund-v1.1.0"
+FUND_TABLE_VERSION = "fund-table-v1.1.0"
 
 
 def _f(v) -> float | None:
@@ -584,3 +593,471 @@ def _bs_of(rec: dict) -> dict:
             "trade_payables", "borrowings_non_current",
             "borrowings_current", "ppe_net")
     return {k: rec[k] for k in keys if k in rec}
+
+
+# ---------------------------------------------------------------------------
+# annual statement table [fund-table-v1.1.0]
+# ---------------------------------------------------------------------------
+
+# (section, label, canonical key, format)
+#   format "cr"  = Rs crore,   "rps" = Rs per share (EPS/DPS),  "x" = ratio
+_TABLE_ROWS: tuple[tuple[str, str, str, str], ...] = (
+    # ---- income statement
+    ("income", "Revenue from operations", "revenue_from_operations", "cr"),
+    ("income", "Other income", "other_income", "cr"),
+    ("income", "Total income", "total_income", "cr"),
+    ("income", "Employee benefits", "employee_benefits", "cr"),
+    ("income", "Finance costs", "finance_costs", "cr"),
+    ("income", "Depreciation & amortisation", "depreciation_amortisation", "cr"),
+    ("income", "Other expenses", "other_expenses", "cr"),
+    ("income", "Total expenses", "total_expenses", "cr"),
+    ("income", "EBITDA (derived)", "ebitda", "cr"),
+    ("income", "Profit before tax", "pbt", "cr"),
+    ("income", "Tax expense", "tax_expense", "cr"),
+    ("income", "Profit after tax", "pat", "cr"),
+    ("income", "EPS basic (Rs)", "eps_basic", "rps"),
+    ("income", "DPS (Rs)", "dps", "rps"),
+    # ---- balance sheet
+    ("balance_sheet", "Share capital", "share_capital", "cr"),
+    ("balance_sheet", "Reserves & surplus", "reserves_surplus", "cr"),
+    ("balance_sheet", "Total equity", "total_equity", "cr"),
+    ("balance_sheet", "Total debt (LT + ST)", "total_debt", "cr"),
+    ("balance_sheet", "Cash & equivalents", "cash_equivalents", "cr"),
+    ("balance_sheet", "Inventory", "inventory", "cr"),
+    ("balance_sheet", "Trade receivables", "trade_receivables", "cr"),
+    ("balance_sheet", "Total current assets", "total_current_assets", "cr"),
+    ("balance_sheet", "Total current liabilities",
+     "total_current_liabilities", "cr"),
+    ("balance_sheet", "Total assets", "total_assets", "cr"),
+    # ---- cash flow
+    ("cash_flow", "Operating cash flow", "cfo", "cr"),
+    ("cash_flow", "Investing cash flow", "cfi", "cr"),
+    ("cash_flow", "Financing cash flow", "cff", "cr"),
+    ("cash_flow", "Capex", "capex", "cr"),
+    ("cash_flow", "Free cash flow (CFO - capex)", "fcf", "cr"),
+)
+
+# per-year computed metrics (label, canonical key, format)
+_METRIC_ROWS: tuple[tuple[str, str, str], ...] = (
+    ("Gross margin %", "gross_margin_pct", "pct"),
+    ("EBITDA margin %", "ebitda_margin_pct", "pct"),
+    ("Operating margin %", "operating_margin_pct", "pct"),
+    ("Net margin %", "net_margin_pct", "pct"),
+    ("ROE %", "roe_pct", "pct"),
+    ("ROA %", "roa_pct", "pct"),
+    ("ROCE %", "roce_pct", "pct"),
+    ("Debt / Equity", "debt_to_equity", "x"),
+    ("Current ratio", "current_ratio", "x"),
+    ("Interest coverage x", "interest_coverage", "x"),
+    ("FCF (Rs cr)", "fcf_cr", "cr"),
+    ("OCF / PAT", "ocf_to_pat", "x"),
+    ("Revenue YoY %", "revenue_yoy_pct", "pct"),
+    ("PAT YoY %", "pat_yoy_pct", "pct"),
+    ("EPS YoY %", "eps_yoy_pct", "pct"),
+)
+
+TABLE_ASSUMPTIONS: tuple[str, ...] = (
+    "Columns are audited annual filings (consolidated preferred) for the "
+    "most recent fiscal years available — up to five. Missing years stay "
+    "absent and are never fabricated.",
+    "Indian fiscal-year (Apr-Mar) labels; amounts are Rs crore; per-share "
+    "items (EPS/DPS) are Rupees as printed in the filing, never annualised.",
+    "ROE/ROA average the current and prior year's equity/assets when both "
+    "exist, otherwise they use the current year's figure.",
+    "Debt/Equity uses total debt (long + short-term borrowings) over total "
+    "equity; net debt = total debt - cash.",
+    "EBITDA = total income - total expenses + depreciation + finance costs "
+    "- exceptional items; FCF = operating cash flow - capex.",
+    "BVPS/per-share balance-sheet measures are reported only when a share "
+    "count is derivable from the filings (EPS bridge or paid-up capital / "
+    "face value).",
+    "Multi-year statistics (CAGR, averages, volatility, trend) use only the "
+    "years with valid data and require at least two usable years; CAGR uses "
+    "the actual period span available.",
+    "Growth volatility = sample standard deviation and coefficient of "
+    "variation of the yearly growth series; trend direction is the sign of "
+    "a linear fit over the annual series (for Debt/Equity a falling slope "
+    "counts as improving).",
+    "Every figure is descriptive arithmetic over filed accounts — never "
+    "investment advice. Missing or degenerate inputs are honest nulls, "
+    "never zeros.",
+)
+
+
+def _fy_label(period_end: str | None) -> str:
+    y_raw, m_raw = (str(period_end or "").split("-")[:2] + ["", ""])[:2]
+    if not y_raw.isdigit() or not m_raw.isdigit():
+        return "?"
+    y, m = int(y_raw), int(m_raw)
+    fystart = y - 1 if m <= 3 else y
+    return f"FY{str(fystart + 1)[-2:]:0>2}"
+
+
+def _per_year_metrics(rec: dict, prev: dict | None) -> dict:
+    rev = _f(rec.get("revenue_from_operations"))
+    pat = _f(rec.get("pat"))
+    cp = _f(rec.get("cost_of_materials"))
+    ebitda = _f(rec.get("ebitda")) or derive_ebitda(rec)
+    fin = _f(rec.get("finance_costs"))
+    ebit = _ebit(rec)
+    equity = _avg_with_prev(rec, prev, "total_equity")
+    assets = _avg_with_prev(rec, prev, "total_assets")
+    debt = _f(rec.get("total_debt"))
+    invested = (debt + equity) if None not in (debt, equity) else None
+    ca = _f(rec.get("total_current_assets"))
+    cl = _f(rec.get("total_current_liabilities"))
+    cfo = _f(rec.get("cfo"))
+    capex = _f(rec.get("capex"))
+    fcf = cfo - capex if None not in (cfo, capex) else None
+    out = {
+        "gross_margin_pct": (round((rev - cp) / abs(rev) * 100.0, 2)
+                             if rev and cp is not None else None),
+        "ebitda_margin_pct": _pct(ebitda, rev),
+        "operating_margin_pct": _pct(ebit, rev),
+        "net_margin_pct": _pct(pat, rev),
+        "roe_pct": _pct(pat, equity),
+        "roa_pct": _pct(pat, assets),
+        "roce_pct": _pct(ebit, invested),
+        "debt_to_equity": _ratio(debt, equity),
+        "current_ratio": (round(ca / cl, 2) if ca is not None and cl else None),
+        "interest_coverage": (round(ebit / fin, 1)
+                              if ebit is not None and fin and fin > 0
+                              else None),
+        "fcf_cr": round(fcf, 1) if fcf is not None else None,
+        "ocf_to_pat": (round(cfo / pat, 2) if cfo is not None and pat else None),
+        "revenue_yoy_pct": None, "pat_yoy_pct": None, "eps_yoy_pct": None,
+    }
+    if prev is not None:
+        for key, name in (("revenue_from_operations", "revenue_yoy_pct"),
+                          ("pat", "pat_yoy_pct"), ("eps_basic", "eps_yoy_pct")):
+            c, p = _f(rec.get(key)), _f(prev.get(key))
+            if None not in (c, p) and p != 0:
+                out[name] = round(c / abs(p) * 100.0 - 100.0, 2)
+    return out
+
+
+# ---- multi-year analysis helpers -------------------------------------------------
+
+def _series_mean(vals) -> float | None:
+    a = [v for v in vals if v is not None]
+    return round(statistics.mean(a), 2) if len(a) >= 2 else None
+
+
+def _series_median(vals) -> float | None:
+    a = [v for v in vals if v is not None]
+    return round(statistics.median(a), 2) if len(a) >= 2 else None
+
+
+def _series_std(vals) -> float | None:
+    a = [v for v in vals if v is not None]
+    if len(a) < 2:
+        return None
+    try:
+        return round(statistics.stdev(a), 2)
+    except (statistics.StatisticsError, ValueError):
+        return None
+
+
+def _series_cv(vals) -> float | None:
+    a = [v for v in vals if v is not None]
+    if len(a) < 2:
+        return None
+    m = statistics.mean(a)
+    if not m:
+        return None
+    try:
+        return round(statistics.stdev(a) / abs(m), 3)
+    except (statistics.StatisticsError, ValueError):
+        return None
+
+
+def _trend_dir(vals, invert: bool = False) -> str | None:
+    pts = [(i, v) for i, v in enumerate(vals) if v is not None]
+    if len(pts) < 2:
+        return None
+    n = len(pts)
+    mx = sum(x for x, _ in pts) / n
+    my = sum(y for _, y in pts) / n
+    den = sum((x - mx) ** 2 for x, _ in pts)
+    if not den:
+        return "flat"
+    slope = sum((x - mx) * (y - my) for x, y in pts) / den
+    if invert:
+        slope = -slope
+    if slope > 1e-9:
+        return "improving"
+    if slope < -1e-9:
+        return "declining"
+    return "flat"
+
+
+def _multi_year(columns: list[dict]) -> dict:
+    """Metrics that only make sense across the whole period (>=2 years)."""
+    n = len(columns)
+
+    def metric(key):
+        return [c["metrics"].get(key) for c in columns]
+
+    def value(key):
+        return [c["values"].get(key) for c in columns]
+
+    rev_s, pat_s, eps_s, cfo_s = (value("revenue_from_operations"),
+                                  value("pat"), value("eps_basic"), value("cfo"))
+    cagr = {}
+    for name, series in (("revenue", rev_s), ("pat", pat_s),
+                         ("eps", eps_s), ("cfo", cfo_s)):
+        present = [v for v in series if v is not None]
+        first = present[0] if present else None
+        last = present[-1] if present else None
+        if n >= 2 and first is not None and last is not None \
+                and first > 0 and last > 0 and len(present) >= 2:
+            span = len(present) - 1
+            c = _cagr(last, first, span)
+            cagr[name] = {"pct": round(c * 100.0, 2) if c is not None else None,
+                          "span": span}
+        else:
+            cagr[name] = {"pct": None, "span": None}
+
+    fcf = metric("fcf_cr")
+    fcf_present = [f for f in fcf if f is not None]
+    cumulative_fcf = round(sum(fcf_present), 1) \
+        if n >= 2 and len(fcf_present) >= 2 else None
+
+    nds = []
+    for c in columns:
+        d = c["values"].get("total_debt")
+        cash = c["values"].get("cash_equivalents") or 0.0
+        nds.append(d - cash if d is not None else None)
+    nd_present = [v for v in nds if v is not None]
+    net_debt_change = round(nd_present[-1] - nd_present[0], 1) \
+        if n >= 2 and len(nd_present) >= 2 else None
+
+    rg = metric("revenue_yoy_pct")
+    pg = metric("pat_yoy_pct")
+    pat_present = [p for p in pat_s if p is not None]
+    pos_pat = sum(1 for p in pat_present if p > 0)
+    neg_pat_years = [c["fy"] for c, p in zip(columns, pat_s)
+                     if p is not None and p < 0]
+    rev_present = [r for r in rev_s if r is not None]
+    pos_rev = sum(1 for r in rev_present if r > 0)
+
+    return {
+        "years_n": n,
+        "cagr": cagr,
+        "cumulative_fcf_cr": cumulative_fcf,
+        "net_debt_change_cr": net_debt_change,
+        "averages": {
+            "net_margin_pct": _series_mean(metric("net_margin_pct")),
+            "net_margin_median_pct": _series_median(metric("net_margin_pct")),
+            "ebitda_margin_pct": _series_mean(metric("ebitda_margin_pct")),
+            "roe_pct": _series_mean(metric("roe_pct")),
+            "roa_pct": _series_mean(metric("roa_pct")),
+            "debt_to_equity": _series_mean(metric("debt_to_equity")),
+            "current_ratio": _series_mean(metric("current_ratio")),
+        },
+        "consistency": {
+            "positive_pat_ratio": (round(pos_pat / len(pat_present), 2)
+                                   if pat_present else None),
+            "positive_revenue_ratio": (round(pos_rev / len(rev_present), 2)
+                                       if rev_present else None),
+            "negative_pat_years": neg_pat_years,
+        },
+        "volatility": {
+            "revenue_growth_std_pp": _series_std(rg),
+            "revenue_growth_cv": _series_cv(rg),
+            "pat_growth_std_pp": _series_std(pg),
+            "pat_growth_cv": _series_cv(pg),
+        },
+        "trend": {
+            "revenue": _trend_dir(rev_s),
+            "net_margin_pct": _trend_dir(metric("net_margin_pct")),
+            "roe_pct": _trend_dir(metric("roe_pct")),
+            "debt_to_equity": _trend_dir(metric("debt_to_equity"),
+                                         invert=True),
+        },
+    }
+
+
+# ---- consistency checks & warnings -----------------------------------------------
+
+def _consistency_checks(years: list[dict], quarters: list[dict],
+                        columns: list[dict]) -> dict:
+    """Arithmetic cross-checks on the table. Each value is True / False /
+    None (not checkable). These are descriptive validation hints, never
+    gates — a False just means the filed numbers don't reconcile."""
+
+    def approx(a, b, tol):
+        a, b = _f(a), _f(b)
+        if a is None or b is None:
+            return None
+        if abs(b) <= 1e-9:
+            return abs(a - b) <= 1e-9
+        return abs(a - b) / abs(b) <= tol
+
+    out = []
+    for r in years:
+        ta, te, tl = (_f(r.get("total_assets")), _f(r.get("total_equity")),
+                      _f(r.get("total_liabilities")))
+        if None in (ta, te, tl) or abs(ta) <= 1e-9:
+            continue
+        out.append(abs(ta - (te + tl)) / abs(ta) <= 0.005)
+    checks = {"assets_equal_equity_plus_liabilities":
+              all(out) if out else None}
+
+    out = []
+    for r in years:
+        stored, derived = _f(r.get("ebitda")), derive_ebitda(r)
+        if stored is None or derived is None:
+            continue
+        out.append(approx(stored, derived, 0.01))
+    checks["ebitda_bridge"] = all(out) if out else None
+
+    q_by_fy: dict = {}
+    for q in quarters:
+        q_by_fy.setdefault(q.get("fy"), []).append(
+            _f(q.get("revenue_from_operations")))
+    out = []
+    for r in years:
+        annual_rev = _f(r.get("revenue_from_operations"))
+        present = [v for v in (q_by_fy.get(r.get("fy")) or [])
+                   if v is not None]
+        if annual_rev is None or len(present) < 4:
+            continue
+        out.append(approx(sum(present), annual_rev, 0.02))
+    checks["annual_matches_quarter_sum"] = all(out) if out else None
+
+    revs = [c["values"].get("revenue_from_operations") for c in columns]
+    first = next((v for v in revs if v is not None), None)
+    last = next((v for v in reversed(revs) if v is not None), None)
+    if columns and first and last and first > 0 and last > 0:
+        product, ok_chain = 1.0, True
+        for c in columns[1:]:
+            yoy = c["metrics"].get("revenue_yoy_pct")
+            if yoy is None:
+                ok_chain = False
+                break
+            product *= 1.0 + yoy / 100.0
+        checks["growth_chain_revenue"] = (
+            approx(product, last / first, 0.01) if ok_chain else None)
+    else:
+        checks["growth_chain_revenue"] = None
+
+    out = []
+    for c in columns:
+        m = c["metrics"].get("net_margin_pct")
+        rev = c["values"].get("revenue_from_operations")
+        pat = c["values"].get("pat")
+        if None in (m, rev, pat) or not rev:
+            continue
+        out.append(abs(m - (pat / abs(rev) * 100.0)) <= 0.02)
+    checks["margin_identity"] = all(out) if out else None
+    return checks
+
+
+def _table_warnings(years: list[dict], ttm: dict,
+                    columns: list[dict]) -> list[str]:
+    warnings: list[str] = []
+    n = len(years)
+    if n < 2:
+        warnings.append(f"Only {n} fiscal year{'' if n == 1 else 's'} "
+                        "available — multi-year metrics are limited.")
+    miss_cf = [r.get("fy") for r in years if _f(r.get("cfo")) is None]
+    if miss_cf:
+        warnings.append("Cash-flow items missing for " +
+                        ", ".join(str(f) for f in miss_cf) + ".")
+    miss_bs = [r.get("fy") for r in years
+               if _f(r.get("total_assets")) is None
+               or _f(r.get("total_equity")) is None]
+    if miss_bs:
+        warnings.append("Balance-sheet items missing for " +
+                        ", ".join(str(f) for f in miss_bs) + ".")
+    zero_rev = [r.get("fy") for r in years
+                if _f(r.get("revenue_from_operations")) in (None, 0)]
+    if zero_rev:
+        warnings.append("No revenue recorded for " +
+                        ", ".join(str(f) for f in zero_rev) + ".")
+    neg_pat = [c["fy"] for c in columns
+               if c["values"].get("pat") is not None
+               and c["values"].get("pat") < 0]
+    if neg_pat:
+        warnings.append("Loss years: " + ", ".join(str(f) for f in neg_pat)
+                        + ".")
+    ttm_margin = _pct(_f(ttm.get("pat")), _f(ttm.get("revenue_from_operations")))
+    if ttm_margin is not None and columns:
+        last_margin = columns[-1]["metrics"].get("net_margin_pct")
+        if last_margin is not None and abs(last_margin - ttm_margin) > 5.0:
+            warnings.append(
+                f"TTM net margin ({ttm_margin}%) diverges more than 5pts from "
+                f"the latest audited year ({last_margin}%) — trailing quarters "
+                "differ from the last annual.")
+    return warnings
+
+
+# ---- orchestrator -----------------------------------------------------------------
+
+def build_annual_table(doc: dict) -> dict:
+    """Three statements + per-year metrics + multi-year analysis
+
+    [fund-table-v1.1.0]. Columns are the audited annual records
+    (consolidated preferred) for the most recent fiscal years available,
+    oldest -> newest, capped at five; missing years are absent, never
+    fabricated. Consistent with the house honest-null rule everywhere.
+    """
+    block = pick_block(doc)
+    empty = {"methodology_version": FUND_VERSION,
+             "table_version": FUND_TABLE_VERSION, "available": False}
+    if not block:
+        return {**empty, "note": "no statement block for this ISIN yet"}
+    annuals = _annual_series(block)
+    if not annuals:
+        return {**empty, "note": "no audited annual filings parsed yet"}
+    quarters = _quarter_series(block)
+    years = annuals[-5:]
+    ttm = block.get("ttm") or {}
+    tt_cfo = _f(ttm.get("cfo"))
+    tt_capex = _f(ttm.get("capex"))
+    columns: list[dict] = []
+    for i, rec in enumerate(years):
+        prev = years[i - 1] if i > 0 else None
+        fy = rec.get("fy") or _fy_label(rec.get("period_end"))
+        values: dict = {}
+        for _sec, _label, key, _fmt in _TABLE_ROWS:
+            if key == "fcf":
+                cfo, capex = _f(rec.get("cfo")), _f(rec.get("capex"))
+                values[key] = (round(cfo - capex, 1)
+                               if None not in (cfo, capex) else None)
+            else:
+                values[key] = _f(rec.get(key))
+        columns.append({"fy": fy, "period_end": rec.get("period_end"),
+                        "values": values, "metrics": _per_year_metrics(rec, prev)})
+    return {
+        "methodology_version": FUND_VERSION,
+        "table_version": FUND_TABLE_VERSION,
+        "available": True,
+        "basis": "consolidated" if doc.get("consolidated")
+        else "standalone",
+        "as_of": years[-1].get("period_end") if years else None,
+        "years_n": len(years),
+        "years": [{"fy": c["fy"], "period_end": c["period_end"]}
+                  for c in columns],
+        "rows": [{"section": s, "label": lab, "key": k, "format": f}
+                 for (s, lab, k, f) in _TABLE_ROWS],
+        "metric_rows": [{"label": lab, "key": k, "format": f}
+                        for (lab, k, f) in _METRIC_ROWS],
+        "columns": columns,
+        "ttm": {
+            "window_start": ttm.get("window_start"),
+            "window_end": ttm.get("window_end"),
+            "revenue_from_operations": _f(ttm.get("revenue_from_operations")),
+            "ebitda": _f(ttm.get("ebitda")) or derive_ebitda(ttm),
+            "pat": _f(ttm.get("pat")),
+            "cfo": tt_cfo,
+            "eps_basic": _f(ttm.get("eps_basic")) or _f(ttm.get("eps")),
+            "fcf_cr": (round(tt_cfo - tt_capex, 1)
+                       if None not in (tt_cfo, tt_capex) else None),
+        },
+        "multi_year": _multi_year(columns),
+        "checks": _consistency_checks(years, quarters, columns),
+        "warnings": _table_warnings(years, block.get("ttm") or {}, columns),
+        "assumptions": list(TABLE_ASSUMPTIONS),
+    }

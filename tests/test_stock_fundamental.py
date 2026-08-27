@@ -14,9 +14,10 @@ from __future__ import annotations
 import pytest
 
 from webapp.stock_fundamental import (
-    altman_z, beneish_m, cashflow_quality, compute_fundamentals, dupont,
-    efficiency, FUND_VERSION, growth, leverage, liquidity, per_share_base,
-    piotroski_f, profitability, shares_outstanding, valuation)
+    altman_z, beneish_m, build_annual_table, cashflow_quality,
+    compute_fundamentals, dupont, efficiency, FUND_VERSION, growth, leverage,
+    liquidity, per_share_base, piotroski_f, profitability, shares_outstanding,
+    valuation)
 
 
 def _ttm():
@@ -206,3 +207,174 @@ def test_compute_fundamentals_full_payload_shape():
 def test_compute_fundamentals_no_statements_is_honest():
     payload = compute_fundamentals({}, price=None)
     assert payload["available"] is False
+
+
+# ---- annual statement table [fund-table-v1.1.0] -----------------------------------
+
+# 5 synthetic audited years FY22..FY26: revenue grows 10%/yr, PAT 10%/yr,
+# equity 10%/yr, debt falls by 2/yr, capex == PAT so FCF is a flat 5.0,
+# and inventory/receivables/payables scale with revenue. Expressions are
+# written so every arithmetic identity the engine checks holds exactly.
+def _year_annual(fy, rev, idx, **kw):
+    pat = rev * 0.1
+    pbt = pat / 0.75
+    dep, fin = 4.0, 3.0
+    equity = 40.0 * (1.1 ** idx)
+    rec = {
+        "period_end": f"{2022 + idx}-03-31", "fy": fy, "kind": "FY",
+        "cumulative": True,
+        "revenue_from_operations": rev, "other_income": 2.0,
+        "total_income": rev + 2.0,
+        "cost_of_materials": rev * 0.6, "employee_benefits": rev * 0.05,
+        "finance_costs": fin, "depreciation_amortisation": dep,
+        "other_expenses": rev * 0.1, "total_expenses": rev + 2.0 - pbt,
+        "ebitda": pbt + dep + fin, "exceptional_items": 0.0,
+        "pbt": pbt, "tax_expense": pbt * 0.25, "pat": pat,
+        "eps_basic": pat / 2.0, "share_capital": 20.0,
+        "reserves_surplus": equity - 20.0, "total_equity": equity,
+        "total_debt": 20.0 - 2.0 * idx, "cash_equivalents": 10.0 + idx,
+        "inventory": rev * 0.15, "trade_receivables": rev * 0.2,
+        "trade_payables": rev * 0.1, "total_current_assets": rev * 0.7,
+        "total_current_liabilities": rev * 0.4, "total_assets": rev,
+        "total_liabilities": rev - equity,
+        "cfo": pat + 5.0, "capex": pat, "cfi": -8.0, "cff": -5.0,
+        "net_change_in_cash": 1.0,
+    }
+    rec.update(kw)
+    return rec
+
+
+def _fy_quarters(quarters, fy, apr_year, rev):
+    vals = (0.20, 0.25, 0.25, 0.30)
+    ends = [(apr_year, 6), (apr_year, 9), (apr_year, 12), (apr_year + 1, 3)]
+    for qi, (frac, (y, m)) in enumerate(zip(vals, ends)):
+        quarters.append({
+            "period_end": f"{y}-03-31" if m == 3 else f"{y}-{m:02d}-30",
+            "fy": fy, "kind": "Q", "quarter": f"Q{qi + 1}",
+            "cumulative": False, "revenue_from_operations": round(rev * frac, 4),
+        })
+
+
+def _table_doc():
+    annuals, quarters = [], []
+    for idx in range(5):
+        fy = f"FY{22 + idx}"
+        rev = 100.0 * (1.1 ** idx)
+        annuals.append(_year_annual(fy, rev, idx))
+        _fy_quarters(quarters, fy, 2021 + idx, rev)
+    return {"consolidated": {"quarters": quarters, "annual": annuals, "ttm": {}},
+            "validation": {"confidence": 100}}
+
+
+def test_table_columns_are_audited_fiscal_years():
+    t = build_annual_table(_table_doc())
+    assert t["available"] is True
+    assert [y["fy"] for y in t["years"]] == ["FY22", "FY23", "FY24", "FY25", "FY26"]
+    assert t["years_n"] == 5
+    rev = [c["values"]["revenue_from_operations"] for c in t["columns"]]
+    assert rev == pytest.approx([100.0, 110.0, 121.0, 133.1, 146.41])
+    assert t["methodology_version"] == FUND_VERSION
+    assert t["table_version"] == "fund-table-v1.1.0"
+
+
+def test_table_per_year_metrics_hand_computed():
+    t = build_annual_table(_table_doc())
+    c0, c1 = t["columns"][0], t["columns"][1]
+    assert c0["metrics"]["net_margin_pct"] == pytest.approx(10.0)
+    assert c0["metrics"]["gross_margin_pct"] == pytest.approx(40.0)
+    assert c0["metrics"]["current_ratio"] == pytest.approx(1.75)
+    assert c0["metrics"]["debt_to_equity"] == pytest.approx(20.0 / 40.0)
+    assert c0["metrics"]["roe_pct"] == pytest.approx(round(10.0 / 40.0 * 100, 2))
+    assert c1["metrics"]["roe_pct"] == pytest.approx(round(11.0 / ((44.0 + 40.0) / 2) * 100, 2))
+    assert c0["metrics"]["fcf_cr"] == pytest.approx(5.0)
+
+
+def test_table_yoy_cagr_and_multi_year_hand_computed():
+    t = build_annual_table(_table_doc())
+    yoy = [c["metrics"]["revenue_yoy_pct"] for c in t["columns"]]
+    assert yoy == [None, 10.0, 10.0, 10.0, 10.0]
+    c = t["multi_year"]["cagr"]
+    assert c["revenue"] == {"pct": 10.0, "span": 4}
+    assert c["pat"]["pct"] == pytest.approx(10.0)
+    assert t["multi_year"]["cumulative_fcf_cr"] == pytest.approx(25.0)
+    assert t["multi_year"]["net_debt_change_cr"] == pytest.approx(-12.0)
+    assert t["multi_year"]["consistency"]["positive_pat_ratio"] == pytest.approx(1.0)
+    assert t["multi_year"]["consistency"]["negative_pat_years"] == []
+    assert t["multi_year"]["volatility"]["revenue_growth_std_pp"] == pytest.approx(0.0)
+
+
+def test_table_trends_and_checks():
+    t = build_annual_table(_table_doc())
+    trd = t["multi_year"]["trend"]
+    assert trd["revenue"] == "improving"
+    assert trd["net_margin_pct"] == "flat"
+    chk = t["checks"]
+    for key in ("assets_equal_equity_plus_liabilities", "ebitda_bridge",
+                "annual_matches_quarter_sum", "growth_chain_revenue",
+                "margin_identity"):
+        assert chk[key] is True
+    assert t["warnings"] == []
+
+
+def test_table_single_year_is_honest():
+    doc = _table_doc()
+    doc["consolidated"]["annual"] = doc["consolidated"]["annual"][-1:]
+    t = build_annual_table(doc)
+    assert t["years_n"] == 1
+    assert t["columns"][0]["fy"] == "FY26"
+    assert t["multi_year"]["cagr"]["revenue"]["pct"] is None
+    assert t["multi_year"]["cagr"]["revenue"]["span"] is None
+    assert t["multi_year"]["cumulative_fcf_cr"] is None
+    assert t["multi_year"]["averages"]["net_margin_pct"] is None
+    assert t["multi_year"]["trend"]["revenue"] is None
+    assert any("Only 1 fiscal year" in w for w in t["warnings"])
+
+
+def test_table_missing_cashflow_warns_and_nulls_fcf():
+    doc = _table_doc()
+    rec = doc["consolidated"]["annual"][-1]
+    rec["cfo"], rec["capex"] = None, None
+    t = build_annual_table(doc)
+    assert t["columns"][-1]["metrics"]["fcf_cr"] is None
+    assert t["columns"][-1]["values"]["cfo"] is None
+    assert any("Cash-flow items missing" in w for w in t["warnings"])
+
+
+def test_table_negative_pat_year_flagged():
+    doc = _table_doc()
+    doc["consolidated"]["annual"][-1]["pat"] = -5.0
+    t = build_annual_table(doc)
+    assert "FY26" in t["multi_year"]["consistency"]["negative_pat_years"]
+    assert t["multi_year"]["consistency"]["positive_pat_ratio"] == pytest.approx(0.8)
+    assert any("Loss years" in w for w in t["warnings"])
+
+
+def test_table_bank_like_doc_has_null_gross_margin():
+    doc = _table_doc()
+    for rec in doc["consolidated"]["annual"]:
+        rec["cost_of_materials"] = None
+    t = build_annual_table(doc)
+    assert all(c["metrics"]["gross_margin_pct"] is None for c in t["columns"])
+    assert all(c["metrics"]["net_margin_pct"] is not None for c in t["columns"])
+
+
+def test_table_ttm_snapshot_and_standalone_fallback():
+    doc = _table_doc()
+    doc["consolidated"]["ttm"] = {"revenue_from_operations": 500.0, "pat": 50.0,
+                                  "ebitda": 120.0, "cfo": 60.0, "capex": 10.0,
+                                  "eps": 5.0, "window_start": "2025-03-31",
+                                  "window_end": "2025-12-31"}
+    t = build_annual_table(doc)
+    assert t["ttm"]["revenue_from_operations"] == 500.0
+    assert t["ttm"]["fcf_cr"] == 50.0
+    assert t["ttm"]["eps_basic"] == 5.0
+    cons = doc.pop("consolidated")
+    doc["standalone"] = cons
+    t2 = build_annual_table(doc)
+    assert t2["available"] is True and t2["basis"] == "standalone"
+
+
+def test_table_no_statement_is_honest():
+    assert build_annual_table({})["available"] is False
+    assert build_annual_table(
+        {"consolidated": {"annual": [], "quarters": [], "ttm": {}}})["available"] is False

@@ -1188,7 +1188,7 @@ async function switchStockTab(isin, tab, force) {
   if (!stockTabLoaded[isin + tab]) {
     stockTabLoaded[isin + tab] = true;
     try {
-      const endpoint = tab === "statements" ? "financials" : tab;
+      const endpoint = tab === "statements" ? "financials/table" : tab;
       const data = await App.api(`/securities/${encodeURIComponent(isin)}/${endpoint}`)
         .catch(e => { throw new Error(e && e.message || "Request failed"); });
       stockTabCache[isin + tab] = data;
@@ -1204,6 +1204,104 @@ function _kvGrid(pairs) {
   return `<table class="data" style="min-width:0"><tbody>${pairs.map(
     ([k, v]) => `<tr><td style="color:var(--text-2);font-weight:600;width:45%">${k}</td><td>${v}</td></tr>`
   ).join("")}</tbody></table>`;
+}
+
+// Statements tab: three statements as rows, audited fiscal years as columns,
+// per-year computed metrics in the same grid, and a multi-year analysis block
+// below (CAGR / averages & consistency / volatility / trend) plus arithmetic
+// consistency checks and the documented assumptions. [fund-table-v1.1.0]
+function renderAnnualTable(d) {
+  if (!d || d.available === false)
+    return `<div class="empty">${App.esc(d && d.note ? d.note : "No parsed statements yet.")}</div>`;
+  const num = (v, dp = 2) => v === null || v === undefined ? "—" : App.formatNum(v, dp);
+  const ttm = d.ttm || {};
+  const cols = d.columns || [];
+  if (!cols.length)
+    return `<div class="empty">No audited annual statements parsed yet.</div>`;
+  const mY = d.multi_year || {};
+  const cagr = mY.cagr || {}, avg = mY.averages || {}, cons = mY.consistency || {},
+        vol = mY.volatility || {}, trd = mY.trend || {};
+  const fmt = (v, format) => {
+    if (v === null || v === undefined) return "—";
+    if (format === "cr") return num(v, 0);
+    if (format === "rps") return "₹" + num(v, 2);
+    if (format === "pct") return num(v, 2) + "%";
+    return num(v, 2);
+  };
+  const trendBadge = s => !s ? "—" : App.badge(s, s === "improving" ? "green" : s === "declining" ? "red" : "grey");
+  const secHead = label => `<tr style="background:var(--bg-2)"><td colspan="${cols.length + 1}" style="font-weight:700;letter-spacing:.02em">${label}</td></tr>`;
+  const valRow = (label, key, format, from) =>
+    `<tr><td>${label}</td>${cols.map(c => {
+      const v = from === "metrics" ? c.metrics[key] : c.values[key];
+      return `<td class="num">${fmt(v, format)}</td>`;
+    }).join("")}</tr>`;
+
+  const bodyRows = [];
+  const sections = [["income", "Income statement"], ["balance_sheet", "Balance sheet"], ["cash_flow", "Cash flow"]];
+  sections.forEach(([sec, label]) => {
+    const rs = (d.rows || []).filter(r => r.section === sec);
+    if (rs.length) bodyRows.push(secHead(label), ...rs.map(r => valRow(r.label, r.key, r.format, "values")));
+  });
+  bodyRows.push(secHead("Computed metrics"));
+  (d.metric_rows || []).forEach(r => bodyRows.push(valRow(r.label, r.key, r.format, "metrics")));
+
+  const cagrCell = (label, k) => {
+    const g = cagr[k];
+    return [label, g && g.pct !== null ? `${num(g.pct, 1)}% <span class="page-sub">(${g.span}y)</span>` : "—"];
+  };
+  const CHECK_LABELS = {
+    assets_equal_equity_plus_liabilities: "Assets = equity + liabilities (≤0.5%)",
+    ebitda_bridge: "EBITDA bridge reconciles (≤1%)",
+    annual_matches_quarter_sum: "Annual revenue matches summed quarters (≤2%)",
+    growth_chain_revenue: "YoY chain compounds to total growth (≤1%)",
+    margin_identity: "Net margin = PAT / revenue",
+  };
+  const checkHtml = Object.keys(d.checks || {}).map(k =>
+    `<tr><td style="font-weight:600">${App.esc(CHECK_LABELS[k] || k)}</td>
+      <td class="r">${d.checks[k] === null ? App.badge("n/a", "grey") : d.checks[k] ? App.badge("ok", "green") : App.badge("fail", "red")}</td></tr>`).join("");
+  const warnings = (d.warnings || []).map(w =>
+    `<div class="page-sub" style="color:var(--amber);margin:2px 0">⚠ ${App.esc(w)}</div>`).join("");
+  const assumptions = (d.assumptions || []).map(a => `<li>${App.esc(a)}</li>`).join("");
+
+  return `
+    <div class="grid auto" style="margin-bottom:12px">
+      <div class="kpi card"><div class="kpi-label">Revenue (TTM)</div><div class="kpi-value">${num(ttm.revenue_from_operations, 0)}</div><div class="kpi-sub">₹ crore · ${App.esc(ttm.window_start || "")} → ${App.esc(ttm.window_end || "")}</div></div>
+      <div class="kpi card"><div class="kpi-label">EBITDA (TTM)</div><div class="kpi-value">${num(ttm.ebitda, 0)}</div><div class="kpi-sub">margin ${ttm.revenue_from_operations ? num((ttm.ebitda || 0) / ttm.revenue_from_operations * 100, 1) : "—"}%</div></div>
+      <div class="kpi card"><div class="kpi-label">PAT (TTM)</div><div class="kpi-value">${num(ttm.pat, 0)}</div><div class="kpi-sub">EPS ₹${num(ttm.eps_basic)}</div></div>
+      <div class="kpi card"><div class="kpi-label">FCF (TTM)</div><div class="kpi-value">${num(ttm.fcf_cr, 0)}</div><div class="kpi-sub">CFO − capex ₹ crore</div></div>
+    </div>
+    ${warnings ? `<div style="margin-bottom:8px">${warnings}</div>` : ""}
+    <div class="table-wrap" style="max-height:60vh;overflow:auto">
+      <table class="data"><thead>
+        <tr><th>Item · ₹ crore unless marked</th>${cols.map(c => `<th class="r">${App.esc(c.fy)}</th>`).join("")}</tr>
+      </thead><tbody>${bodyRows.join("")}</tbody></table>
+    </div>
+    <h3 style="margin-top:16px">Multi-year analysis <span class="page-sub">(across ${(d.years_n || 0)} fiscal year${(d.years_n || 0) === 1 ? "" : "s"})</span></h3>
+    <div class="grid auto" style="margin:10px 0 12px">
+      <div class="kpi card"><div class="kpi-label">Revenue CAGR</div><div class="kpi-value">${cagr.revenue && cagr.revenue.pct !== null ? num(cagr.revenue.pct, 1) + "%" : "—"}</div><div class="kpi-sub">${cagr.revenue && cagr.revenue.span ? cagr.revenue.span + "y span" : "&nbsp;"}</div></div>
+      <div class="kpi card"><div class="kpi-label">PAT CAGR</div><div class="kpi-value">${cagr.pat && cagr.pat.pct !== null ? num(cagr.pat.pct, 1) + "%" : "—"}</div><div class="kpi-sub">${cagr.pat && cagr.pat.span ? cagr.pat.span + "y span" : "&nbsp;"}</div></div>
+      <div class="kpi card"><div class="kpi-label">EPS CAGR</div><div class="kpi-value">${cagr.eps && cagr.eps.pct !== null ? num(cagr.eps.pct, 1) + "%" : "—"}</div><div class="kpi-sub">${cagr.eps && cagr.eps.span ? cagr.eps.span + "y span" : "&nbsp;"}</div></div>
+      <div class="kpi card"><div class="kpi-label">Cumulative FCF</div><div class="kpi-value">${num(mY.cumulative_fcf_cr, 0)}</div><div class="kpi-sub">₹ crore over window</div></div>
+    </div>
+    ${_kvGrid([
+      cagrCell("CFO CAGR", "cfo"),
+      ["Net-debt change (first → last year)", mY.net_debt_change_cr === null || mY.net_debt_change_cr === undefined ? "—" : num(mY.net_debt_change_cr, 0) + " ₹ cr"],
+      ["Avg / median net margin", `${fmt(avg.net_margin_pct, "pct")} / ${fmt(avg.net_margin_median_pct, "pct")}`],
+      ["Avg EBITDA margin · Avg ROE · Avg ROA", `${fmt(avg.ebitda_margin_pct, "pct")} · ${fmt(avg.roe_pct, "pct")} · ${fmt(avg.roa_pct, "pct")}`],
+      ["Avg debt/equity · Avg current ratio", `${fmt(avg.debt_to_equity, "x")} · ${fmt(avg.current_ratio, "x")}`],
+      ["Positive-PAT years", cons.positive_pat_ratio === null || cons.positive_pat_ratio === undefined ? "—" : Math.round(cons.positive_pat_ratio * 100) + "%" + (cons.negative_pat_years && cons.negative_pat_years.length ? ` · losses in ${cons.negative_pat_years.map(App.esc).join(", ")}` : "")],
+      ["Revenue growth σ (pp)", `${vol.revenue_growth_std_pp === null || vol.revenue_growth_std_pp === undefined ? "—" : num(vol.revenue_growth_std_pp, 1)} (CV ${vol.revenue_growth_cv === null || vol.revenue_growth_cv === undefined ? "—" : num(vol.revenue_growth_cv, 2)})`],
+      ["PAT growth σ (pp)", `${vol.pat_growth_std_pp === null || vol.pat_growth_std_pp === undefined ? "—" : num(vol.pat_growth_std_pp, 1)} (CV ${vol.pat_growth_cv === null || vol.pat_growth_cv === undefined ? "—" : num(vol.pat_growth_cv, 2)})`],
+      ["Trend — revenue", trendBadge(trd.revenue)],
+      ["Trend — net margin", trendBadge(trd.net_margin_pct)],
+      ["Trend — ROE", trendBadge(trd.roe_pct)],
+      ["Trend — debt/equity (falling = improving)", trendBadge(trd.debt_to_equity)],
+    ])}
+    ${checkHtml ? `<h3 style="margin-top:16px">Calculation checks</h3><div class="table-wrap"><table class="data" style="min-width:0"><tbody>${checkHtml}</tbody></table></div>` : ""}
+    <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">Methodology & assumptions</summary>
+      <ul style="margin-top:8px;padding-left:18px;line-height:1.6">${assumptions}</ul>
+      <div class="page-sub" style="margin-top:8px">${App.esc(d.disclaimer || "")} Descriptive arithmetic on filed accounts — not investment advice.</div>
+    </details>`;
 }
 
 function renderStockTab(tab, d) {
@@ -1260,26 +1358,7 @@ function renderStockTab(tab, d) {
   }
 
   if (tab === "statements") {
-    const b = d.consolidated || d.standalone;
-    if (!b) return `<div class="empty">No parsed statements yet.</div>`;
-    const ttm = b.ttm || {};
-    const qs = (b.quarters || []).filter(q => !q.cumulative).slice(-8).reverse();
-    const row = q => `<tr><td>${App.esc(q.period_end)}</td>
-      <td class="num">${num(q.revenue_from_operations, 0)}</td>
-      <td class="num">${num(q.ebitda, 0)}</td>
-      <td class="num">${num(q.pat, 0)}</td>
-      <td class="num">${num(q.cfo, 0)}</td></tr>`;
-    return `
-      <div class="grid auto" style="margin-bottom:12px">
-        <div class="kpi card"><div class="kpi-label">Revenue (TTM)</div><div class="kpi-value">${num(ttm.revenue_from_operations, 0)}</div><div class="kpi-sub">₹ crore · ${App.esc(ttm.window_start || "")} → ${App.esc(ttm.window_end || "")}</div></div>
-        <div class="kpi card"><div class="kpi-label">EBITDA (TTM)</div><div class="kpi-value">${num(ttm.ebitda, 0)}</div><div class="kpi-sub">margin ${ttm.revenue_from_operations ? num(ttm.ebitda / ttm.revenue_from_operations * 100, 1) : "—"}%</div></div>
-        <div class="kpi card"><div class="kpi-label">PAT (TTM)</div><div class="kpi-value">${num(ttm.pat, 0)}</div><div class="kpi-sub">EPS ₹${num(ttm.eps_basic)}</div></div>
-        <div class="kpi card"><div class="kpi-label">CFO − capex</div><div class="kpi-value">${num((ttm.cfo || 0) - (ttm.capex || 0), 0)}</div><div class="kpi-sub">FCF ₹ crore</div></div>
-      </div>
-      <div class="table-wrap" style="max-height:40vh;overflow:auto">
-      <table class="data"><thead><tr><th>Quarter end</th><th class="r">Revenue</th><th class="r">EBITDA</th><th class="r">PAT</th><th class="r">CFO</th></tr></thead>
-      <tbody>${qs.map(row).join("") || '<tr><td colspan="5" class="empty">No discrete quarters.</td></tr>'}</tbody></table></div>
-      <div class="page-sub" style="margin-top:8px">₹ crore · ${d.validation ? `confidence ${d.validation.confidence}` : ""} · sources trace via sha256 in file</div>`;
+    return renderAnnualTable(d);
   }
 
   if (tab === "factors") {
@@ -1347,7 +1426,7 @@ async function switchAnalyticsTab(isin, tab, force) {
   if (!secAnLoaded[isin + tab]) {
     secAnLoaded[isin + tab] = true;
     try {
-      const endpoint = tab === "statements" ? "financials" : tab;
+      const endpoint = tab === "statements" ? "financials/table" : tab;
       const data = await App.api(`/securities/${encodeURIComponent(isin)}/${endpoint}`)
         .catch(e => { throw new Error(e && e.message || "Request failed"); });
       secAnCache[isin + tab] = data;
@@ -1421,18 +1500,7 @@ function renderAnalyticsTab(tab, d) {
   }
 
   if (tab === "statements") {
-    const b = d.consolidated || d.standalone;
-    if (!b) return `<div class="empty">No parsed statements yet.</div>`;
-    const annuals = (b.annual || []).slice(-5).reverse();
-    const arow = a => `<tr><td>${App.esc(a.period_end)}</td>
-      <td class="num">${num(a.revenue_from_operations, 0)}</td>
-      <td class="num">${num(a.ebitda, 0)}</td>
-      <td class="num">${num(a.pat, 0)}</td>
-      <td class="num">${num(a.eps_basic)}</td></tr>`;
-    return `${renderStockTab("statements", d)}
-      ${annuals.length ? `<h3 style="margin-top:14px">Annual (₹ crore)</h3><div class="table-wrap"><table class="data">
-        <thead><tr><th>FY end</th><th class="r">Revenue</th><th class="r">EBITDA</th><th class="r">PAT</th><th class="r">EPS ₹</th></tr></thead>
-        <tbody>${annuals.map(arow).join("")}</tbody></table></div>` : ""}`;
+    return renderStockTab("statements", d);
   }
 
   if (tab === "factors") {

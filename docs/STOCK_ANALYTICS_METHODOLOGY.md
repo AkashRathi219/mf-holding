@@ -9,7 +9,8 @@ Version stamps (each payload carries its own):
 - Technical: **`tech-v1.0.0`** (`webapp/stock_technical.py`)
 - Factors:   **`factor-v1.0.0`** (`webapp/factor_scores.py`)
 - Statements:**`stmt-v1.0.0`** (`src/statement_schema.py`)
-- Fundamentals:**`fund-v1.0.0`** (`webapp/stock_fundamental.py`)
+- Fundamentals:**`fund-v1.1.0`** (`webapp/stock_fundamental.py`)
+- Statement table:**`fund-table-v1.1.0`** (annual/cash-flow grid, §4)
 
 ## 1. Technical engine [tech-v1.0.0]
 
@@ -96,7 +97,7 @@ Coverage reality (measured): digital PDFs parse near-perfectly; pure scans
 shares then come from paid-up capital ÷ face value (captured from the
 label), and EPS is derived as PAT/shares and flagged `eps_derived`.
 
-## 4. Fundamentals engine [fund-v1.0.0]
+## 4. Fundamentals engine [fund-v1.1.0]
 
 Pure functions over the statement document + latest close. TTM block drives
 current ratios; balance-sheet fields merge from the latest audited annual
@@ -122,10 +123,63 @@ distress / <2.99 grey / ≥ safe; TL falls back to A − E), Beneish M
 8-variable index with M > −1.78 flagged as a statistical screen — a review
 prompt, never an accusation. Anchors: `tests/test_stock_fundamental.py`.
 
+### 4.1 Annual statement table [fund-table-v1.1.0]
+
+`build_annual_table(doc)` renders the three statements as **rows, audited
+fiscal years as columns** (a single grid per user requirement). Visible in
+the Statements tab via `GET /api/securities/{isin}/financials/table`.
+
+Columns = **last ≤5 distinct audited fiscal years** present in the document,
+ascending (based on period-end), so 1–5 columns in practice — the actual
+coverage at build time is dominated by FY22–FY24 (528 of 673 docs). Years
+are never fabricated: less coverage means fewer columns, never interpolated
+figures.
+
+Row catalog (`_TABLE_ROWS`, grouped Income statement → Balance sheet → Cash
+flow) then computed metrics (`_METRIC_ROWS`); ~25 rows, ₹ crore floats, per-share
+items marked ₹. Computation rules reused from the fundamentals families:
+margins = /revenue; ROE/ROA average previous+current equity/assets when both
+exist; `FCF = CFO − capex`; `EBITDA = TI − TE + Dep + Fin − exceptional`;
+DPS 0 only when a dividend line parsed; denominators ≤0 → honest null.
+
+Per-year metrics include gross/EBITDA/operating/net margins, ROE, ROA, D/E,
+current ratio, interest coverage, FCF, YoY growth.
+
+Multi-year block (only for ≥2 years, else honest nulls):
+- **CAGR** on revenue, PAT, EPS, CFO (same trading-period basis as §4
+  growth; `span = n − 1`);
+- **Averages & consistency**: mean/median margins, mean ROE/ROA/D/E/current
+  ratio, positive-PAT ratio with loss-year labels, cumulative FCF, net-debt
+  change (first → last year);
+- **Volatility of growth**: σ of revenue/PAT YoY growth (pp) + coefficient of
+  variation (σ/|mean| × 100, which stays meaningful on lower growth);
+- **Trend** via simple OLS slope on the last up-to-5 observations:
+  improving (sign > ~slope-equivalent threshold), declining, flat.
+
+Arithmetic checks (`checks`) recompute each statement independently and emit
+pass / fail / not-applicable (tolerances in the payload's assumptions):
+assets = equity + liabilities (±0.5%), EBITDA bridge (from recorded T-format
+lines, ±1%), **quarter-sum cross-check** (sum of discrete quarters within a
+FY vs the audited annual revenue, ±2% — a data-quality canary: a handful of
+docs (≈6%) trip it on upstream parse quirks like an annual figure pulled from
+a different segment while the audited tables themselves still satisfy every
+other check), YoY chain compounding into the total growth (±1%), and net
+margin = PAT/revenue identity.
+
+Warnings (`warnings`) surface honest gaps: balance-sheet / cash-flow items
+missing for a fiscal year, loss years, single-year docs, and large TTM-vs-
+latest-audited margin divergence. Every figure stays null when its inputs are
+absent — nothing is guessed.
+
+Assumptions shipped in the payload are the machine-readable copy of what is
+documented here (audited XBRL/PDF figures, ₹ crore, NSE-only, best-available
+of consolidated vs standalone, traders may restate, etc.).
+
 ## 5. Serving & parity
 
 Webapp endpoints: `/api/securities/{isin}/technical | financials |
-fundamentals | factors`, `/api/factors/universe`, `/api/factors/screen`.
+financials/table | fundamentals | factors`, `/api/factors/universe`,
+`/api/factors/screen`.
 Security drawer renders them under lazy-loaded tabs; every surface shows
 the not-advice disclaimer. Chatapp vendors the engines via
 `chatapp/scripts/sync_from_parent.ps1` and exposes `stock_technicals` +

@@ -3527,6 +3527,23 @@ class WebDB:
         """Raw normalised statements (quarters/annual/TTM) for UI tables."""
         return self._load_stock_financials(isin)
 
+    def annual_financial_table(self, isin: str) -> dict:
+        """[fund-table-v1.1.0] Three statements collapsed to audited fiscal
+        years (years as columns) + per-year metrics + multi-year analysis,
+        with consistency checks and documented assumptions."""
+        from .stock_fundamental import (
+            build_annual_table, FUND_TABLE_VERSION)
+        doc = self._load_stock_financials(isin)
+        if not doc:
+            return {"methodology_version": FUND_TABLE_VERSION,
+                    "available": False,
+                    "note": "no parsed statements for this ISIN yet"}
+        table = build_annual_table(doc)
+        table["isin"] = isin
+        table["symbol"] = doc.get("symbol", "")
+        table["name"] = doc.get("name", "")
+        return table
+
     def list_securities(self, q=None, confirmed_equity=None, cap=None, sector=None,
                         limit=100, offset=0) -> dict:
         where, args = [], []

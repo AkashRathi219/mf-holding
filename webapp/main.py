@@ -667,6 +667,22 @@ def api_security_financials(isin: str, request: Request):
     return doc
 
 
+@app.get("/api/securities/{isin}/financials/table")
+def api_security_financials_table(isin: str, request: Request):
+    """[fund-table-v1.1.0] Income / balance-sheet / cash-flow statement rows
+    across the audited fiscal years (years as columns) with per-year computed
+    metrics, a multi-year analysis block, arithmetic consistency checks and
+    the documented assumptions the figures rest on."""
+    _require_user(request)
+    isin = isin.upper()
+    if not get_db().get_security(isin):
+        raise HTTPException(status_code=404, detail="Security not found.")
+    payload = get_db().annual_financial_table(isin)
+    if payload.get("available"):
+        payload["disclaimer"] = NOT_ADVICE
+    return payload
+
+
 @app.get("/api/securities/{isin}/fundamentals")
 def api_security_fundamentals(isin: str, request: Request):
     """[fund-v1.0.0] Fundamental ratios, DuPont, valuation and composite
