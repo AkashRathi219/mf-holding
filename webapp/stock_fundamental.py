@@ -77,7 +77,16 @@ def pick_block(doc: dict) -> dict | None:
 
 def _annual_series(block: dict) -> list[dict]:
     rows = [r for r in (block.get("annual") or []) if isinstance(r, dict)]
-    return sorted(rows, key=lambda r: r.get("period_end") or "")
+    rows = sorted(rows, key=lambda r: r.get("period_end") or "")
+    seen: set = set()
+    out = []
+    for r in rows:                      # one column per period end — a feed
+        pe = r.get("period_end")        # row plus a parsed record for the
+        if pe in seen:                  # same FY must not render twice
+            continue
+        seen.add(pe)
+        out.append(r)
+    return out
 
 
 def _quarter_series(block: dict) -> list[dict]:
@@ -683,6 +692,25 @@ TABLE_ASSUMPTIONS: tuple[str, ...] = (
     "never zeros.",
 )
 
+TABLE_ASSUMPTIONS_Q: tuple[str, ...] = (
+    "No audited annual filing is parsed for this stock yet, so the columns "
+    "are the latest discrete quarters (unaudited, as reported on NSE's "
+    "results-comparison feed) instead of fiscal years.",
+    "Amounts are Rs crore, converted from the feed's Rs lakh; per-share "
+    "items (EPS, face value) stay in rupees as printed.",
+    "Quarter-over-quarter comparisons are replaced by year-on-year against "
+    "the same quarter of the prior year when that quarter is available.",
+    "Balance-sheet and cash-flow rows are absent from this feed — they stay "
+    "out of the table rather than showing fabricated values; TTM KPIs above "
+    "are sums of the trailing four discrete quarters.",
+    "Growth spans in the multi-year block are counted in quarters when the "
+    "columns are quarters; CAGR over quarters is annualised arithmetically "
+    "and is noisier than a multi-year CAGR.",
+    "Every figure is descriptive arithmetic over reported numbers — never "
+    "investment advice. Missing or degenerate inputs are honest nulls, "
+    "never zeros.",
+)
+
 
 def _fy_label(period_end: str | None) -> str:
     y_raw, m_raw = (str(period_end or "").split("-")[:2] + ["", ""])[:2]
@@ -1001,7 +1029,10 @@ def build_annual_table(doc: dict) -> dict:
     [fund-table-v1.1.0]. Columns are the audited annual records
     (consolidated preferred) for the most recent fiscal years available,
     oldest -> newest, capped at five; missing years are absent, never
-    fabricated. Consistent with the house honest-null rule everywhere.
+    fabricated. When no audited annual filing is parsed yet but discrete
+    quarterly records exist, the table falls back to the latest quarters
+    (period="Q") with explicit unaudited labeling instead of an empty
+    screen. Consistent with the house honest-null rule everywhere.
     """
     block = pick_block(doc)
     empty = {"methodology_version": FUND_VERSION,
@@ -1009,17 +1040,28 @@ def build_annual_table(doc: dict) -> dict:
     if not block:
         return {**empty, "note": "no statement block for this ISIN yet"}
     annuals = _annual_series(block)
-    if not annuals:
-        return {**empty, "note": "no audited annual filings parsed yet"}
     quarters = _quarter_series(block)
-    years = annuals[-5:]
+    if annuals:
+        years = annuals[-5:]
+        period = "FY"
+    elif quarters:
+        years = quarters[-5:]
+        period = "Q"
+    else:
+        return {**empty, "note": "no audited annual filings parsed yet"}
     ttm = block.get("ttm") or {}
     tt_cfo = _f(ttm.get("cfo"))
     tt_capex = _f(ttm.get("capex"))
     columns: list[dict] = []
     for i, rec in enumerate(years):
         prev = years[i - 1] if i > 0 else None
+        if period == "Q":
+            # quarterly columns: YoY must compare the same quarter a year
+            # earlier, not the adjacent column (that would be QoQ)
+            prev = years[i - 4] if i >= 4 else None
         fy = rec.get("fy") or _fy_label(rec.get("period_end"))
+        if period == "Q" and rec.get("quarter"):
+            fy = f"{rec['quarter']} {fy}"
         values: dict = {}
         for _sec, _label, key, _fmt in _TABLE_ROWS:
             if key == "fcf":
@@ -1030,18 +1072,42 @@ def build_annual_table(doc: dict) -> dict:
                 values[key] = _f(rec.get(key))
         columns.append({"fy": fy, "period_end": rec.get("period_end"),
                         "values": values, "metrics": _per_year_metrics(rec, prev)})
+    basis = "consolidated" if doc.get("consolidated") else "standalone"
+    if period == "Q":
+        # only render row groups that actually carry a value — the feed
+        # gives income-statement items, so balance-sheet/cash-flow groups
+        # would be columns of dashes
+        live_sections = {sec for sec, _lab, key, _fmt in _TABLE_ROWS
+                         if any(c["values"].get(key) is not None
+                                for c in columns)}
+        table_rows = [{"section": s, "label": lab, "key": k, "format": f}
+                      for (s, lab, k, f) in _TABLE_ROWS
+                      if s in live_sections]
+    else:
+        table_rows = [{"section": s, "label": lab, "key": k, "format": f}
+                      for (s, lab, k, f) in _TABLE_ROWS]
+    multi_year = _multi_year(columns)
+    if period == "Q":
+        for g in (multi_year.get("cagr") or {}).values():
+            if g.get("span") is not None:
+                g["unit"] = "quarters"
+    warnings = _table_warnings(years, block.get("ttm") or {}, columns)
+    if period == "Q":
+        structurally_absent = ("Cash-flow items missing",
+                               "Balance-sheet items missing")
+        warnings = [w for w in warnings
+                    if not w.startswith(structurally_absent)]
     return {
         "methodology_version": FUND_VERSION,
         "table_version": FUND_TABLE_VERSION,
         "available": True,
-        "basis": "consolidated" if doc.get("consolidated")
-        else "standalone",
+        "basis": basis,
+        "period": period,
         "as_of": years[-1].get("period_end") if years else None,
         "years_n": len(years),
         "years": [{"fy": c["fy"], "period_end": c["period_end"]}
                   for c in columns],
-        "rows": [{"section": s, "label": lab, "key": k, "format": f}
-                 for (s, lab, k, f) in _TABLE_ROWS],
+        "rows": table_rows,
         "metric_rows": [{"label": lab, "key": k, "format": f}
                         for (lab, k, f) in _METRIC_ROWS],
         "columns": columns,
@@ -1056,8 +1122,9 @@ def build_annual_table(doc: dict) -> dict:
             "fcf_cr": (round(tt_cfo - tt_capex, 1)
                        if None not in (tt_cfo, tt_capex) else None),
         },
-        "multi_year": _multi_year(columns),
+        "multi_year": multi_year,
         "checks": _consistency_checks(years, quarters, columns),
-        "warnings": _table_warnings(years, block.get("ttm") or {}, columns),
-        "assumptions": list(TABLE_ASSUMPTIONS),
+        "warnings": warnings,
+        "assumptions": list(TABLE_ASSUMPTIONS_Q if period == "Q"
+                            else TABLE_ASSUMPTIONS),
     }

@@ -1229,6 +1229,8 @@ function renderAnnualTable(d) {
     return num(v, 2);
   };
   const trendBadge = s => !s ? "—" : App.badge(s, s === "improving" ? "green" : s === "declining" ? "red" : "grey");
+  const quarterly = d.period === "Q";
+  const spanLabel = g => g && g.span ? `${g.span}${g.unit === "quarters" ? "Q" : "y"} span` : "&nbsp;";
   const secHead = label => `<tr style="background:var(--bg-2)"><td colspan="${cols.length + 1}" style="font-weight:700;letter-spacing:.02em">${label}</td></tr>`;
   const valRow = (label, key, format, from) =>
     `<tr><td>${label}</td>${cols.map(c => {
@@ -1271,16 +1273,17 @@ function renderAnnualTable(d) {
       <div class="kpi card"><div class="kpi-label">FCF (TTM)</div><div class="kpi-value">${num(ttm.fcf_cr, 0)}</div><div class="kpi-sub">CFO − capex ₹ crore</div></div>
     </div>
     ${warnings ? `<div style="margin-bottom:8px">${warnings}</div>` : ""}
+    ${quarterly ? `<div class="page-sub" style="margin:0 0 8px">${App.badge("unaudited quarterly", "amber")} No audited annual filing parsed yet — columns are the latest reported quarters (NSE results feed); balance-sheet &amp; cash-flow rows are unavailable at this basis.</div>` : ""}
     <div class="table-wrap" style="max-height:60vh;overflow:auto">
       <table class="data"><thead>
         <tr><th>Item · ₹ crore unless marked</th>${cols.map(c => `<th class="r">${App.esc(c.fy)}</th>`).join("")}</tr>
       </thead><tbody>${bodyRows.join("")}</tbody></table>
     </div>
-    <h3 style="margin-top:16px">Multi-year analysis <span class="page-sub">(across ${(d.years_n || 0)} fiscal year${(d.years_n || 0) === 1 ? "" : "s"})</span></h3>
+    <h3 style="margin-top:16px">Multi-year analysis <span class="page-sub">(across ${(d.years_n || 0)} ${quarterly ? "quarter" : "fiscal year"}${(d.years_n || 0) === 1 ? "" : "s"})</span></h3>
     <div class="grid auto" style="margin:10px 0 12px">
-      <div class="kpi card"><div class="kpi-label">Revenue CAGR</div><div class="kpi-value">${cagr.revenue && cagr.revenue.pct !== null ? num(cagr.revenue.pct, 1) + "%" : "—"}</div><div class="kpi-sub">${cagr.revenue && cagr.revenue.span ? cagr.revenue.span + "y span" : "&nbsp;"}</div></div>
-      <div class="kpi card"><div class="kpi-label">PAT CAGR</div><div class="kpi-value">${cagr.pat && cagr.pat.pct !== null ? num(cagr.pat.pct, 1) + "%" : "—"}</div><div class="kpi-sub">${cagr.pat && cagr.pat.span ? cagr.pat.span + "y span" : "&nbsp;"}</div></div>
-      <div class="kpi card"><div class="kpi-label">EPS CAGR</div><div class="kpi-value">${cagr.eps && cagr.eps.pct !== null ? num(cagr.eps.pct, 1) + "%" : "—"}</div><div class="kpi-sub">${cagr.eps && cagr.eps.span ? cagr.eps.span + "y span" : "&nbsp;"}</div></div>
+      <div class="kpi card"><div class="kpi-label">Revenue CAGR</div><div class="kpi-value">${cagr.revenue && cagr.revenue.pct !== null ? num(cagr.revenue.pct, 1) + "%" : "—"}</div><div class="kpi-sub">${spanLabel(cagr.revenue)}</div></div>
+      <div class="kpi card"><div class="kpi-label">PAT CAGR</div><div class="kpi-value">${cagr.pat && cagr.pat.pct !== null ? num(cagr.pat.pct, 1) + "%" : "—"}</div><div class="kpi-sub">${spanLabel(cagr.pat)}</div></div>
+      <div class="kpi card"><div class="kpi-label">EPS CAGR</div><div class="kpi-value">${cagr.eps && cagr.eps.pct !== null ? num(cagr.eps.pct, 1) + "%" : "—"}</div><div class="kpi-sub">${spanLabel(cagr.eps)}</div></div>
       <div class="kpi card"><div class="kpi-label">Cumulative FCF</div><div class="kpi-value">${num(mY.cumulative_fcf_cr, 0)}</div><div class="kpi-sub">₹ crore over window</div></div>
     </div>
     ${_kvGrid([
