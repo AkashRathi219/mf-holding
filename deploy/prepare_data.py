@@ -14,6 +14,7 @@ never writes to ``data/`` (the live local DB is untouched).
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import json
 import shutil
@@ -54,6 +55,62 @@ ROOT_FILES = [
 SKIP_DIRS = {"raw", "stock_bhavcopy", "pdfs", "logs", "downloads", ".staging"}
 
 DBS = ["data/webapp.db", "data/userdata.db", "data/webapp_auth.db"]
+
+# --- upload policy: JSON, plus the few non-JSON files the webapp opens itself ---
+#
+# The app's loaders glob only ``*.json`` out of the parsed stores and the
+# per-scheme/per-ISIN dirs. The remaining non-JSON files in the staged tree are
+# pipeline-side leftovers that no module under ``webapp/`` ever reads: the
+# per-document CSVs under ``parsed/``, the Nifty index constituent PDFs/XLSX,
+# and the NSE bond raw dumps (the runtime artifact is ``bonds_catalog.json``).
+#
+# Those stay out of the bucket. Source PDFs in particular are routed
+# separately and are never staged (see SKIP_DIRS), so a staging run cannot
+# quietly upload the document corpus.
+RUNTIME_NONJSON = (
+    "webapp.db",                      # the frontend database itself
+    "userdata.db",                    # user strategies/models/clients/portfolios
+    "webapp_auth.db",                 # accounts + password hashes
+    "webapp/.secret_key",             # token-signing secret (sessions)
+    "reference/equity_isin.db",
+    "universe/navall.txt",            # db.py NAVALL_TXT
+    "universe/Combined NAV*.csv",     # db.py UNIVERSE_CSV
+    "reference/equity_isins.csv",     # db.py EQUITY_ISINS_CSV
+    "reference/discovery_needed.csv",  # db.py DISCOVERY_NEEDED_CSV
+    "reference/no_disclosure.csv",    # db.py NO_DISCLOSURE_CSV
+    "reference/discontinued_schemes.csv",  # db.py DISCONTINUED_CSV
+    "reference/ter_*.csv",            # sole TER source
+    "data/logs/refresh_state.json",
+)
+
+
+def prune_stage(keep_nonjson: tuple[str, ...]) -> tuple[int, int]:
+    """Delete every staged file that is neither JSON nor explicitly required.
+
+    Runs after copying and before the manifest is written, so the bucket keys,
+    the staged tree and the manifest all describe the same set. Returns
+    ``(files_removed, bytes_removed)``.
+    """
+    removed_n = removed_b = 0
+    for p in sorted(STAGE.rglob("*"), reverse=True):
+        if not p.is_file():
+            continue
+        if p.suffix.lower() == ".json":
+            continue
+        rel = p.relative_to(STAGE).as_posix()
+        if any(fnmatch.fnmatch(rel, pat) for pat in keep_nonjson):
+            continue
+        removed_b += p.stat().st_size
+        p.unlink()
+        removed_n += 1
+    for d in sorted((p for p in STAGE.rglob("*") if p.is_dir()), reverse=True):
+        try:
+            next(d.iterdir())
+        except StopIteration:
+            d.rmdir()
+        except OSError:
+            pass
+    return removed_n, removed_b
 
 
 def sha256(path: Path) -> str:
@@ -134,6 +191,10 @@ def main() -> None:
                 shutil.copy2(p, dst)
             print(f"  staged bond raw dumps: {day_dir.name} ({len(csvs)} files)")
             break
+
+    dropped_n, dropped_b = prune_stage(RUNTIME_NONJSON)
+    print(f"  pruned {dropped_n} non-runtime files ({dropped_b / 1e6:.1f} MB); "
+          f"bucket = JSON + {len(RUNTIME_NONJSON)} required paths")
 
     entries = []
     total = 0
