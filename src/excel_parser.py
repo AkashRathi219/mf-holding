@@ -848,6 +848,9 @@ def _bind_derivatives(result: dict, deriv_sheets: dict[str, dict]) -> None:
         computed_pct = None
         nav_lacs = sd.get("nav_lacs")
         if nav_lacs and abs(nav_lacs) > 0:
+            # Signed on purpose: matches the sheet's own reported subtotal
+            # (direction-signed MVs), so computed-vs-reported reconciliation
+            # is exact. Magnitude is applied downstream (F&O bucket).
             computed_pct = round(mv_total / nav_lacs * 100.0, 4)
         sd["derivatives_pct_nav"] = {
             "reported": sd.pop("derivatives_reported_pct", None),
@@ -863,6 +866,9 @@ def _bind_derivatives(result: dict, deriv_sheets: dict[str, dict]) -> None:
 
 def save_excel_parsed_data(data: dict, output_dir: Path, filename_stem: str) -> None:
     """Save parsed Excel data as JSON and CSV."""
+    from src.document_class import classify
+
+    data["document_class"] = classify(data)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     json_path = output_dir / f"{filename_stem}.json"

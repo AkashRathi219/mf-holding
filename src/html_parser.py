@@ -96,6 +96,9 @@ def _num(value: str):
 
 
 def save_html_parsed_data(data: dict, output_dir: Path, filename_stem: str) -> None:
+    from src.document_class import classify
+
+    data["document_class"] = classify(data)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     json_path = output_dir / f"{filename_stem}.json"

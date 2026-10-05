@@ -573,7 +573,7 @@ def _sample_tx():
         import json
         from pathlib import Path
         SAMPLE_TX = parse_cas_transactions(json.loads(
-            Path(r"D:\opencode\mf_holding\CAS_sample_extracted_transactions.txt")
+            Path(r"D:\opencode\mf_holding\data\CAS_sample_extracted_transactions.txt")
             .read_text(encoding="utf-8")))
     return SAMPLE_TX
 

@@ -185,12 +185,13 @@ def _save_csv_data(parsed: dict, out_dir: Path, stem: str) -> None:
 
 
 # Filenames that are clearly NOT portfolio holdings/factsheet documents.
+# [Phase 5] riskometer disclosures are NO longer dropped: they are downloaded
+# and routed to src/scheme_riskometer.parse_document (see _parse_single_doc).
 _IRRELEVANT_PATTERNS = (
     "tracking-error", "tracking error",
     "market-flash", "market flash",
     "dividend-declaration", "dividend declaration",
     "addendum", "notice",
-    "riskometer", "risk-ometer",
     "nfo", "new fund offer",
     "press-release", "press release",
     "annual-report", "annual report",
@@ -626,12 +627,19 @@ def _parse_single_doc(doc: Path, amc_name: str, year: int, month: int,
                       parsed_dir: Path, force: bool = False) -> bool:
     """Parse a single document into parsed_data/. Returns True on success.
 
-    Skipped (sha256-fresh) documents return False without touching the disk."""
+    Skipped (sha256-fresh) documents return False without touching the disk.
+    [Phase 5] riskometer disclosures are routed to the dedicated riskometer
+    parser — their payload carries no `schemes` mapping, so the db loaders
+    skip it and holdings stay clean."""
     out_json = _parsed_json_path(doc, amc_name, year, month, parsed_dir)
     if not force and _parse_cache_fresh(doc, out_json):
         return False
     try:
-        parsed = parse_document(doc)
+        if "riskometer" in doc.name.lower() or "risk-ometer" in doc.name.lower():
+            from src.scheme_riskometer import parse_document as parse_riskometer
+            parsed = parse_riskometer(doc)
+        else:
+            parsed = parse_document(doc)
         parsed["amc_name"] = amc_name
         parsed["fetch_month"] = month
         parsed["fetch_year"] = year
@@ -647,6 +655,7 @@ def run_ingest(
     amc_filter: str | None = None,
     default_year: int | None = None,
     default_month: int | None = None,
+    force: bool = False,
 ) -> None:
     """Ingest manually downloaded documents.
 
@@ -708,7 +717,7 @@ def run_ingest(
                 continue
             shutil.move(str(f), str(new_path))
             moved += 1
-            if _parse_single_doc(new_path, amc["mf_name"], year, month, parsed_dir):
+            if _parse_single_doc(new_path, amc["mf_name"], year, month, parsed_dir, force=force):
                 parsed += 1
             logger.info(f"  Ingested {amc['mf_name']} {year}-{month:02d}: {f.name}")
         try:
@@ -739,11 +748,11 @@ def run_ingest(
             logger.warning(f"  Already exists: {new_path}, skipping")
             skipped += 1
             continue
-        shutil.move(str(f), str(new_path))
-        moved += 1
-        if _parse_single_doc(new_path, amc["mf_name"], year, month, parsed_dir):
-            parsed += 1
-        logger.info(f"  Ingested {amc['mf_name']} {year}-{month:02d}: {f.name}")
+            shutil.move(str(f), str(new_path))
+            moved += 1
+            if _parse_single_doc(new_path, amc["mf_name"], year, month, parsed_dir, force=force):
+                parsed += 1
+            logger.info(f"  Ingested {amc['mf_name']} {year}-{month:02d}: {f.name}")
 
     # ---- 2. backfill: parse any pdfs doc without parsed output ----
     name_map = {_amc_folder_name(a["mf_name"]): a["mf_name"] for a in registry}
@@ -764,7 +773,7 @@ def run_ingest(
                 for doc in sorted(month_dir.iterdir()):
                     if not doc.is_file():
                         continue
-                    if _parse_single_doc(doc, amc_name, year, month, parsed_dir):
+                    if _parse_single_doc(doc, amc_name, year, month, parsed_dir, force=force):
                         parsed += 1
 
     logger.info(f"Ingest complete: moved={moved} parsed={parsed} skipped={skipped}")
@@ -894,7 +903,9 @@ def parse(file_path):
               help="Year to assign when not detectable from the filename")
 @click.option("--month", "-m", type=int, default=None,
               help="Month to assign when not detectable from the filename")
-def ingest(amc, year, month):
+@click.option("--force", is_flag=True,
+              help="Re-parse documents even when a cached parsed output exists")
+def ingest(amc, year, month, force):
     """Ingest manually downloaded documents.
 
     Drop files into manual_downloads/{AMC Name}/ (folder named after the AMC,
@@ -904,7 +915,7 @@ def ingest(amc, year, month):
     any document already under pdfs/ that has no parsed output.
     """
     _setup_from_config()
-    run_ingest(amc_filter=amc, default_year=year, default_month=month)
+    run_ingest(amc_filter=amc, default_year=year, default_month=month, force=force)
 
 
 @cli.command()
@@ -1199,6 +1210,35 @@ def run_amfi_monthly() -> dict:
     return {"amcs": len(data), "files": len(paths)}
 
 
+def run_otherdata_monthly() -> dict:
+    """Scheduler entry (never raises): AMFI other-data monthly refresh
+    (tracking, disclosure, risk-params, AUM, NFO) -> data/reference/."""
+    from src.amfi_otherdata import run_monthly_all
+    return run_monthly_all()
+
+
+@cli.command("amfi-otherdata")
+@click.argument("jobs", default="selftest")
+@click.option("--date", "-d", "date_str", default=None,
+              help="DD-MMM-YYYY (tracking/disclosure/risk-params)")
+@click.option("--mf", type=int, default=None, help="MF_ID (scheme-details)")
+@click.option("--scheme", type=int, default=None, help="scheme_id (scheme-details)")
+@click.option("--fy", type=int, default=None, help="AMFI financial-year id (aum)")
+@click.option("--period", type=int, default=None, help="AMFI period id (aum)")
+@click.option("--timeout", type=int, default=60)
+def amfi_otherdata(jobs, date_str, mf, scheme, fy, period, timeout):
+    """Run AMFI other-data connector jobs (comma-separated).
+
+    JOBS: selftest, mutual-funds, tracking, disclosure, risk-params, aum,
+    nfo, scheme-details.  See docs/plans/PLAN_AMFI_DATA_SOURCES.md.
+    """
+    _setup_from_config()
+    from src.amfi_otherdata import run_jobs
+    run_jobs([j.strip() for j in jobs.split(",") if j.strip()],
+             date=date_str, mf=mf, scheme=scheme, fy=fy, period=period,
+             timeout=timeout)
+
+
 @cli.command()
 @click.option("--dry-run", is_flag=True, help="Report only; do not touch the registry")
 @click.option("--timeout", type=int, default=60)
@@ -1286,12 +1326,18 @@ def schedule_start():
     async def _start():
         config = load_config()
         from src.financial_statements import refresh_stale as statements_refresh
+        # AMC agent fleet (integrity audit + escalation ladder + discovery).
+        # Jobs are registered only when this callable is provided; see
+        # config/settings.yaml -> scheduler.agent_fleet for the daily/weekly split.
+        from src.agents.fleet_jobs import agent_fleet_fn
         scheduler = MonthlyScheduler(run_pipeline, config, base_dir=BASE_DIR,
                                      nav_refresh_fn=update_latest_navs,
                                      stock_refresh_fn=refresh_all,
                                      bond_refresh_fn=bond_refresh_daily,
                                      amfi_fn=run_amfi_monthly,
-                                     statements_fn=statements_refresh)
+                                     statements_fn=statements_refresh,
+                                     otherdata_fn=run_otherdata_monthly,
+                                     agent_fleet_fn=agent_fleet_fn)
         scheduler.start()
 
         next_run = scheduler.get_next_run()

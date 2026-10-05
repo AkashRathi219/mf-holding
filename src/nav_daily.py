@@ -32,6 +32,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from .nav_history import _date_key, _fetch_amfi, _parse_nav_text, load_universe
+from .nav_freshness import history_rows
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 OUT_DIR = BASE_DIR / "data" / "nav_history"
@@ -49,10 +50,16 @@ MAX_FULL_HISTORY_FETCHES_PER_RUN = 100
 PORTAL_WALK_DELAY = 1.0  # seconds between AMFI portal window requests
 
 
-def _load_history(path: Path) -> list[dict]:
+def _load_history(path: Path) -> tuple[dict, list[dict]]:
+    """Load a nav_history file and return (doc, usable rows).
+
+    Legacy files stored bare date strings instead of ``{date, nav}`` rows; they
+    are dropped here (and reported as malformed by src.nav_freshness) instead of
+    crashing every merge path that calls ``h.get("date")``.
+    """
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
-        return doc, doc.get("history") or []
+        return doc, history_rows(doc.get("history"))
     except Exception:
         return {}, []
 
@@ -208,7 +215,7 @@ def fill_gaps_from_last_known(out_dir: Path = OUT_DIR, max_age_days: int = 6,
         for path in out_dir.glob("*.json"):
             try:
                 doc = json.loads(path.read_text(encoding="utf-8"))
-                hist = doc.get("history") or []
+                hist = history_rows(doc.get("history"))
             except Exception:
                 continue
             last = hist[-1].get("date") if hist else None

@@ -1,4 +1,4 @@
-"""AI-assisted holdings extraction for outline-rendered / scanned PDFs.
+﻿"""AI-assisted holdings extraction for outline-rendered / scanned PDFs.
 
 Some AMC factsheets (e.g. ICICI Prudential's digital factsheets) draw text as
 vector outlines -- zero fonts, zero chars -- so OCR is the only classic route
@@ -164,8 +164,7 @@ def extract_pdf(pdf_path: Path, ocr_text: str = "") -> tuple[list[dict], dict]:
     cfg = load_cfg()
     if not is_configured(cfg):
         raise ExtractError("AI extraction not configured (ai.enabled / key env)")
-    import fitz
-
+    import pymupdf as fitz
     t0 = time.perf_counter()
     mode = cfg.get("mode", "image")
     content: list[dict] = []

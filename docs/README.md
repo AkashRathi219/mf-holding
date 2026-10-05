@@ -21,6 +21,8 @@ Everything documented lives here (`docs/`). Root keeps only `README.md` and
 | [SCHEME_DETAILS_STRATEGY.md](SCHEME_DETAILS_STRATEGY.md) | Authoritative spec for the Scheme Details drawer |
 | [ANALYSIS_RESULTS.md](ANALYSIS_RESULTS.md) | How the compliance report is calculated |
 | [DATA_CADENCE.md](DATA_CADENCE.md) | Refresh schedules (holdings/NAV/stocks/bonds) |
+| [data_sources/](data_sources/README.md) | Complete data-source map: every upstream, method, frequency, output |
+| [FIRECRAWL_EVALUATION.md](FIRECRAWL_EVALUATION.md) | Firecrawl fit assessment + phased adoption plan (AMC discovery fallback) |
 | [DEPLOY_RAILWAY.md](DEPLOY_RAILWAY.md) | Railway + R2 deployment & redeploy runbook |
 
 ## Feature docs

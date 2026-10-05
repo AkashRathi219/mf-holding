@@ -39,6 +39,18 @@ def scheme_nav_files(nav_dir: Path | None = None) -> list[Path]:
         return []
     return sorted(p for p in d.glob("*.json") if p.stem.isdigit())
 
+
+def history_rows(hist) -> list[dict]:
+    """Usable ``{date, nav}`` rows from a nav_history/stock_history list.
+
+    Some legacy files stored bare date strings instead of row objects; every
+    reader used to call ``h.get("date")`` on them and crash with
+    ``AttributeError: 'str' object has no attribute 'get'``. Non-dict entries
+    are dropped here so the audit degrades to "malformed" instead of raising,
+    and ``scripts/repair_nav_history.py`` re-pulls those files.
+    """
+    return [h for h in (hist or []) if isinstance(h, dict) and h.get("date")]
+
 # ---------------------------------------------------------------------------
 # AMFI publication calendar [NAV-FRESH]
 # ---------------------------------------------------------------------------
@@ -242,7 +254,7 @@ def check_navs(max_age_days: int = 10) -> list[dict]:
         except Exception:
             stale.append({"code": code, "error": "unreadable"})
             continue
-        hist = doc.get("history") or []
+        hist = history_rows(doc.get("history"))
         last = hist[-1].get("date") if hist else None
         days = stale_days(last) if last else None
         if not last or days is None or days > max_age_days:
@@ -262,12 +274,12 @@ def check_stocks(max_age_days: int = 10) -> list[dict]:
         except Exception:
             stale.append({"isin": isin, "error": "unreadable"})
             continue
-        hist = doc.get("history") or doc.get("prices") or doc.get("data") or []
+        hist = history_rows(doc.get("history") or doc.get("prices") or doc.get("data"))
         last = hist[-1] if hist else None
         d = last.get("date") if last else None
         days = stale_days(d) if d else None
         if not d or days is None or days > max_age_days:
-            stale.append({"isin": isin, "name": last.get("close") and doc.get("name") or "",
+            stale.append({"isin": isin, "name": (last or {}).get("close") and doc.get("name") or "",
                           "last_date": d or None, "stale_days": days})
     return stale
 
@@ -357,7 +369,9 @@ def backfill_codes_amfi(codes: list[str], days: int = 20) -> dict:
                 doc = {"scheme_code": code, "history": []}
         else:
             doc = {"scheme_code": code, "history": []}
-        hist = doc.get("history") or []
+        raw = doc.get("history") or []
+        malformed = any(not isinstance(h, dict) for h in raw)
+        hist = [] if malformed else list(raw)
         existing = {h.get("date") for h in hist}
         for datestr, nav, *_rest in pts:
             if datestr not in existing:
@@ -415,9 +429,11 @@ def scheme_history_completeness(code: str) -> dict | None:
         except ValueError:
             return None
 
-    hist = doc.get("history") or []
+    raw = doc.get("history") or []
+    hist = history_rows(raw)
     if not hist:
-        return {"code": code, "points": 0, "complete": False}
+        return {"code": code, "points": 0, "complete": False,
+                "malformed": bool(raw)}
     dates = [as_date(h.get("date")) for h in hist]
     valid = [d for d in dates if d]
     max_gap = 0
@@ -457,10 +473,12 @@ def completeness_report(latest_expected: str | None = None) -> dict:
             incomplete.append({"code": fn.stem, "error": "unreadable"})
             continue
         code = doc.get("scheme_code") or fn.stem
-        hist = doc.get("history") or []
+        raw = doc.get("history") or []
+        hist = history_rows(raw)
         fund = doc.get("fund_name") or ""
         if not hist:
-            incomplete.append({"code": code, "fund": fund, "reason": "empty history"})
+            reason = "malformed history (rows are not objects)" if raw else "empty history"
+            incomplete.append({"code": code, "fund": fund, "reason": reason})
             continue
         dates = [as_date(h.get("date")) for h in hist]
         valid = [d for d in dates if d]

@@ -52,9 +52,9 @@ def test_to_number_formats():
 
 
 def test_unit_scale_detection():
-    assert ss.unit_scale_to_crore("(Rs. in Lakhs except per share data)") == 0.10
+    assert ss.unit_scale_to_crore("(Rs. in Lakhs except per share data)") == 0.01
     assert ss.unit_scale_to_crore("Rs in Crore") == 1.0
-    assert ss.unit_scale_to_crore("figures in million") == 10.0
+    assert ss.unit_scale_to_crore("figures in million") == 0.1
     assert ss.unit_scale_to_crore("no unit note here") == 1.0
 
 
@@ -263,3 +263,57 @@ def test_validate_and_score_gates():
     issues, conf = validate_and_score(poor_q, [])
     assert conf < 100
     assert any("missing_revenue" in i for i in issues)
+
+
+# ---- audit provenance [stmt-cov-v1.0.0] --------------------------------------------
+
+def _aud_row(key: str, canon: str, val: float, audit: str | None,
+             url: str) -> dict:
+    return {"section": "consolidated", "canon": canon, "match_score": 1.0,
+            "exact": True, "_audit": audit,
+            "_src": {"url": f"https://nsearchives/{url}", "date": "x"},
+            "values": {key: val}}
+
+
+def test_audit_and_sources_propagate_to_records():
+    rows = [
+        _aud_row("FY|2026-3-31", "revenue_from_operations", 520.0,
+                 "Audited", "annual.pdf"),
+        _aud_row("FY|2026-3-31", "pat", 52.0, "Audited", "annual.pdf"),
+        # a later unaudited filing also carries the same period comparatively
+        _aud_row("FY|2026-3-31", "total_income", 540.0,
+                 "Unaudited", "q1.pdf"),
+    ]
+    _quarters, annuals = assemble(
+        build_section_records(rows)["consolidated"])
+    assert annuals[0]["audit"] == "Audited"          # audited outranks
+    assert set(annuals[0]["source_urls"]) == {
+        "https://nsearchives/annual.pdf", "https://nsearchives/q1.pdf"}
+
+
+def test_records_without_audit_stay_honest():
+    rows = [_aud_row("FY|2025-3-31", "pat", 10.0, None, "old.pdf")]
+    _quarters, annuals = assemble(
+        build_section_records(rows)["consolidated"])
+    assert "audit" not in annuals[0]                 # never guessed
+
+
+def test_derived_quarter_inherits_audit_from_chain():
+    rows = [
+        _aud_row("Q|2025-6-30", "revenue_from_operations", 100.0,
+                 "Unaudited", "q1.pdf"),
+        _aud_row("H1|2025-9-30", "revenue_from_operations", 220.0,
+                 "Unaudited", "h1.pdf"),
+        _aud_row("9M|2025-12-31", "revenue_from_operations", 360.0,
+                 "Unaudited", "9m.pdf"),
+        _aud_row("FY|2026-3-31", "revenue_from_operations", 520.0,
+                 "Audited", "annual.pdf"),
+    ]
+    quarters, annuals = assemble(
+        build_section_records(rows)["consolidated"])
+    by_q = {q["quarter"]: q for q in quarters}
+    assert by_q["Q4"]["audit"] == "Audited"          # derived out of audited FY
+    assert by_q["Q2"]["audit"] == "Unaudited"        # derived out of unaudited H1
+    assert by_q["Q3"]["audit"] == "Unaudited"        # derived out of unaudited 9M
+    assert by_q["Q4"]["source_urls"] == ["https://nsearchives/annual.pdf"]
+    assert annuals[0]["audit"] == "Audited"

@@ -104,7 +104,7 @@ def test_financials_without_file_is_available_false(client, auth,
 def test_app_js_maps_statements_tab_to_financials_route():
     src = (ROOT / "webapp" / "static" / "js" / "app.js").read_text(
         encoding="utf-8")
-    assert 'tab === "statements" ? "financials" : tab' in src
+    assert 'tab === "statements" ? "financials/table" : tab' in src
     # the old broken fetch shape must be gone for good
     assert "/${tab}`" not in src.split("function switchStockTab")[1]
     # the UI keeps its own tab id / cache key: only the URL segment changes

@@ -1,4 +1,4 @@
-"""PDF parsing agent network.
+﻿"""PDF parsing agent network.
 
 Split large / grouped PDFs into small per-scheme (or per-page-chunk) sub-PDFs
 with fast PyMuPDF, then dispatch worker agents - running in a process pool so
@@ -33,7 +33,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import fitz
+import pymupdf as fitz
 
 from src.amfi_nav import get_nav, norm
 from src.pdf_segregator import (

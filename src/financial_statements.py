@@ -1,4 +1,4 @@
-"""Financial-statements pipeline [stmt-v1.0.0].
+﻿"""Financial-statements pipeline [stmt-v1.0.0].
 
 Converts NSE financial-results PDFs (the "audit report" announcements whose
 URLs stock_reports.py already collects) into normalised quarterly / annual
@@ -22,10 +22,6 @@ CLI::
 
     python -m src.financial_statements --symbols RELIANCE --limit 4
     python -m src.financial_statements            # top-held stocks first
-    python -m src.financial_statements --download-fr-xbrl [--years 5] [--symbols X,Y]
-        # raw download of NSE financial-results XBRL filings (download-first /
-        # fill-last: metadata + XML land in data/raw/financial_results_xbrl/,
-        # no parsing, no AI extraction)
 """
 
 from __future__ import annotations
@@ -36,34 +32,27 @@ import json
 import re
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, timedelta
 from pathlib import Path
+from urllib.parse import quote
 
 import pdfplumber
 
-from .stock_common import (BASE_DIR, http_get, load_json, nse_session,
+from .stock_common import (BASE_DIR, http_get, nse_session,
                            now_iso, save_json)
 from .stock_identity import load_identity
 from . import statement_schema as ss
 
 FINANCIALS_DIR = BASE_DIR / "data" / "stock_financials"
 RAW_RESULTS_DIR = BASE_DIR / "data" / "raw" / "financial_results"
-# Financial-results XBRL filings (the page
-# /companies-listing/corporate-filings-financial-results): one XML per filed
-# result; audited/unaudited + consolidated/standalone flags ride the metadata.
-XBRL_RAW_DIR = BASE_DIR / "data" / "raw" / "financial_results_xbrl"
-XBRL_META_PATH = XBRL_RAW_DIR / "_metadata.json"
-XBRL_STATUS_PATH = XBRL_RAW_DIR / "_status.json"
-
-NSE_FR_URL = ("https://www.nseindia.com/api/corporates-financial-results"
-              "?index=equities&period=Quarterly"
-              "&from_date={frm}&to_date={to}")
-FR_REFERER = ("https://www.nseindia.com/companies-listing/"
-              "corporate-filings-financial-results")
 
 NSE_ANNOUNCE_URL = ("https://www.nseindia.com/api/corporate-announcements"
                     "?index=equities&symbol={sym}&page={page}")
+
+
+def announce_url(symbol: str, page: int) -> str:
+    """Announcement-feed URL with the symbol percent-encoded — 'M&M' must
+    reach NSE as M%26M or the raw '&' truncates the query to symbol=M."""
+    return NSE_ANNOUNCE_URL.format(sym=quote(symbol, safe=""), page=page)
 
 _RESULT_HEADLINE = re.compile(
     r"(financial results|financial result|quarterly result|unaudited "
@@ -72,122 +61,6 @@ _EXCLUDE_HEADLINE = re.compile(
     r"(transcript|audio recording|media release|investor|newspaper "
     r"publication|analyst|presentation|earnings call|scrutiniser|voting)",
     re.I)
-
-
-# ---- financial-results XBRL bulk download --------------------------------------
-
-def _fr_month_windows(start: date, end: date) -> list[tuple[str, str]]:
-    out = []
-    cur = start
-    while cur < end:
-        nxt_m = (cur.replace(day=28) + timedelta(days=4)).replace(day=1)
-        out.append((cur.strftime("%d-%m-%Y"),
-                    min(nxt_m - timedelta(days=1), end).strftime("%d-%m-%Y")))
-        cur = nxt_m
-    return out
-
-
-def _fr_fetch_window(frm: str, to: str) -> list[dict]:
-    try:
-        raw = http_get(NSE_FR_URL.format(frm=frm, to=to),
-                       headers={"Referer": FR_REFERER,
-                                "Accept": "application/json, text/plain, */*"},
-                       timeout=60, opener=nse_session(), retries=2)
-        data = json.loads(raw.decode("utf-8", "replace"))
-    except Exception:
-        return []
-    return data if isinstance(data, list) else []
-
-
-def _xbrl_download_one(row: dict) -> tuple[str, bool]:
-    seq = row.get("seqNumber") or ""
-    symbol = (row.get("symbol") or "_unknown").upper()
-    url = row.get("xbrl") or ""
-    dest = XBRL_RAW_DIR / symbol / f"{symbol}_{seq}.xml"
-    if not url:
-        return seq, False
-    if dest.exists() and dest.stat().st_size > 256:
-        return seq, True
-    raw = None
-    for attempt in range(3):                     # NSE throttles bursts into
-        try:                                     # empty/blocked bodies — a
-            raw = http_get(url, opener=nse_session(),  # quiet retry beats a
-                           timeout=60, retries=1)      # permanent hole in the
-        except Exception:                            # corpus [stmt-v1.0.1]
-            raw = None
-        if raw and (raw[:5] == b"<?xml" or b"<xbrl" in raw[:600]):
-            break
-        raw = None
-        if attempt < 2:
-            time.sleep(2.0 * (attempt + 1) ** 2)     # 2s, then 8s
-    if raw is None:
-        return seq, False
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(raw)
-    return seq, True
-
-
-def download_financial_results_xbrl(symbols: list[str] | None = None,
-                                    years_back: int = 5,
-                                    workers: int = 6,
-                                    window_pacing_s: float = 0.5) -> dict:
-    """Raw download of NSE financial-results filings (metadata + XBRL XMLs).
-
-    Sweeps monthly filing-date windows for the last ``years_back`` years over
-    ALL equities (no F&O filter), keeps rows for the requested symbols and
-    saves each filing's XBRL XML under
-    ``data/raw/financial_results_xbrl/<SYMBOL>/``. Metadata merges by
-    ``seqNumber`` into ``_metadata.json`` so reruns only fetch missing files;
-    nothing here parses figures or calls the AI extractor."""
-    ident = load_identity()
-    if symbols:
-        wanted = {s.upper() for s in symbols}
-    else:
-        wanted = {(v.get("symbol") or "").upper()
-                  for v in ident.values() if v.get("symbol")}
-    wanted.discard("")
-    end = date.today()
-    start = date(end.year - years_back, end.month, 1)
-
-    meta = load_json(XBRL_META_PATH, {}) or {}
-    windows = _fr_month_windows(start, end)
-    empty_windows = 0
-    for i, (frm, to) in enumerate(windows, 1):
-        rows = _fr_fetch_window(frm, to)
-        if not rows:
-            empty_windows += 1
-        for r in rows:
-            seq = str(r.get("seqNumber") or "")
-            if seq and (r.get("symbol") or "").upper() in wanted:
-                meta[seq] = r
-        if i % 12 == 0:
-            print(f"  [meta {i}/{len(windows)}] merged={len(meta)}", flush=True)
-        time.sleep(window_pacing_s)
-    save_json(XBRL_META_PATH, meta)
-
-    def _dest(r: dict) -> Path:
-        sym = (r.get("symbol") or "_unknown").upper()
-        return XBRL_RAW_DIR / sym / f"{sym}_{r.get('seqNumber')}.xml"
-
-    todo = [r for r in meta.values() if r.get("xbrl") and not _dest(r).exists()]
-    no_link = sum(1 for r in meta.values() if not r.get("xbrl"))
-    fetched = failed = 0
-    with ThreadPoolExecutor(max_workers=max(1, min(workers, 2))) as pool:
-        futs = {pool.submit(_xbrl_download_one, r): r for r in todo}
-        for n, fut in enumerate(as_completed(futs), 1):
-            seq, ok = fut.result()
-            fetched += ok
-            failed += not ok
-            if n % 250 == 0:
-                print(f"  [dl {n}/{len(todo)}]", flush=True)
-            time.sleep(0.5)
-
-    status = {"as_of": now_iso(), "symbols": len(wanted),
-              "filings_kept": len(meta), "downloads_attempted": len(todo),
-              "downloaded_total": fetched, "failed": failed,
-              "no_xbrl_link": no_link, "empty_windows": empty_windows}
-    save_json(XBRL_STATUS_PATH, status)
-    return status
 
 
 # ---- announcements -------------------------------------------------------------
@@ -211,7 +84,7 @@ def fetch_result_announcements(symbol: str, pages: int = 3) -> list[dict]:
         data = None
         for attempt in range(3):
             try:
-                raw = http_get(NSE_ANNOUNCE_URL.format(sym=symbol, page=page_no),
+                raw = http_get(announce_url(symbol, page_no),
                                headers={"Referer": "https://www.nseindia.com/"},
                                timeout=20, opener=nse_session(), retries=1)
                 data = json.loads(raw.decode("utf-8", "replace"))
@@ -637,7 +510,7 @@ def _extract_face_value(label: str) -> float | None:
 def _candidate_pages(pdf_path: Path, max_pages: int = 8) -> list[int]:
     """Pages likely holding statement tables: keyword hits on the text layer;
     image-only pages qualify blindly (scans) — capped by max_pages."""
-    import fitz
+    import pymupdf as fitz
     keywords = ("particulars", "revenue from operations", "balance sheet",
                 "cash flow", "total income", "profit after tax",
                 "borrowings", "inventories", "trade payables")
@@ -650,7 +523,7 @@ def _candidate_pages(pdf_path: Path, max_pages: int = 8) -> list[int]:
     except Exception:
         return []
     try:
-        for i in range(min(len(doc), 16)):
+        for i in range(min(len(doc), 300)):
             txt = doc[i].get_text() or ""
             stripped = txt.strip()
             if len(stripped) < 200:
@@ -698,7 +571,7 @@ def _stmt_chat(pdf_path: Path, page_index: int) -> dict | None:
     if not key or os.environ.get("STMT_AI", "").lower() in ("0", "false"):
         return None
     model = os.environ.get("STMT_AI_MODEL", "google/gemini-2.5-flash")
-    import fitz
+    import pymupdf as fitz
     from PIL import Image
     import base64
     import io
@@ -778,6 +651,220 @@ def _page_cached_chat(pdf_path: Path, page_index: int, sha: str):
     return payload
 
 
+# ---- opencode CLI vision backend (STMT_BACKEND=opencode) -----------------------
+#
+# Near-zero-cost tier: each call shells out to `opencode run -m <model>` with a
+# free multimodal model (default opencode-go/glm-5.3-flash). Pages are batched
+# (<=4 per agent run) so the per-invocation overhead is amortised, and each
+# page's payload is cached separately so restarts never repeat work.
+
+OC_PNG_DIR = RAW_RESULTS_DIR / "_oc_png"
+
+_OC_MODEL = "opencode-go/glm-5.3-flash"
+
+_OC_BATCH = (
+    "Transcribe the financial-results tables shown in the PNG image files "
+    "listed below. They are pages of an Indian listed company's SEBI Reg-33 "
+    "audited annual results (period ended 31 March). Rules:\n"
+    "- For EVERY listed file return one entry keyed by the exact integer page "
+    "number in the filename suffix -p<N>.png.\n"
+    "- Identify each page's section: 'consolidated' or 'standalone' (guessed "
+    "from the page title / annexure split).\n"
+    "- 'unit': exactly one of 'crore', 'lakh', 'million' as printed in the "
+    "amount-note (e.g. 'Rs. in crore'); '-' when the page has no amounts.\n"
+    "- 'periods': every table period column printed left-to-right as "
+    "{kind: Q|H1|9M|FY, date: YYYY-MM-DD} — a 'Year ended 31.03.2026' column is "
+    "FY/2026-03-31; a quarter column is Q with its period-end date.\n"
+    "- 'rows': EVERY line-item, label EXACTLY as printed, values one per "
+    "period in the same order (null when a cell is blank/not-applicable), in "
+    "the printed unit with decimals — never re-scale.\n"
+    "- Auditor's-report, notes, and narrative-only pages: sections: [] for "
+    "that page.\n"
+    '- Reply with ONLY one JSON object: {"pages":[{"page":0,"sections":[]}]} '
+    "where each page entry is "
+    '{"page":N,"sections":[{"section":"consolidated","unit":"crore",'
+    '"periods":[{"kind":"FY","date":"2026-03-31"}],'
+    '"rows":[{"label":"Revenue from operations","values":[1234.5]}]}]}.'
+)
+
+
+def _opencode_available() -> bool:
+    return _opencode_command() is not None
+
+
+def _opencode_command() -> list[str] | None:
+    """Resolve the real opencode executable. On Windows the npm install puts
+    a .cmd/.ps1 shim on PATH that Python's subprocess cannot execute directly,
+    so map it to the sibling node_modules/opencode-ai/bin/opencode.exe."""
+    import shutil
+    exe = shutil.which("opencode")
+    if not exe:
+        return None
+    p = Path(exe)
+    if p.name.lower().endswith((".cmd", ".ps1")):
+        cand = p.parent / "node_modules" / "opencode-ai" / "bin" / "opencode.exe"
+        if cand.exists():
+            return [str(cand)]
+        return ["cmd", "/c", str(p)]
+    if p.name.lower().endswith(".exe"):
+        return [str(p)]
+    return ["cmd", "/c", str(p)]
+
+
+def _oc_parse(text: str) -> dict | None:
+    """Extract the {'pages': [...]} object from raw opencode output."""
+    import re as _re
+    text = _re.sub(r"\x1b\[[0-9;]*m", "", text or "")
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(text)):
+        c = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+            continue
+        if c == '"':
+            in_str = True
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    obj = json.loads(text[start:i + 1])
+                except Exception:
+                    return None
+                if isinstance(obj, dict) and isinstance(obj.get("pages"), list):
+                    return obj
+                return None
+    return None
+
+
+def _oc_render(pdf_path: Path, sha: str, pno: int) -> Path:
+    img = OC_PNG_DIR / f"{sha}-p{pno}.png"
+    if not img.exists():
+        import pymupdf as fitz
+        OC_PNG_DIR.mkdir(parents=True, exist_ok=True)
+        doc = fitz.open(str(pdf_path))
+        try:
+            doc[pno].get_pixmap(dpi=150).save(str(img))
+        finally:
+            doc.close()
+    return img
+
+
+def _opencode_batch(pdf_path: Path, sha: str, pnos: list[int]) -> dict[int, dict]:
+    """One opencode CLI run reading the given page renders; returns
+    {page_index: {'sections': [...]}} for the pages it could resolve."""
+    import subprocess
+    rel = "; ".join(str(_oc_render(pdf_path, sha, p).relative_to(Path.cwd()))
+                    for p in pnos)
+    prompt = (f"{_OC_BATCH}\nFILES (render each, then transcribe): {rel}\n"
+              "Return ONLY the JSON object described above.")
+    import os
+    model = os.environ.get("OPCODE_MODEL", _OC_MODEL)
+    try:
+        timeout_s = float(os.environ.get("OPCODE_TIMEOUT", "600"))
+    except ValueError:
+        timeout_s = 600.0
+    prefix = _opencode_command()
+    if prefix is None:
+        return {}
+    last_err = None
+    for attempt in range(2):
+        if attempt:
+            time.sleep(4 * attempt)
+        obj = None
+        try:
+            # subprocess.run(timeout=...) drains the pipes with NO timeout
+            # after killing the child; orphaned opencode helper processes
+            # keep the handles open and the worker hangs forever (seen after
+            # a Windows sleep/wake). Do the kill + a bounded drain instead.
+            proc = subprocess.Popen([*prefix, "run", "-m", model, prompt],
+                                    cwd=Path.cwd(), stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, text=True,
+                                    encoding="utf-8", errors="replace")
+            try:
+                r_out, r_err = proc.communicate(timeout=timeout_s)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                try:
+                    r_out, r_err = proc.communicate(timeout=30)
+                except Exception:
+                    r_out, r_err = "", ""
+                last_err = RuntimeError(
+                    f"timed out after {timeout_s} seconds")
+            obj = _oc_parse((r_out or "") + "\n" + (r_err or "")) \
+                if (r_out or r_err) else None
+        except Exception as e:                   # noqa: BLE001
+            last_err = e
+        if obj is None:
+            last_err = last_err or RuntimeError("unparsed opencode output")
+            continue
+        out: dict[int, dict] = {}
+        for entry in obj.get("pages") or []:
+            pno = entry.get("page")
+            secs = entry.get("sections")
+            if isinstance(pno, int) and pno in pnos and isinstance(secs, list) \
+                    and secs:
+                out[pno] = {"sections": secs}
+        return out
+    print(f"    opencode batch failed p{pnos}: {last_err}")
+    return {}
+
+
+def _opencode_pages(pdf_path: Path, pages: list[int], sha: str,
+                    use_cache: bool = True) -> dict[int, dict]:
+    """Per-page payloads via the opencode CLI, cached beside the OpenRouter
+    tier. Consumed in batches of <=4 (dense SEBI-33 table pages overflow the
+    CLI timeout at 8); pages a batch missed are retried alone."""
+    out: dict[int, dict] = {}
+    todo: list[int] = []
+    for p in pages:
+        cp = AI_CACHE_DIR / f"{sha}-oc-p{p}-{PROMPT_VERSION}.json"
+        if use_cache and cp.exists():
+            try:
+                out[p] = json.loads(cp.read_text(encoding="utf-8"))
+                continue
+            except Exception:
+                pass
+        todo.append(p)
+
+    def save(p: int, payload: dict) -> None:
+        out[p] = payload
+        if use_cache:
+            try:
+                (AI_CACHE_DIR / f"{sha}-oc-p{p}-{PROMPT_VERSION}.json") \
+                    .write_text(json.dumps(payload), encoding="utf-8")
+            except Exception:
+                pass
+
+    import os
+    try:
+        batch_sz = max(1, int(os.environ.get("OPCODE_BATCH", "4")))
+    except ValueError:
+        batch_sz = 4
+    while todo:
+        batch, todo = todo[:batch_sz], todo[batch_sz:]
+        got = _opencode_batch(pdf_path, sha, batch)
+        for p, payload in got.items():
+            save(p, payload)
+        for p in batch:
+            if p not in got:
+                got1 = _opencode_batch(pdf_path, sha, [p])
+                for pp, payload in got1.items():
+                    save(pp, payload)
+    return out
+
+
 def ai_extract_document(pdf_path: Path, max_pages: int = 8,
                         use_cache: bool = True) -> list[dict] | None:
     """AI-first extraction of a whole results PDF.
@@ -785,75 +872,128 @@ def ai_extract_document(pdf_path: Path, max_pages: int = 8,
     Returns raw rows in the SAME internal shape as parse_table_pages so the
     normalisation/assembly stages are tier-agnostic:
         [{section, label_raw, canon, match_score, values:{KIND|y-m-d: amt}, page}]
-    None means 'AI unavailable' (no key / disabled / all pages failed) —
+    None means 'AI unavailable' (no backend / disabled / all pages failed) —
     callers then fall back to the deterministic parser.
-    Results cached by file sha256 so backfills never re-bill.
+    Backend selection: STMT_BACKEND=opencode extracts through the opencode CLI
+    plus a free multimodal model (near-zero cost); the default keeps using
+    OpenRouter. Results cached by file sha256 so backfills never re-bill /
+    re-run.
     """
     import os
-    if os.environ.get("OPENROUTER_API_KEY", "") == "" \
-            or os.environ.get("STMT_AI", "").lower() in ("0", "false"):
+    if os.environ.get("STMT_AI", "").lower() in ("0", "false"):
+        return None
+    backend = os.environ.get("STMT_BACKEND", "openrouter").lower()
+    if backend == "opencode":
+        if not _opencode_available():
+            return None
+    elif os.environ.get("OPENROUTER_API_KEY", "") == "":
         return None
     sha = sha256_file(pdf_path)
     pages = _candidate_pages(pdf_path, max_pages=max_pages)
     if not pages:
         return None
     out: list[dict] = []
-    for pno in pages:
-        payload = _page_cached_chat(pdf_path, pno, sha) if use_cache \
-            else _stmt_chat(pdf_path, pno)
-        if not payload:
-            continue
-        for sec_block in (payload.get("sections") or []):
-            section = str(sec_block.get("section") or "").lower()
-            section = "consolidated" if "consol" in section else "standalone"
-            unit = str(sec_block.get("unit") or "crore").lower()
-            scale = {"crore": 1.0, "lakh": 0.10, "lakhs": 0.10,
-                     "million": 10.0}.get(unit, 1.0)
-            periods = sec_block.get("periods") or []
-            slot_dates: list[tuple[str, tuple] | None] = []
-            for p in periods:
-                d = ss.parse_period_date(str(p.get("date") or ""))
-                kind = ss.classify_period(f"{p.get('kind') or ''} quarter "
-                                          f"{p.get('date') or ''}",
-                                          default=str(p.get("kind") or "Q"))
-                kind = str(p.get("kind") or kind).upper()
-                if kind not in ("Q", "H1", "9M", "FY"):
-                    kind = "Q"
-                slot_dates.append((kind, d) if d else None)
-            if not slot_dates or any(s is None for s in slot_dates):
-                continue                      # unusable column contract
-            for row in (sec_block.get("rows") or []):
-                label = str(row.get("label") or "").strip()
-                vals = row.get("values")
-                if not label or not isinstance(vals, list):
-                    continue
-                canon, score = ss.match_label(label)
-                exact_flag = bool(ss.is_exact_label(label))
-                values: dict[str, float] = {}
-                scale_eff = 1.0 if canon in ss.PER_SHARE_KEYS else scale
-                for j, num in enumerate(vals):
-                    if j >= len(slot_dates) or num is None:
-                        continue
-                    if not isinstance(num, (int, float)):
-                        continue
-                    kind, date = slot_dates[j]
-                    values[f"{kind}|{date[0]}-{date[1]}-{date[2]}"] = \
-                        round(float(num) * scale_eff, 4)
-                if not values:
-                    continue
-                out.append({"section": section,
-                            "label_raw": label[:160],
-                            "canon": canon,
-                            "match_score": round(score, 3),
-                            "exact": exact_flag,
-                            "face_value": _extract_face_value(label),
-                            "values": values, "page": pno})
+    if backend == "opencode":
+        page_payloads = _opencode_pages(pdf_path, pages, sha, use_cache)
+        for pno in pages:
+            payload = page_payloads.get(pno)
+            if payload:
+                _append_payload_rows(out, payload, pno)
+        if not out or sum(1 for r in out if r["canon"]) < 3:
+            if _confirm_openrouter():
+                print("    opencode yielded nothing usable; falling back to "
+                      "paid OpenRouter...")
+                out = []
+                for pno in pages:
+                    payload = _page_cached_chat(pdf_path, pno, sha) if use_cache \
+                        else _stmt_chat(pdf_path, pno)
+                    if payload:
+                        _append_payload_rows(out, payload, pno)
+    else:
+        for pno in pages:
+            payload = _page_cached_chat(pdf_path, pno, sha) if use_cache \
+                else _stmt_chat(pdf_path, pno)
+            if payload:
+                _append_payload_rows(out, payload, pno)
     if not out:
         return None
     matched = sum(1 for r in out if r["canon"])
     if matched < 3:
         return None                             # garbage guard
     return out
+
+
+def _confirm_openrouter() -> bool:
+    """Ask before spending paid OpenRouter credits to retry a document the
+    free opencode tier could not extract. Non-interactive runs default to
+    'no' unless STMT_AI_FALLBACK=always is set."""
+    import os
+    mode = os.environ.get("STMT_AI_FALLBACK", "").lower()
+    if mode in ("always", "yes", "1", "true"):
+        return True
+    if mode in ("never", "no", "0", "false"):
+        return False
+    import sys
+    try:
+        if not sys.stdin.isatty():
+            return False
+    except Exception:
+        return False
+    try:
+        ans = input("\nopencode extracted nothing usable from this document; "
+                    "retry with PAID OpenRouter? [y/N] ").strip().lower()
+        return ans in ("y", "yes")
+    except Exception:
+        return False
+
+
+def _append_payload_rows(out: list[dict], payload: dict, pno: int) -> None:
+    """Convert one vision-tier {'sections': [...]} payload into raw rows."""
+    for sec_block in (payload.get("sections") or []):
+        section = str(sec_block.get("section") or "").lower()
+        section = "consolidated" if "consol" in section else "standalone"
+        unit = str(sec_block.get("unit") or "crore").lower()
+        scale = {"crore": 1.0, "lakh": 0.01, "lakhs": 0.01,
+                 "million": 0.1}.get(unit, 1.0)
+        periods = sec_block.get("periods") or []
+        slot_dates: list[tuple[str, tuple] | None] = []
+        for p_block in periods:
+            d = ss.parse_period_date(str(p_block.get("date") or ""))
+            kind = ss.classify_period(f"{p_block.get('kind') or ''} quarter "
+                                      f"{p_block.get('date') or ''}",
+                                      default=str(p_block.get("kind") or "Q"))
+            kind = str(p_block.get("kind") or kind).upper()
+            if kind not in ("Q", "H1", "9M", "FY"):
+                kind = "Q"
+            slot_dates.append((kind, d) if d else None)
+        if not slot_dates or any(s is None for s in slot_dates):
+            continue                      # unusable column contract
+        for row in (sec_block.get("rows") or []):
+            label = str(row.get("label") or "").strip()
+            vals = row.get("values")
+            if not label or not isinstance(vals, list):
+                continue
+            canon, score = ss.match_label(label)
+            exact_flag = bool(ss.is_exact_label(label))
+            values: dict[str, float] = {}
+            scale_eff = 1.0 if canon in ss.PER_SHARE_KEYS else scale
+            for j, num in enumerate(vals):
+                if j >= len(slot_dates) or num is None:
+                    continue
+                if not isinstance(num, (int, float)):
+                    continue
+                kind, date = slot_dates[j]
+                values[f"{kind}|{date[0]}-{date[1]}-{date[2]}"] = \
+                    round(float(num) * scale_eff, 4)
+            if not values:
+                continue
+            out.append({"section": section,
+                        "label_raw": label[:160],
+                        "canon": canon,
+                        "match_score": round(score, 3),
+                        "exact": exact_flag,
+                        "face_value": _extract_face_value(label),
+                        "values": values, "page": pno})
 
 
 # ---- assembly -------------------------------------------------------------------
@@ -866,16 +1006,54 @@ _EXPENSE_KEYS = frozenset((
 ))
 
 
+# ---- audit provenance -------------------------------------------------------------
+# Every raw extraction row can carry `_audit` ("Audited"/"Unaudited", read off
+# the filing headline) and `_src` {url, date}. build_section_records folds both
+# into the per-period record so downstream tables can show WHICH filing class
+# each figure came from; assemble() surfaces them as `audit` / `source_urls`.
+_AUDIT_RANK = {"Audited": 2, "Unaudited": 1}
+
+
+def _merge_audit(rec: dict, audit: str | None) -> None:
+    rank = _AUDIT_RANK.get(audit or "", 0)
+    if rank and rank > rec.get("_audit_rank", 0):
+        rec["_audit_rank"] = rank
+
+
+def _merge_src(rec: dict, src: dict | None) -> None:
+    url = (src or {}).get("url")
+    if not url:
+        return
+    urls = rec.setdefault("_src_urls", [])
+    if url not in urls:
+        urls.append(url)
+
+
+def _surface_audit(rec: dict) -> dict:
+    """_audit_rank/_src_urls internals -> clean `audit` / `source_urls` fields."""
+    rank = rec.pop("_audit_rank", 0) or 0
+    urls = rec.pop("_src_urls", None)
+    if rank:
+        rec["audit"] = "Audited" if rank >= 2 else "Unaudited"
+    if urls:
+        rec["source_urls"] = urls
+    return rec
+
+
 def build_section_records(raw_rows: list[dict]) -> dict[str, dict[tuple, dict]]:
     """raw extraction rows -> {section: {(kind,end): {canon: value}}}."""
     sections: dict[str, dict[tuple, dict]] = {}
     for row in raw_rows:
         sec = sections.setdefault(row["section"], {})
+        audit = row.get("_audit")
+        src = row.get("_src")
         for key_str, amount in row["values"].items():
             kind, date_str = key_str.split("|", 1)
             y, mth, d = (int(x) for x in date_str.split("-"))
             rec_key = (kind, (y, mth, d))
             rec = sec.setdefault(rec_key, {})
+            _merge_audit(rec, audit)
+            _merge_src(rec, src)
             if row["canon"]:
                 if row["canon"] in _EXPENSE_KEYS and amount < 0:
                     amount = -amount
@@ -964,6 +1142,12 @@ def assemble(section_map: dict[tuple, dict]) -> tuple[list[dict], list[dict]]:
             meta["quarter"] = tag
             meta["derived"] = True
             rec = {**vals, **meta}
+            # derived quarter inherits the filing class of the cumulative
+            # record it was subtracted from (Q4 out of the audited FY stays
+            # Audited; Q2/Q3 out of unaudited H1/9M stay Unaudited)
+            rec["_audit_rank"] = max(cum.get("_audit_rank", 0) or 0,
+                                     prev.get("_audit_rank", 0) or 0)
+            rec["_src_urls"] = list(cum.get("_src_urls") or [])
             derived.append((("QD", base_end), rec))
     all_entries = entries + derived
 
@@ -986,7 +1170,9 @@ def assemble(section_map: dict[tuple, dict]) -> tuple[list[dict], list[dict]]:
     years_seen: dict[str, dict] = {}
     for rec in annuals:
         years_seen.setdefault(rec["period_end"], rec)
-    annuals = [years_seen[k] for k in sorted(years_seen)]
+    annuals = [_surface_audit(years_seen[k]) for k in sorted(years_seen)]
+    for rec in quarters:
+        _surface_audit(rec)
     return quarters, annuals
 
 
@@ -1008,7 +1194,8 @@ def compute_ttm(quarters: list[dict]) -> dict | None:
     for r in window:
         keys.update(k for k in r if not k.startswith("_")
                     and k not in ("period_end", "fy", "kind", "quarter",
-                                  "cumulative", "derived"))
+                                  "cumulative", "derived", "audit",
+                                  "source_urls"))
     skip_per_share = ss.PER_SHARE_KEYS
     # balance-sheet items are STOCKS: summing them across a TTM window
     # fabricates nonsense (share capital x4, cash x4) — latest reading wins
@@ -1064,6 +1251,43 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def _parse_child(q, pdf_path, max_pages, primary_period) -> None:
+    """Child target for parse_table_pages_guarded (spawn context)."""
+    try:
+        q.put(parse_table_pages(pdf_path, max_pages=max_pages,
+                                primary_period=primary_period))
+    except Exception:
+        q.put(None)
+
+
+def parse_table_pages_guarded(pdf_path: Path, max_pages: int = 12,
+                              primary_period: tuple[str, tuple] | None = None,
+                              budget_s: float = 90.0) -> list[dict] | None:
+    """parse_table_pages under a hard wall-clock budget.
+
+    pdfminer's layout analysis is CPU-bound and unbounded on vector-soup
+    pages (newspaper advertisements, scanned query replies) that slip past
+    the headline filter — one such PDF stalled a backfill worker for over an
+    hour. The parse therefore runs in a child process; when the budget
+    expires the child is terminated and the PDF is treated as unreadable
+    (None -> honest 'no rows', never fabricated data).
+    """
+    import multiprocessing as mp
+    ctx = mp.get_context("spawn")
+    q = ctx.SimpleQueue()
+    p = ctx.Process(target=_parse_child,
+                    args=(q, pdf_path, max_pages, primary_period))
+    p.start()
+    p.join(budget_s)
+    if p.is_alive():
+        p.terminate()
+        p.join()
+        print(f"    parse budget {budget_s:.0f}s exceeded "
+              f"{pdf_path.name[:60]} -> skipped", flush=True)
+        return None
+    return q.get() if not q.empty() else None
+
+
 def process_stock(isin: str, ident_row: dict,
                   max_documents: int = 6) -> dict:
     """Full pipeline for one stock; returns a status summary."""
@@ -1085,19 +1309,19 @@ def process_stock(isin: str, ident_row: dict,
         pdf_path = download_pdf(a["url"], symbol)
         if not pdf_path:
             continue
-        # PRIMARY: vision-model extraction (handles scans + OCR noise);
-        # FALLBACK: deterministic word-position parser (offline / no key).
-        # BOTH tiers always run and their raw rows are concatenated —
-        # build_section_records' rank logic keeps the better reading per
-        # line item, so a partial AI pass no longer starves the parser of
-        # the rows it can read (bank filings: AI often misses the
-        # balance-sheet page entirely).
+        # PRIMARY (only): deterministic word-position parser (pdfplumber,
+        # offline / no key) under a hard per-PDF CPU budget. The vision-model
+        # tier is DISABLED by decision — scanned/image-only PDFs the parser
+        # cannot read yield no rows and stay honest gaps in the coverage
+        # report. To re-enable AI-assisted extraction, uncomment the block
+        # below (it ran before the parser).
         tiers: list[str] = []
-        raw = ai_extract_document(pdf_path)
-        if raw:
-            all_raw.extend(raw)
-            tiers.append("ai")
-        det = parse_table_pages(pdf_path, primary_period=primary)
+        # raw = ai_extract_document(pdf_path)
+        # if raw:
+        #     all_raw.extend(raw)
+        #     tiers.append("ai")
+        det = parse_table_pages_guarded(pdf_path, primary_period=primary) \
+            or []
         if det:
             all_raw.extend(det)
             tiers.append("deterministic")
@@ -1251,19 +1475,8 @@ def main() -> int:
     parser.add_argument("--symbols", default="",
                         help="comma-separated NSE symbols")
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--download-fr-xbrl", action="store_true",
-                        help="raw download: financial-results XBRL filings "
-                             "-> data/raw/financial_results_xbrl/")
-    parser.add_argument("--years", type=int, default=5,
-                        help="years back for --download-fr-xbrl")
-    parser.add_argument("--workers", type=int, default=6)
     args = parser.parse_args()
     syms = [s.strip() for s in args.symbols.split(",") if s.strip()] or None
-    if args.download_fr_xbrl:
-        result = download_financial_results_xbrl(
-            symbols=syms, years_back=args.years, workers=args.workers)
-        print(json.dumps(result, indent=2))
-        return 0
     results = run(symbols=syms, limit=args.limit)
     ok = sum(1 for r in results if r.get("status") == "ok")
     print(json.dumps({"total": len(results), "ok": ok}, indent=2))

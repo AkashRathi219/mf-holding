@@ -161,6 +161,9 @@ def load_ter_schemes(xlsx_path: Path) -> pd.DataFrame:
 
 def load_universe(csv_path: Path) -> pd.DataFrame:
     """Load the Combined NAV universe file (fund+plan rows)."""
+    # [slim-deps] lazy import, same rationale as load_ter_schemes().
+    import pandas as pd
+
     df = pd.read_csv(csv_path, encoding="utf-8-sig")
     df.columns = [c.strip() for c in df.columns]
     return df
@@ -338,6 +341,9 @@ def map_universe_to_ter(
       ter_status   : ok / no_scheme / empty_plan / not_disclosed / matured...
       ter_scheme   : the TER export scheme name that was matched
     """
+    # [slim-deps] lazy import, same rationale as load_ter_schemes().
+    import pandas as pd
+
     ter_lookup = {row["_key"]: row for _, row in ter.iterrows()}
 
     out = universe.copy()

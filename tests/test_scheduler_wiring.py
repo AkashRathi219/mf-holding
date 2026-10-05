@@ -22,12 +22,14 @@ ROOT = Path(__file__).resolve().parent.parent
 #   stock_refresh_fn()
 #   bond_refresh_fn()
 #   amfi_fn()
+#   otherdata_fn()
 CONTRACTS: dict[str, dict] = {
     "pipeline_fn": {"kwargs": ("year", "month"), "sync_ok": True},
     "nav_refresh_fn": {"kwargs": ("days",), "sync_ok": True},
     "stock_refresh_fn": {"kwargs": (), "sync_ok": True},
     "bond_refresh_fn": {"kwargs": (), "sync_ok": True},
     "amfi_fn": {"kwargs": (), "sync_ok": True},
+    "otherdata_fn": {"kwargs": (), "sync_ok": True},
 }
 
 WIRING_SITES = [

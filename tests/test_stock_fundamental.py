@@ -274,7 +274,7 @@ def test_table_columns_are_audited_fiscal_years():
     rev = [c["values"]["revenue_from_operations"] for c in t["columns"]]
     assert rev == pytest.approx([100.0, 110.0, 121.0, 133.1, 146.41])
     assert t["methodology_version"] == FUND_VERSION
-    assert t["table_version"] == "fund-table-v1.1.0"
+    assert t["table_version"] == "fund-table-v1.2.0"
 
 
 def test_table_per_year_metrics_hand_computed():
@@ -378,3 +378,61 @@ def test_table_no_statement_is_honest():
     assert build_annual_table({})["available"] is False
     assert build_annual_table(
         {"consolidated": {"annual": [], "quarters": [], "ttm": {}}})["available"] is False
+
+
+# ---- quarterly results breakup [fund-table-v1.2.0] --------------------------------
+
+def _quarter(fy, q, rev, pat, audit, derived=False):
+    month = {"Q1": 6, "Q2": 9, "Q3": 12, "Q4": 3}[q]
+    year = int(fy[2:]) if q != "Q4" else int(fy[2:])
+    return {"period_end": f"{year}-{month:02d}-30", "fy": fy, "kind": "Q",
+            "quarter": q, "cumulative": False, "derived": derived,
+            "audit": audit,
+            "revenue_from_operations": rev, "pbt": rev * 0.15,
+            "pat": pat, "eps_basic": pat / 2}
+
+
+def _breakup_doc():
+    quarters = []
+    for fy, aud in (("FY24", "Audited"), ("FY25", "Unaudited"),
+                    ("FY26", "Audited")):
+        for i, q in enumerate(("Q1", "Q2", "Q3", "Q4")):
+            if fy == "FY24" and q in ("Q3", "Q4"):
+                continue                     # honest gap: never filed/parsed
+            quarters.append(_quarter(fy, q, 100.0 + i, 10.0 + i,
+                                     "Audited" if (q == "Q4" and aud == "Audited")
+                                     else "Unaudited",
+                                     derived=(q == "Q4")))
+    return {"consolidated": {"quarters": quarters,
+                             "annual": [_annual("FY26", 440.0, 44.0)],
+                             "ttm": {}}}
+
+
+def test_breakup_slots_five_fys_by_quarter():
+    t = build_annual_table(_breakup_doc())
+    qb = t["quarterly_breakup"]
+    assert qb["available"] is True
+    assert qb["fys"] == ["FY24", "FY25", "FY26"]
+    assert len(qb["rows"]) == 12                 # 3 FYs x Q1-Q4 slots
+    slots = {(r["fy"], r["quarter"]) for r in qb["rows"]}
+    assert slots == {(fy, q) for fy in qb["fys"]
+                     for q in ("Q1", "Q2", "Q3", "Q4")}
+
+
+def test_breakup_honest_gaps_and_audit_flags():
+    t = build_annual_table(_breakup_doc())
+    rows = {(r["fy"], r["quarter"]): r for r in t["quarterly_breakup"]["rows"]}
+    gap = rows[("FY24", "Q3")]
+    assert gap["period_end"] is None and gap["audit"] is None
+    assert all(v is None for v in gap["values"].values())
+    q4 = rows[("FY26", "Q4")]
+    assert q4["audit"] == "Audited" and q4["derived"] is True
+    assert q4["values"]["revenue_from_operations"] == pytest.approx(103.0)
+    assert rows[("FY25", "Q1")]["audit"] == "Unaudited"
+
+
+def test_breakup_absent_without_quarters():
+    t = build_annual_table({"consolidated": {"annual": [_annual("FY26", 440.0, 44.0)],
+                                             "quarters": [], "ttm": {}}})
+    assert t["quarterly_breakup"]["available"] is False
+    assert build_annual_table({})["quarterly_breakup"]["available"] is False

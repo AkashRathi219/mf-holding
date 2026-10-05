@@ -1,4 +1,4 @@
-"""Fundamental-analysis engine [fund-v1.1.0].
+"""Fundamental-analysis engine [fund-v1.1.1].
 
 Pure functions over a normalised statement document (data/stock_financials/
 <ISIN>.json produced by src/financial_statements.py) plus the latest close
@@ -27,8 +27,8 @@ from __future__ import annotations
 import math
 import statistics
 
-FUND_VERSION = "fund-v1.1.0"
-FUND_TABLE_VERSION = "fund-table-v1.1.0"
+FUND_VERSION = "fund-v1.1.1"
+FUND_TABLE_VERSION = "fund-table-v1.2.0"
 
 
 def _f(v) -> float | None:
@@ -93,6 +93,62 @@ def _quarter_series(block: dict) -> list[dict]:
     rows = [r for r in (block.get("quarters") or [])
             if isinstance(r, dict) and not r.get("cumulative")]
     return sorted(rows, key=lambda r: r.get("period_end") or "")
+
+
+# per-quarter line items shown in the results-breakup table (label, key, format)
+_QUARTER_ROWS: tuple[tuple[str, str, str], ...] = (
+    ("Revenue", "revenue_from_operations", "cr"),
+    ("Total income", "total_income", "cr"),
+    ("PBT", "pbt", "cr"),
+    ("PAT", "pat", "cr"),
+    ("EPS (basic, Rs)", "eps_basic", "rps"),
+)
+
+_QUARTER_BREAKUP_ASSUMPTIONS: tuple[str, ...] = (
+    "Rows are the last five fiscal years x Q1-Q4; every discrete quarter "
+    "parsed from NSE corporate-announcement filings shows up in its slot and "
+    "missing quarters stay empty — never interpolated.",
+    "'Audited' means the figure was parsed from a filing whose announcement "
+    "declares audited results (typically Q4/annual); 'Unaudited' from a "
+    "quarterly declaration; '(derived)' quarters were subtracted from "
+    "cumulative H1/9M/annual filings in the same FY chain.",
+    "Amounts are Rs crore as filed; per-share items are rupees as printed. "
+    "Quarterly filings are unaudited by regulation except Q4/full-year.",
+)
+
+
+def quarterly_breakup(block: dict) -> dict:
+    """Quarterly results breakup [fund-table-v1.2.0]: last five FYs x Q1-Q4
+    with the audited/unaudited class of every quarter. Honest gaps — a slot
+    with no parsed quarter stays null."""
+    disc = _quarter_series(block)
+    empty = {"available": False,
+             "assumptions": list(_QUARTER_BREAKUP_ASSUMPTIONS)}
+    if not disc:
+        return empty
+    fys = sorted({r.get("fy") for r in disc if r.get("fy")})[-5:]
+    if not fys:
+        return empty
+    by_slot: dict[tuple[str, str], dict] = {}
+    for r in disc:
+        fy, q = r.get("fy"), r.get("quarter")
+        if fy in fys and q in ("Q1", "Q2", "Q3", "Q4"):
+            by_slot.setdefault((fy, q), r)
+    rows: list[dict] = []
+    for fy in fys:
+        for q in ("Q1", "Q2", "Q3", "Q4"):
+            rec = by_slot.get((fy, q))
+            rows.append({
+                "fy": fy,
+                "quarter": q,
+                "period_end": rec.get("period_end") if rec else None,
+                "values": {key: (_f(rec.get(key)) if rec else None)
+                           for _lab, key, _fmt in _QUARTER_ROWS},
+                "audit": rec.get("audit") if rec else None,
+                "derived": bool(rec.get("derived")) if rec else False,
+            })
+    return {"available": True, "fys": fys, "rows": rows,
+            "assumptions": list(_QUARTER_BREAKUP_ASSUMPTIONS)}
 
 
 def shares_outstanding(ttm: dict | None, annuals: list[dict],
@@ -385,7 +441,7 @@ def piotroski_f(cur: dict, prev: dict) -> dict | None:
     def gm(rec):
         rev = f(rec, "revenue_from_operations")
         cogs = f(rec, "cost_of_materials")
-        return _ratio(rev - cogs, rev) if rev else None
+        return _ratio(rev - cogs, rev) if rev and cogs is not None else None
 
     ato_c = _ratio(f(cur, "revenue_from_operations"), f(cur, "total_assets"))
     ato_p = _ratio(f(prev, "revenue_from_operations"),
@@ -477,7 +533,7 @@ def beneish_m(cur: dict, prev: dict) -> dict | None:
 
     def gmargin(rec):
         rev, cogs = f(rec, "revenue_from_operations"), f(rec, "cost_of_materials")
-        return _ratio(rev - cogs, rev) if rev else None
+        return _ratio(rev - cogs, rev) if rev and cogs is not None else None
 
     dsri = None
     if None not in (f(cur, "trade_receivables"), f(cur, "revenue_from_operations"),
@@ -1026,17 +1082,20 @@ def _table_warnings(years: list[dict], ttm: dict,
 def build_annual_table(doc: dict) -> dict:
     """Three statements + per-year metrics + multi-year analysis
 
-    [fund-table-v1.1.0]. Columns are the audited annual records
+    [fund-table-v1.2.0]. Columns are the audited annual records
     (consolidated preferred) for the most recent fiscal years available,
     oldest -> newest, capped at five; missing years are absent, never
     fabricated. When no audited annual filing is parsed yet but discrete
     quarterly records exist, the table falls back to the latest quarters
     (period="Q") with explicit unaudited labeling instead of an empty
-    screen. Consistent with the house honest-null rule everywhere.
+    screen. Adds a quarterly results breakup (last five FYs x Q1-Q4, each
+    quarter tagged Audited/Unaudited/Derived). Consistent with the house
+    honest-null rule everywhere.
     """
     block = pick_block(doc)
     empty = {"methodology_version": FUND_VERSION,
-             "table_version": FUND_TABLE_VERSION, "available": False}
+             "table_version": FUND_TABLE_VERSION, "available": False,
+             "quarterly_breakup": quarterly_breakup(block or {})}
     if not block:
         return {**empty, "note": "no statement block for this ISIN yet"}
     annuals = _annual_series(block)
@@ -1125,6 +1184,7 @@ def build_annual_table(doc: dict) -> dict:
         "multi_year": multi_year,
         "checks": _consistency_checks(years, quarters, columns),
         "warnings": warnings,
+        "quarterly_breakup": quarterly_breakup(block),
         "assumptions": list(TABLE_ASSUMPTIONS_Q if period == "Q"
                             else TABLE_ASSUMPTIONS),
     }

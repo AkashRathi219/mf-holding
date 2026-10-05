@@ -1,0 +1,31 @@
+{
+ "amc": "Test AMC Mutual Fund",
+ "files": [
+  {
+   "file": "Test AMC Mutual Fund\\07-2026\\factsheet\\Test_AMC_Factsheet_July_2026.xls",
+   "status": "ok",
+   "sheets": [
+    {
+     "scheme": "Test Top Ten Fund",
+     "date": "31 Jul 2026",
+     "plans": {
+      "Direct": {
+       "holdings": [
+        {"name": "Alpha Industries Ltd", "isin": "INE001A0101", "pct_nav": 10.0},
+        {"name": "Beta Motors Ltd", "isin": "INE002B0101", "pct_nav": 9.0},
+        {"name": "Gamma Pharma Ltd", "isin": "INE003C0101", "pct_nav": 8.0},
+        {"name": "Delta Retail Ltd", "isin": "INE004D0101", "pct_nav": 5.0},
+        {"name": "Epsilon Bank Ltd", "isin": "INE005E0101", "pct_nav": 4.0},
+        {"name": "Zeta Energy Ltd", "isin": "INE006F0101", "pct_nav": 3.0},
+        {"name": "Eta Metals Ltd", "isin": "INE007G0101", "pct_nav": 3.0},
+        {"name": "Theta IT Ltd", "isin": "INE008H0101", "pct_nav": 1.5},
+        {"name": "Iota Realty Ltd", "isin": "INE009I0101", "pct_nav": 1.0},
+        {"name": "Kappa FMCG Ltd", "isin": "INE010J0101", "pct_nav": 0.5}
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

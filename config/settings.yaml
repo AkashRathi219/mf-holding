@@ -57,7 +57,10 @@ scheduler:
     hour: 8
     minute: 35
   # Daily stock refresh: update closing prices + corporate actions + NSE
-  # financial-report announcements for resolved equity stocks.
+  # financial-report announcements for resolved equity stocks. Corporate
+  # actions additionally get their own standalone pass at 21:45 IST
+  # (agent_fleet.daily_corporate_actions) so an action refresh is never
+  # blocked by a price failure here.
   stock_refresh:
     enabled: true
     hour: 21
@@ -82,6 +85,56 @@ scheduler:
     enabled: true
     hour: 7
     minute: 15
+  # Monthly AMFI other-data refresh (PLAN_AMFI_DATA_SOURCES): tracking
+  # error/difference, scheme-wise disclosure, risk parameters, AUM, NFO
+  # -> data/reference/amfi_*.json. Same days 8-12 publish window.
+  otherdata_refresh:
+    enabled: true
+    hour: 7
+    minute: 45
+  # AMC agent-fleet maintenance (SPEC §8.1/§11) + the DAILY vs WEEKLY data
+  # policy. DAILY = market data only: mutual-fund NAV, stock closing prices,
+  # stock corporate actions, bond prices, and the read-only integrity audit
+  # (it audits stored data and fetches nothing, so it is compatible with
+  # weekly holdings). WEEKLY = the mutual-fund holdings statement cycle in
+  # ONE job (weekly_mf_holdings): AMC agents first (discovery/download
+  # fleet), then the integrity audit to tier the fresh data, and ONLY THEN
+  # the escalation ladder - per ticket amc_recheck -> web_search -> amfi ->
+  # advisorkhoj -> manual via next_channel(), so AMFI/Advisorkhoj are a
+  # downstream fallback reached only after the AMC agents fail, never a
+  # parallel/peer activity. weekly_manual_digest stays weekly (reporting
+  # only, fetches nothing). Every job can be toggled and re-timed
+  # independently; they all route through one scheduler wiring entry point
+  # (agent_fleet_fn) that dispatches on the job id.
+  agent_fleet:
+    enabled: true
+    # Read-only DB audit -> data/reports/integrity_<date>.md (~7s).
+    daily_integrity_audit:
+      enabled: true
+      hour: 7
+      minute: 20
+    # Stock corporate actions (dividends/splits/announcements), decoupled
+    # from the 21:00 bundled stock job - distinct time so they never
+    # overlap and a price failure cannot block the action refresh.
+    daily_corporate_actions:
+      enabled: true
+      hour: 21
+      minute: 45
+    # The whole MF-holdings cycle, strictly ordered: AMC discovery fleet ->
+    # integrity audit -> unbounded escalation-ladder drain (the queue's
+    # next_channel() ordering makes the source channels a fallback).
+    weekly_mf_holdings:
+      enabled: true
+      day_of_week: mon
+      hour: 6
+      minute: 30
+    # manual_register pending rows by reason
+    # -> data/reports/manual_digest_<date>.md
+    weekly_manual_digest:
+      enabled: true
+      day_of_week: fri
+      hour: 18
+      minute: 0
 
 paths:
   pdfs_dir: data/raw/pdfs

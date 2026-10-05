@@ -172,8 +172,9 @@ latest-audited margin divergence. Every figure stays null when its inputs are
 absent — nothing is guessed.
 
 Assumptions shipped in the payload are the machine-readable copy of what is
-documented here (audited XBRL/PDF figures, ₹ crore, NSE-only, best-available
-of consolidated vs standalone, traders may restate, etc.).
+documented here (figures from NSE-published audited/unaudited financial
+results, ₹ crore, NSE-only, best-available of consolidated vs standalone,
+traders may restate, etc.).
 
 ## 5. Serving & parity
 

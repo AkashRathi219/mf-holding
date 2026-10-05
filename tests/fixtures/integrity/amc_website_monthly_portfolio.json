@@ -1,0 +1,45 @@
+{
+ "source_file": "pdfs/Test_AMC/2026/07/Monthly_Portfolio_July_2026.pdf",
+ "file_type": "pdf",
+ "metadata": {"date": "as on 31-Jul-2026"},
+ "amc_name": "Test AMC Mutual Fund",
+ "schemes": {
+  "TF1": {
+   "fund_name": "Test Full Disclosure Fund",
+   "date": "Monthly Portfolio Statement as on July 31, 2026",
+   "holdings": [
+    {"company": "Alpha Industries Ltd", "isin": "INE001A0101", "percent_nav": 50.0},
+    {"company": "Beta Motors Ltd", "isin": "INE002B0101", "percent_nav": 30.0},
+    {"company": "Gamma Pharma Ltd", "isin": "INE003C0101", "percent_nav": 17.0}
+   ]
+  },
+  "TP1": {
+   "fund_name": "Test Partial Fund",
+   "date": "Monthly Portfolio Statement as on July 31, 2026",
+   "holdings": [
+    {"company": "Alpha Industries Ltd", "isin": "INE001A0101", "percent_nav": 30.0},
+    {"company": "Beta Motors Ltd", "isin": "INE002B0101", "percent_nav": 20.0},
+    {"company": "Gamma Pharma Ltd", "isin": "INE003C0101", "percent_nav": 10.0}
+   ]
+  },
+  "TS1": {
+   "fund_name": "Test Suspect Fund",
+   "date": "Monthly Portfolio Statement as on July 31, 2026",
+   "holdings": [
+    {"company": "Alpha Industries Ltd", "isin": "INE001A0101", "percent_nav": 40.0},
+    {"company": "Beta Motors Ltd", "isin": "INE002B0101", "percent_nav": 30.0},
+    {"company": "Gamma Pharma Ltd", "isin": "INE003C0101", "percent_nav": 25.0},
+    {"company": "Delta Retail Ltd", "isin": "INE004D0101", "percent_nav": 22.0}
+   ]
+  },
+  "TN1": {
+   "fund_name": "Test No Date Fund",
+   "date": "",
+   "holdings": [
+    {"company": "Alpha Industries Ltd", "isin": "INE001A0101", "percent_nav": 30.0},
+    {"company": "Beta Motors Ltd", "isin": "INE002B0101", "percent_nav": 20.0},
+    {"company": "Gamma Pharma Ltd", "isin": "INE003C0101", "percent_nav": 10.0}
+   ]
+  }
+ }
+}

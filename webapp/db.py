@@ -25,6 +25,7 @@ from .conventions import normalize_metric as _normalize_metric
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
+REFERENCE_DIR = DATA_DIR / "reference"
 DB_PATH = DATA_DIR / "webapp.db"
 
 # Folders scanned for scheme-indexed holdings JSON (excel / zip / html parsers)
@@ -42,6 +43,10 @@ STOCK_FINANCIALS_DIR = DATA_DIR / "stock_financials"
 STOCK_REPORTS_DIR = DATA_DIR / "stock_reports"
 DISCOVERY_NEEDED_CSV = DATA_DIR / "reference" / "discovery_needed.csv"
 NO_DISCLOSURE_CSV = DATA_DIR / "reference" / "no_disclosure.csv"
+# Schemes AMFI no longer publishes (wound down / merged). Written by
+# scripts/mark_discontinued_schemes.py; keeps coverage='discontinued' across DB
+# rebuilds so the dashboard/UI can show "discontinued + last known NAV".
+DISCONTINUED_CSV = DATA_DIR / "reference" / "discontinued_schemes.csv"
 # Optional benchmark-weight file for index/ETF funds, keyed by Nifty index name:
 #   data/nifty/weights.json  ->  { "Nifty200_Momentum_30": { "INE117A01022": 4.31, ... } }
 # Ingestion source: niftyindices.com "Market Capitalisation & Weightage" monthly
@@ -295,7 +300,7 @@ def _fingerprint() -> str:
     h = hashlib.sha256()
     # [F&O-v1] logic/schema version salt — bump to force a clean rebuild when
     # holdings schema or classification semantics change.
-    h.update(b"fo-v1:hedge-cols+derivative-split")
+    h.update(b"fo-v1:hedge-cols+derivative-split+ter-as-of")
     files: list[Path] = [
         UNIVERSE_CSV, EQUITY_ISINS_CSV, INDEX_RESOLVED_JSON,
         DISCOVERY_NEEDED_CSV, NO_DISCLOSURE_CSV,
@@ -640,7 +645,8 @@ def _create_schema(cur: sqlite3.Cursor) -> None:
             as_of TEXT,
             category TEXT,
             plan TEXT,
-            nav REAL, ter REAL, ter_regular REAL, ter_direct REAL, aum REAL,
+            nav REAL, ter REAL, ter_regular REAL, ter_direct REAL, ter_as_of TEXT,
+            aum REAL,
             amfi_regular TEXT, amfi_direct TEXT, isin_regular TEXT, isin_direct TEXT,
             ytm REAL, duration REAL, avg_maturity REAL,
             is_index INTEGER, is_etf INTEGER, is_fof INTEGER,
@@ -798,10 +804,13 @@ def _containment_ratio(a: str, b: str) -> float:
 
 def _coverage_statuses() -> dict[str, dict]:
     statuses: dict[str, dict] = {}
-    for path in (DISCOVERY_NEEDED_CSV, NO_DISCLOSURE_CSV):
+    # order matters: a scheme listed as discontinued stays flagged even if it
+    # also appears in a discovery/needs-disclosure list.
+    for path, tag in ((DISCONTINUED_CSV, "discontinued"),
+                      (DISCOVERY_NEEDED_CSV, "discovery_needed"),
+                      (NO_DISCLOSURE_CSV, "no_disclosure")):
         if not path.exists():
             continue
-        tag = "discovery_needed" if path.name.startswith("discovery") else "no_disclosure"
         with open(path, encoding="utf-8-sig", newline="") as fh:
             for r in csv.DictReader(fh):
                 fund = (r.get("fund") or "").strip()
@@ -1226,6 +1235,9 @@ def _seed_schemes_and_holdings(cur: sqlite3.Cursor) -> None:
             "nav": (uni_match or {}).get("nav"), "ter": headline,
             "ter_regular": _t(ter_reg_raw),
             "ter_direct": _t(ter_dir_raw),
+            # [TER-v2.1] export as-of date (e.g. "2026-07-06") — surfaced as the
+            # TER badge's as-of month so staleness is visible in Scheme Details.
+            "ter_as_of": (ter_rec or {}).get("date") or None,
             "amfi_regular": None, "amfi_direct": None,
             "isin_regular": None, "isin_direct": None,
             "aum": (uni_match or {}).get("aum"),
@@ -1576,12 +1588,12 @@ def _seed_schemes_and_holdings(cur: sqlite3.Cursor) -> None:
     cur.executemany(
         """INSERT OR REPLACE INTO schemes (
             id, key, amc, fund_name, source, as_of, category, plan, nav, ter,
-            ter_regular, ter_direct, aum, amfi_regular, amfi_direct,
+            ter_regular, ter_direct, ter_as_of, aum, amfi_regular, amfi_direct,
             isin_regular, isin_direct,
             ytm, duration, avg_maturity, is_index, is_etf, is_fof, coverage,
             n_holdings, n_equity, n_debt, top_holding, top_holding_pct, cash_pct,
             large_pct, mid_pct, small_pct, index_name
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         [_row_tuple(scheme_rows[key]) for key in scheme_rows],
     )
 
@@ -1615,7 +1627,7 @@ def _row_tuple(r: dict) -> tuple:
     return (
         r["id"], r["key"], r["amc"], r["fund_name"], r["source"], r["as_of"],
         r["category"], r["plan"], r["nav"], r["ter"],
-        r.get("ter_regular"), r.get("ter_direct"), r["aum"],
+        r.get("ter_regular"), r.get("ter_direct"), r.get("ter_as_of"), r["aum"],
         r.get("amfi_regular"), r.get("amfi_direct"), r.get("isin_regular"), r.get("isin_direct"),
         r["ytm"],
         r["duration"], r["avg_maturity"], r["is_index"], r["is_etf"], r["is_fof"],
@@ -3195,6 +3207,40 @@ class WebDB:
         d["as_of"] = _clean_holdings_date(d.get("as_of"))
         return d
 
+    # ---- [Phase 3/5] scheme attributes (riskometer / description / managers)
+    _ATTR_CACHE: dict[str, dict | None] = {"loaded": False}
+
+    def scheme_attributes(self, fund_name: str) -> dict:
+        """Read-time lookup of the mined scheme-attribute reference files,
+        keyed by fund-level canon_name. Returns {} when nothing is on record.
+        Kept OUT of the db build so monthly attribute refreshes never force a
+        rebuild."""
+        if not self._ATTR_CACHE.get("loaded"):
+            refs = {}
+            files = {
+                "riskometer": REFERENCE_DIR / "scheme_riskometer.json",
+                "description": REFERENCE_DIR / "scheme_descriptions.json",
+                "fund_managers": REFERENCE_DIR / "fund_managers.json",
+            }
+            for key, path in files.items():
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    refs[key] = (data.get("funds") or {})
+                except Exception:
+                    refs[key] = {}
+            self._ATTR_CACHE.update(refs)
+            self._ATTR_CACHE["loaded"] = True
+        canon = canon_name(fund_name or "")
+        out = {}
+        for key in ("riskometer", "description", "fund_managers"):
+            rec = (self._ATTR_CACHE.get(key) or {}).get(canon)
+            if rec:
+                rec = dict(rec)
+                rec.pop("history", None)          # keep payloads lean
+                rec.pop("scheme_variants", None)
+                out[key] = rec
+        return out
+
     def holdings_stats(self, scheme_ids) -> dict[int, dict]:
         """scheme_id -> {n, with_isin, with_pct, max_pct, sum_pct} over the
         holdings table (batch helper for confidence scoring)."""
@@ -3206,11 +3252,18 @@ class WebDB:
             f"SELECT scheme_id, COUNT(*) AS n, "
             f"SUM(CASE WHEN isin!='' THEN 1 ELSE 0 END) AS wi, "
             f"SUM(CASE WHEN percent_nav IS NOT NULL THEN 1 ELSE 0 END) AS wp, "
+            f"SUM(CASE WHEN asset_class='future_options' THEN 1 ELSE 0 END) AS n_fno, "
+            f"SUM(CASE WHEN pct_nav_hedged > 0 THEN 1 ELSE 0 END) AS n_hedged, "
             f"MAX(percent_nav) AS max_pct, SUM(percent_nav) AS sum_pct "
             f"FROM holdings WHERE scheme_id IN ({q}) GROUP BY scheme_id",
             ids).fetchall()
         return {r["scheme_id"]: {"n": r["n"], "with_isin": r["wi"] or 0,
                                  "with_pct": r["wp"] or 0,
+                                 # [F&O-v1] flag covers both explicit F&O rows
+                                 # and hedged sleeves (Derivative % to NAV on
+                                 # stock rows).
+                                 "n_fno": (r["n_fno"] or 0)
+                                          + (r["n_hedged"] or 0),
                                  "max_pct": r["max_pct"],
                                  "sum_pct": r["sum_pct"]} for r in rows}
 

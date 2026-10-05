@@ -252,7 +252,7 @@ async function loadSchemes() {
   if (v("schemeSource")) p.set("source", v("schemeSource"));
   if (v("schemeCoverage")) p.set("coverage", v("schemeCoverage"));
   const tbody = document.getElementById("schemeTbody");
-  tbody.innerHTML = `<tr><td colspan="8" class="empty"><span class="spin"></span> Loading schemes…</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="9" class="empty"><span class="spin"></span> Loading schemes…</td></tr>`;
   try {
     const data = await App.api("/schemes?" + p.toString());
     document.getElementById("schemeCount").textContent = App.formatNum(data.total) + " schemes";
@@ -261,15 +261,19 @@ async function loadSchemes() {
     document.getElementById("schemePrev").disabled = schemeState.offset === 0;
     document.getElementById("schemeNext").disabled = schemeState.offset + schemeState.limit >= data.total;
     if (!data.items.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="empty">No schemes match your filters.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="empty">No schemes match your filters.</td></tr>`;
       return;
     }
     tbody.innerHTML = data.items.map(s => {
       const top = s.top_holding ? `${App.esc(s.top_holding)} <span class="mono" style="color:var(--text-3)">${App.formatPct(s.top_holding_pct)}</span>` : "—";
+      const ter = (s.ter_regular != null || s.ter_direct != null)
+        ? `${s.ter_regular != null ? App.formatPct(s.ter_regular * 100, 2) : "—"} / ${s.ter_direct != null ? App.formatPct(s.ter_direct * 100, 2) : "—"}`
+        : "—";
       const flags = [];
       if (s.is_index) flags.push(App.badge("index", "blue"));
       if (s.is_etf) flags.push(App.badge("ETF", "blue"));
       if (s.is_fof) flags.push(App.badge("FoF", "grey"));
+      if (s.n_fno) flags.push(App.badge("F&O", "amber"));   // [F&O-v1] derivatives-usage flag
       return `<tr class="clickable" onclick="location.hash='#scheme/${s.id}'">
         <td><strong>${App.esc(s.fund_name)}</strong>${confBadge(s.confidence)}<br><span class="mono" style="font-size:11px;color:var(--text-3)">${App.formatDate(s.as_of)}</span></td>
         <td>${App.esc(s.amc)}</td>
@@ -277,6 +281,7 @@ async function loadSchemes() {
         <td>${App.flagBadge(s.coverage)}</td>
         <td class="num">${App.formatNum(s.n_holdings)}</td>
         <td class="num">${App.formatNum(s.aum, 1)}</td>
+        <td class="num">${ter}</td>
         <td>${top}</td>
         <td><button class="btn btn-outline btn-sm">Details</button></td>
       </tr>`;
@@ -372,6 +377,8 @@ async function renderSchemeDetail(id, container, titleEl) {
 
     const terReg = s.ter_regular != null ? App.formatPct(s.ter_regular * 100, 3) : "—";
     const terDir = s.ter_direct != null ? App.formatPct(s.ter_direct * 100, 3) : "—";
+    // [TER-v2.1] export as-of month, e.g. "2026-07-06" -> "Jul-2026"
+    const terAsOf = s.ter_as_of ? new Date(s.ter_as_of).toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" }) : "";
     const amfiR = s.amfi_regular || "—";
     const amfiD = s.amfi_direct || "—";
     const isinR = s.isin_regular || "—";
@@ -399,6 +406,35 @@ async function renderSchemeDetail(id, container, titleEl) {
         ${s.top_holding_pct ? `<span class="top-holding-pct">${App.formatPct(s.top_holding_pct)}</span>` : ""}
       </div>` : "";
 
+    // [Phase 3/5] mined attributes: description, riskometer gauge, managers
+    const attrs = s.attributes || {};
+    const asOfMonth = (v) => v ? new Date(v + (v.length === 7 ? "-01" : ""))
+      .toLocaleString("en-IN", { month: "short", year: "numeric", timeZone: "UTC" }) : "";
+    const RISK_LEVELS = ["low", "low to moderate", "moderate", "moderately high", "high", "very high"];
+    const riskGauge = (lvl) => {
+      if (!lvl) return `<span class="page-sub">—</span>`;
+      const idx = RISK_LEVELS.indexOf(lvl);
+      return `<span class="risk-gauge">${RISK_LEVELS.map((l, i) =>
+        `<span class="risk-cell${i <= idx ? " on" : ""}${i === idx ? " cur" : ""}" title="${l}"></span>`).join("")}
+        <span class="risk-label">${App.esc(lvl)}</span></span>`;
+    };
+    let attrCard = "";
+    if (attrs.description || attrs.riskometer || attrs.fund_managers) {
+      const rk = attrs.riskometer || {};
+      const fm = attrs.fund_managers || {};
+      const ds = attrs.description || {};
+      attrCard = `
+      <div class="card" style="margin-bottom:16px">
+        <h3>Scheme attributes <span class="badge grey">as assigned by the AMC${rk.as_of ? ` · ${App.esc(asOfMonth(rk.as_of))}` : ""}</span></h3>
+        ${ds.description ? `<p style="margin:0 0 10px;color:var(--text-2);line-height:1.55">${App.esc(ds.display || ds.description)}</p>` : ""}
+        ${fm.managers && fm.managers.length ? `<p style="margin:0 0 10px"><strong>Managed by</strong> ${fm.managers.map(m => App.esc(m)).join(", ")}${fm.as_of ? ` <span class="page-sub">· ${App.esc(asOfMonth(fm.as_of))}</span>` : ""}</p>` : ""}
+        ${rk.scheme_risk || rk.benchmark_risk ? `<table class="data" style="min-width:0"><tbody>
+          <tr><td style="color:var(--text-2);font-weight:600;width:38%">Scheme Riskometer</td><td>${riskGauge(rk.scheme_risk)}</td></tr>
+          <tr><td style="color:var(--text-2);font-weight:600">Benchmark Riskometer</td><td>${riskGauge(rk.benchmark_risk)}</td></tr>
+        </tbody></table>` : ""}
+      </div>`;
+    }
+
     if (titleEl) titleEl.textContent = `${s.fund_name} \u00b7 ${s.amc} \u00b7 ${App.sourceLabel(s.source)}`;
 
     const holdingsCard = h.length ? `
@@ -418,7 +454,7 @@ async function renderSchemeDetail(id, container, titleEl) {
         ${kpi("Latest NAV", s.nav_value != null ? App.esc(s.nav_value) : "\u2014", `as of ${App.esc(s.nav_date ? App.formatDate(s.nav_date) : "\u2014")} · daily`)}
         ${kpi("AUM", s.aum != null ? App.formatINR(s.aum, 1) + " cr" : "\u2014", `holdings ${App.esc(s.holdings_date ? App.formatDate(s.holdings_date) : "\u2014")}`)}
         ${kpi("Holdings", App.formatNum(h.length), `${App.formatNum(s.n_equity)} equity`)}
-        ${kpi("Expense ratio", `${terReg} → ${terDir}`, "regular → direct")}
+        ${kpi("Expense ratio", `${terReg} → ${terDir}`, `regular → direct${terAsOf ? ` · AMFI export ${App.esc(terAsOf)}` : ""}`)}
       </div>
 
       <div class="grid two" style="margin-bottom:16px">
@@ -443,6 +479,7 @@ async function renderSchemeDetail(id, container, titleEl) {
       </div>
 
       <div id="schemeAnalytics"></div>
+      ${attrCard}
       ${holdingsCard}
       ${buildNavSection(id, nav)}`;
 
@@ -1238,6 +1275,37 @@ function renderAnnualTable(d) {
       return `<td class="num">${fmt(v, format)}</td>`;
     }).join("")}</tr>`;
 
+  const qb = d.quarterly_breakup || {};
+  const auditBadge = (a, derived) => {
+    const b = a === "Audited" ? App.badge("audited", "green")
+      : a === "Unaudited" ? App.badge("unaudited", "amber")
+      : App.badge("class n/a", "grey");
+    return b + (derived ? ' <span class="page-sub">(derived)</span>' : "");
+  };
+  const qbRows = (qb.rows || []).map(r => {
+    const v = r.values || {};
+    const has = r.period_end != null;
+    const cell = (val, f) => `<td class="num">${has ? fmt(val, f) : "—"}</td>`;
+    return `<tr${has ? "" : ' style="opacity:.5"'}>
+      <td style="font-weight:600;white-space:nowrap">${App.esc(r.quarter)} ${App.esc(r.fy)}</td>
+      ${cell(v.revenue_from_operations, "cr")}
+      ${cell(v.total_income, "cr")}
+      ${cell(v.pbt, "cr")}
+      ${cell(v.pat, "cr")}
+      ${cell(v.eps_basic, "rps")}
+      <td style="white-space:nowrap">${has ? auditBadge(r.audit, r.derived) : App.badge("not parsed", "grey")}</td>
+    </tr>`;
+  }).join("");
+  const qbAssumptions = (qb.assumptions || []).map(a => `<li>${App.esc(a)}</li>`).join("");
+  const qbSection = qb.available ? `
+    <h3 style="margin-top:16px">Quarterly results breakup <span class="page-sub">(last ${qb.fys.length} FYs · basis per filing)</span></h3>
+    <div class="table-wrap" style="max-height:60vh;overflow:auto">
+      <table class="data"><thead>
+        <tr><th>Quarter</th><th class="r">Revenue</th><th class="r">Total income</th><th class="r">PBT</th><th class="r">PAT</th><th class="r">EPS (₹)</th><th>Basis</th></tr>
+      </thead><tbody>${qbRows}</tbody></table>
+    </div>
+    ${qbAssumptions ? `<details style="margin-top:6px"><summary class="page-sub" style="cursor:pointer">Quarterly breakup assumptions</summary><ul style="margin-top:8px;padding-left:18px;line-height:1.6">${qbAssumptions}</ul></details>` : ""}` : "";
+
   const bodyRows = [];
   const sections = [["income", "Income statement"], ["balance_sheet", "Balance sheet"], ["cash_flow", "Cash flow"]];
   sections.forEach(([sec, label]) => {
@@ -1279,6 +1347,7 @@ function renderAnnualTable(d) {
         <tr><th>Item · ₹ crore unless marked</th>${cols.map(c => `<th class="r">${App.esc(c.fy)}</th>`).join("")}</tr>
       </thead><tbody>${bodyRows.join("")}</tbody></table>
     </div>
+    ${qbSection}
     <h3 style="margin-top:16px">Multi-year analysis <span class="page-sub">(across ${(d.years_n || 0)} ${quarterly ? "quarter" : "fiscal year"}${(d.years_n || 0) === 1 ? "" : "s"})</span></h3>
     <div class="grid auto" style="margin:10px 0 12px">
       <div class="kpi card"><div class="kpi-label">Revenue CAGR</div><div class="kpi-value">${cagr.revenue && cagr.revenue.pct !== null ? num(cagr.revenue.pct, 1) + "%" : "—"}</div><div class="kpi-sub">${spanLabel(cagr.revenue)}</div></div>
@@ -3399,6 +3468,11 @@ function initAdmin() {
       <div class="page-sub">Price / corporate-action / report coverage over the confirmed-equity universe (<b id="sbTotal">…</b> stocks) · latest price date <b id="sbLatest">…</b></div>
       <div id="sbBody" style="margin-top:10px"><span class="spin"></span> Loading…</div>
     </div>
+    <div id="stmtCovCard" class="card" style="margin-bottom:16px">
+      <h3 style="margin-bottom:4px">Statement coverage <span id="scOverall" class="badge grey">…</span></h3>
+      <div class="page-sub">Audited / unaudited quarterly + annual filings parsed from NSE corporate-announcement PDFs, last five fiscal years (<b id="scWindow">…</b>) · <a href="/api/admin/statements-coverage?format=csv" download>download CSV</a></div>
+      <div id="scBody" style="margin-top:10px"><span class="spin"></span> Loading…</div>
+    </div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <h3 style="margin:0">Refresh pipelines <span id="admSched" class="badge grey"></span></h3>
       <button class="btn btn-outline btn-sm" onclick="initAdmin()">Reload</button>
@@ -3624,6 +3698,50 @@ async function refreshStockStatusData() {
   }
 }
 
+async function refreshCoverageData() {
+  const body = document.getElementById("scBody");
+  if (!body) return;
+  try {
+    const c = await App.api("/admin/statements-coverage");
+    const fys = c.window_fys || [];
+    const winEl = document.getElementById("scWindow");
+    if (winEl) winEl.textContent = fys.join(" · ");
+    const badge = document.getElementById("scOverall");
+    const pct = c.universe ? Math.round(c.with_doc / c.universe * 100) : 0;
+    if (badge) {
+      badge.className = "badge " + (pct >= 80 ? "green" : pct >= 55 ? "amber" : "red");
+      badge.textContent = `${App.formatNum(c.with_doc)} / ${App.formatNum(c.universe)} stocks parsed`;
+    }
+    const sum = c.summary || {};
+    const annualRow = fys.map(fy => {
+      const a = sum[`${fy}|FY|Audited`] || 0, u = sum[`${fy}|FY|Unaudited`] || 0,
+            k = sum[`${fy}|FY|unknown`] || 0, n = a + u + k;
+      const tone = !n ? "grey" : a >= c.universe * 0.8 ? "green" : "amber";
+      return `<td class="num"><span class="badge ${tone}">${a}</span>${u || k ? ` <span class="page-sub">+${u || 0}u${k ? ` +${k}?` : ""}</span>` : ""}</td>`;
+    }).join("");
+    const qRow = (q) => fys.map(fy => {
+      const n = ["Audited", "Unaudited", "unknown"].reduce((t, au) => t + (sum[`${fy}|${q}|${au}`] || 0), 0);
+      return `<td class="num">${n || "—"}</td>`;
+    }).join("");
+    const missing = (c.stocks || []).filter(s =>
+      fys.some(fy => !s.parsed[`${fy}|FY|Audited`] && !s.parsed[`${fy}|FY|Unaudited`] && !s.parsed[`${fy}|FY|unknown`]));
+    body.innerHTML = `
+      <div class="table-wrap" style="max-height:300px;overflow:auto">
+        <table class="data"><thead>
+          <tr><th>Parsed filings (audited count)</th>${fys.map(fy => `<th class="r">${App.esc(fy)}</th>`).join("")}</tr>
+        </thead><tbody>
+          <tr><td style="font-weight:600">Annual (FY)</td>${annualRow}</tr>
+          ${["Q1", "Q2", "Q3", "Q4"].map(q => `<tr><td style="font-weight:600">${q} quarters</td>${qRow(q)}</tr>`).join("")}
+        </tbody></table>
+      </div>
+      <div class="page-sub" style="margin-top:8px">Badges = audited annual filings parsed per FY (u = unaudited, ? = class unknown — pre-tagging docs). ${App.formatNum(missing.length)} stocks have no parsed annual for any window year: <span class="mono">${App.esc(missing.slice(0, 14).map(s => s.symbol || s.isin).join(", "))}${missing.length > 14 ? " …" : ""}</span></div>`;
+  } catch (e) {
+    const o = document.getElementById("scOverall");
+    if (o) { o.className = "badge grey"; o.textContent = "N/A"; }
+    body.innerHTML = `<div class="empty">${App.esc(e.message)}</div>`;
+  }
+}
+
 function dhBucketColor(bucket) {
   const tone = (NF_BUCKET_META[bucket] || {}).tone;
   return { green: "var(--success)", amber: "var(--warning)",
@@ -3650,6 +3768,7 @@ async function refreshAdminData() {
     refreshHealthData();
     refreshFreshnessData();
     refreshStockStatusData();
+    refreshCoverageData();
     const [sum, logs] = await Promise.all([
       App.api("/admin/refresh-summary"),
       App.api("/admin/refresh-logs?limit=200"),

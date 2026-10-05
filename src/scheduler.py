@@ -22,6 +22,63 @@ IST = timezone(timedelta(hours=5, minutes=30))
 _JOB_DEFAULTS = {"misfire_grace_time": 6 * 3600, "coalesce": True,
                  "max_instances": 1}
 
+# Agent-fleet job registry — DAILY vs WEEKLY data policy (product owner):
+#
+# DAILY — market data only: mutual-fund NAV (daily_nav_refresh), stock daily
+# closing prices (daily_stock_refresh), stock corporate actions
+# (daily_corporate_actions — split out of the bundled stock job so an action
+# refresh is never blocked by a price failure), bond prices
+# (daily_bond_refresh) and the integrity audit (daily_integrity_audit —
+# READ-ONLY: it audits stored data and fetches nothing, so it is compatible
+# with "holdings are weekly"). The 21:45 corporate-actions slot is distinct
+# from the 21:00 bundled stock job so the two never overlap.
+#
+# WEEKLY — mutual-fund holdings statement / portfolio breakup: ONE job,
+# weekly_mf_holdings, performs the whole MF-holdings cycle in strict order —
+# (a) the AMC discovery/download fleet FIRST (runner.run_all(production=True))
+# so the AMC-own-website scrapers find and fetch the links, (b) then the
+# integrity audit so the newly downloaded data is tiered, (c) ONLY THEN the
+# escalation ladder, which per ticket walks amc_recheck -> web_search -> amfi
+# -> advisorkhoj -> manual via next_channel() — i.e. AMFI/Advisorkhoj are
+# reached ONLY as a downstream fallback after the AMC agents have had their
+# turn. weekly_manual_digest stays weekly (reporting only, fetches nothing).
+#
+# daily_ladder_sweep and weekly_source_channels were removed as standalone
+# jobs: mutual-fund holdings work is WEEKLY, and the source channels
+# (AMFI/Advisorkhoj) must never be a parallel/peer activity — they are a
+# fallback reached only after the AMC agents fail, which next_channel()
+# ordering already guarantees. Their intent is preserved inside
+# weekly_mf_holdings. Shape: (job_id, day_of_week or None for daily, default
+# hour, default minute). All registered with the _JOB_DEFAULTS
+# coalesce/max_instances guard and Asia/Kolkata triggers.
+_AGENT_FLEET_JOBS: tuple[tuple[str, str | None, int, int], ...] = (
+    ("daily_integrity_audit", None, 7, 20),
+    ("daily_corporate_actions", None, 21, 45),
+    ("weekly_mf_holdings", "mon", 6, 30),
+    ("weekly_manual_digest", "fri", 18, 0),
+)
+
+_AGENT_JOB_NAMES = {
+    "daily_integrity_audit": "Daily Integrity Audit",
+    "daily_corporate_actions": "Daily Stock Corporate Actions",
+    "weekly_mf_holdings": "Weekly MF Holdings Cycle",
+    "weekly_manual_digest": "Weekly Manual-Register Digest",
+}
+
+
+def agent_fleet_job_kwargs(job_id: str, cfg: dict) -> dict:
+    """Per-job kwargs forwarded to ``agent_fleet_fn`` (the dispatch contract).
+
+    The weekly MF-holdings cycle runs its fleet stage with the real
+    production bindings (``production=True``); the read-only audit, the
+    corporate-actions refresh and the manual digest are kwargs-free. The
+    former bounded ``daily_ladder_sweep`` cap is gone with that job — ladder
+    work now happens once a week, unbounded, inside ``weekly_mf_holdings``.
+    """
+    if job_id == "weekly_mf_holdings":
+        return {"production": True}
+    return {}
+
 
 def ist_now() -> datetime:
     return datetime.now(IST)
@@ -30,7 +87,8 @@ def ist_now() -> datetime:
 class MonthlyScheduler:
     def __init__(self, pipeline_fn, settings: dict, base_dir: Path,
                  nav_refresh_fn=None, stock_refresh_fn=None, bond_refresh_fn=None,
-                 amfi_fn=None, preheal_fn=None, statements_fn=None):
+                 amfi_fn=None, preheal_fn=None, statements_fn=None,
+                 otherdata_fn=None, agent_fleet_fn=None):
         self.pipeline_fn = pipeline_fn
         self.settings = settings
         self.base_dir = base_dir
@@ -40,6 +98,11 @@ class MonthlyScheduler:
         self.amfi_fn = amfi_fn
         self.preheal_fn = preheal_fn
         self.statements_fn = statements_fn
+        self.otherdata_fn = otherdata_fn
+        # Single entry point for all agent-fleet jobs: called as
+        # agent_fleet_fn(job_name, **kwargs) and dispatches on the job name
+        # to the runner/integrity/escalation/manual_register components.
+        self.agent_fleet_fn = agent_fleet_fn
         self.scheduler = AsyncIOScheduler(timezone="Asia/Kolkata")
 
     def setup(self):
@@ -235,6 +298,67 @@ class MonthlyScheduler:
                 f"{amfi_cfg.get('minute', 15):02d} IST"
             )
 
+        # ---- Monthly AMFI other-data refresh (tracking error/difference,
+        # scheme-wise disclosure, risk parameters, AUM, NFO) [PLAN_AMFI_DATA_SOURCES]
+        od_cfg = sched.get("otherdata_refresh", {})
+        if self.otherdata_fn and od_cfg.get("enabled", True):
+            od_trigger = CronTrigger(
+                day="8-12",  # same publish window as the disclosure feeds
+                hour=od_cfg.get("hour", 7),
+                minute=od_cfg.get("minute", 45),
+                timezone="Asia/Kolkata",
+            )
+            self.scheduler.add_job(
+                self._run_otherdata,
+                trigger=od_trigger,
+                id="monthly_amfi_otherdata",
+                name="Monthly AMFI Other-Data Fetch",
+                replace_existing=True,
+                **_JOB_DEFAULTS,
+            )
+            logger.info(
+                f"Monthly AMFI other-data fetch set: days 8-12 at "
+                f"{od_cfg.get('hour', 7):02d}:{od_cfg.get('minute', 45):02d} IST"
+            )
+
+        # ---- AMC agent fleet (SPEC §8.1/§11 + the DAILY vs WEEKLY data
+        # policy documented above _AGENT_FLEET_JOBS): the read-only integrity
+        # audit, the corporate-actions refresh, the weekly MF-holdings cycle
+        # (fleet -> audit -> ladder) and the manual digest, all dispatched
+        # through the ONE injectable agent_fleet_fn(job_name, **kwargs) entry
+        # point so the heavy agent imports stay out of the scheduler wiring.
+        af_cfg = sched.get("agent_fleet", {})
+        if self.agent_fleet_fn and af_cfg.get("enabled", True):
+            for job_id, dow, d_hour, d_minute in _AGENT_FLEET_JOBS:
+                job_cfg = af_cfg.get(job_id, {})
+                if not job_cfg.get("enabled", True):
+                    continue
+                trigger_kwargs = {}
+                if dow is not None:
+                    trigger_kwargs["day_of_week"] = job_cfg.get("day_of_week", dow)
+                af_trigger = CronTrigger(
+                    hour=job_cfg.get("hour", d_hour),
+                    minute=job_cfg.get("minute", d_minute),
+                    timezone="Asia/Kolkata",
+                    **trigger_kwargs,
+                )
+                self.scheduler.add_job(
+                    self._run_agent_job,
+                    trigger=af_trigger,
+                    args=[job_id],
+                    kwargs=agent_fleet_job_kwargs(job_id, af_cfg),
+                    id=job_id,
+                    name=_AGENT_JOB_NAMES[job_id],
+                    replace_existing=True,
+                    **_JOB_DEFAULTS,
+                )
+                logger.info(
+                    f"Agent-fleet job {job_id} set: "
+                    f"{job_cfg.get('day_of_week', dow or 'daily')} "
+                    f"{job_cfg.get('hour', d_hour):02d}:"
+                    f"{job_cfg.get('minute', d_minute):02d} IST"
+                )
+
     async def _run_pipeline(self):
         # [BUG-M8] IST clock for target month/year AND marker naming: a UTC
         # host firing the 06:00 IST Aug-1 run at Jul-31 local previously
@@ -320,6 +444,26 @@ class MonthlyScheduler:
             logger.info(f"Monthly AMFI fetch complete: {summary}")
         except Exception as e:
             logger.error(f"Monthly AMFI fetch failed: {e}")
+
+    async def _run_otherdata(self):
+        logger.info("Monthly AMFI other-data fetch triggered")
+        try:
+            summary = await asyncio.to_thread(self.otherdata_fn)
+            logger.info(f"Monthly AMFI other-data fetch complete: {summary}")
+        except Exception as e:
+            logger.error(f"Monthly AMFI other-data fetch failed: {e}")
+
+    async def _run_agent_job(self, name: str, **kwargs):
+        # Shared wrapper for all agent-fleet jobs: agent_fleet_fn
+        # dispatches on `name` to the right component. One bad day must
+        # never kill the scheduler, so the exception is logged and dropped
+        # (same containment as every other _run_X wrapper).
+        logger.info(f"Agent-fleet job {name} triggered")
+        try:
+            summary = await asyncio.to_thread(self.agent_fleet_fn, name, **kwargs)
+            logger.info(f"Agent-fleet job {name} complete: {summary}")
+        except Exception as e:
+            logger.error(f"Agent-fleet job {name} failed: {e}")
 
     def start(self):
         self.setup()

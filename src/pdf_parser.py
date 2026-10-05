@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import logging
@@ -152,7 +152,7 @@ def _parse_pdf_legacy(pdf_path: Path) -> dict:
 def _ocr_pdf(pdf_path: Path, dpi: int = 200) -> str:
     """Render each page and OCR it with Tesseract (for vector/image-only PDFs)."""
     try:
-        import fitz
+        import pymupdf as fitz
         import pytesseract
         from PIL import Image
     except ImportError:
@@ -186,7 +186,7 @@ def _ocr_pdf_words(pdf_path: Path, dpi: int = 200) -> tuple[str, list[dict], flo
 
     Each word box is ``{"text","left","top","width","height","conf","page"}``.
     Falls back to plain text-only OCR when image_to_data is unavailable."""
-    import fitz
+    import pymupdf as fitz
     import pytesseract
     from PIL import Image
 
@@ -487,8 +487,7 @@ def _empty_result(source_file: str, file_type: str) -> dict:
 def _parse_pdf_pymupdf(pdf_path: Path, result: dict) -> dict:
     """Fallback: extract text using PyMuPDF when pdfplumber cannot open the file."""
     try:
-        import fitz
-
+        import pymupdf as fitz
         doc = fitz.open(pdf_path)
         try:
             text = "\n\n".join(page.get_text() for page in doc)
@@ -582,6 +581,9 @@ def _classify_tables(tables: list[dict]) -> dict:
 
 
 def save_parsed_data(data: dict, output_dir: Path, filename_stem: str) -> None:
+    from src.document_class import classify
+
+    data["document_class"] = classify(data)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     json_path = output_dir / f"{filename_stem}.json"

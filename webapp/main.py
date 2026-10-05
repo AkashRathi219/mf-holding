@@ -196,6 +196,18 @@ def _statements_job() -> list[dict]:
         return []
 
 
+def _otherdata_job() -> dict:
+    """Monthly AMFI other-data refresh (PLAN_AMFI_DATA_SOURCES): tracking
+    error/difference, scheme-wise disclosure, risk parameters, AUM, NFO.
+    Per-job guarded so one failing feed never blocks the rest."""
+    try:
+        from src.amfi_otherdata import run_monthly_all
+        return run_monthly_all()
+    except Exception as e:
+        log.error("AMFI other-data refresh failed: %s", e)
+        return {"status": f"failed: {e}"}
+
+
 def _start_scheduler_thread() -> None:
     """Run the cron jobs inside the web process when ENABLE_SCHEDULER=1.
 
@@ -232,6 +244,7 @@ def _start_scheduler_thread() -> None:
                     amfi_fn=_amfi_job,
                     preheal_fn=_preheal_job,
                     statements_fn=_statements_job,
+                    otherdata_fn=_otherdata_job,
                 )
                 sched.start()
             except Exception:
@@ -422,7 +435,10 @@ def api_schemes(request: Request):
         from webapp import data_health
         stats = get_db().holdings_stats([s["id"] for s in items])
         for s in items:
-            s["confidence"] = data_health.scheme_confidence(s, stats.get(s["id"]))
+            st = stats.get(s["id"]) or {}
+            s["confidence"] = data_health.scheme_confidence(s, st)
+            # [F&O-v1] derivatives-usage flag for the explorer badge
+            s["n_fno"] = st.get("n_fno") or 0
     return data
 
 
@@ -433,10 +449,13 @@ def api_cas_sample(request: Request):
     _require_user(request)
     import json
     from pathlib import Path
-    p = Path(__file__).resolve().parent.parent / "CAS_sample_portfolio_holdings.json"
+    root = Path(__file__).resolve().parent.parent
+    # [cleanup] fixture lives under data/ since the 31-Aug root cleanup
+    p = root / "data" / "CAS_sample_portfolio_holdings.json"
     if not p.exists():
-        remote_ensure("CAS_sample_portfolio_holdings.json",
-                      dest=Path(__file__).resolve().parent.parent / "CAS_sample_portfolio_holdings.json")
+        p = root / "CAS_sample_portfolio_holdings.json"
+    if not p.exists():
+        remote_ensure("CAS_sample_portfolio_holdings.json", dest=p)
     if not p.exists():
         raise HTTPException(status_code=404, detail="No CAS sample on record.")
     try:
@@ -469,6 +488,11 @@ def api_scheme_detail(scheme_id: int, request: Request, holdings: int = 0):
     out["nav_date"] = nav_date
     out["nav_value"] = nav_value
     out["holdings_date"] = out.get("as_of") or None
+    # [Phase 3/5] mined attributes: riskometer / description / fund managers
+    try:
+        out["attributes"] = get_db().scheme_attributes(scheme.get("fund_name") or "")
+    except Exception:
+        out["attributes"] = {}
     try:
         from webapp import data_health
         st = get_db().holdings_stats([scheme_id]).get(scheme_id)
@@ -1459,6 +1483,32 @@ def api_stocks_status(request: Request):
     _require_user(request)
     from src.stock_status import report
     return report()
+
+
+@app.get("/api/admin/statements-coverage")
+def admin_statements_coverage(request: Request, format: str = "", maxage: int = 600):
+    """[stmt-cov-v1.0.0] Audited/unaudited quarterly + annual filing coverage
+    for the last five fiscal years across every tracked equity — parsed docs
+    vs filed-but-not-parsed announcements. `format=csv` streams the long
+    matrix for Excel."""
+    _require_superadmin(request)
+    from fastapi.responses import Response
+    from src.statement_coverage import build_coverage, csv_rows
+    if (format or "").lower() == "csv":
+        payload = build_coverage(max_stale_seconds=max(0, maxage))
+        header, rows = csv_rows(payload)
+        import csv as _csv
+        import io as _io
+        buf = _io.StringIO()
+        w = _csv.writer(buf)
+        w.writerow(header)
+        w.writerows(rows)
+        return Response(
+            content="\ufeff" + buf.getvalue(),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition":
+                     'attachment; filename="statements_coverage.csv"'})
+    return build_coverage(max_stale_seconds=max(0, maxage))
 
 
 # --------------------------------------------------------------------------

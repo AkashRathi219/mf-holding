@@ -165,6 +165,9 @@ def save_zip_parsed_data(data: dict, output_dir: Path, filename_stem: str) -> No
     """Persist a ZIP-parsed result as JSON + a per-scheme CSV."""
     import json
 
+    from src.document_class import classify
+
+    data["document_class"] = classify(data)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     json_path = output_dir / f"{filename_stem}.json"

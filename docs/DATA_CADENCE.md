@@ -28,6 +28,26 @@ For **every scheme** the system tracks two important dates:
 - `python main.py nav-status` — reports which schemes are complete from inception to
   the latest NAV date.
 - `python main.py nav-freshness` — checks for stale NAVs/prices; `--backfill` refreshes them.
+
+## AMFI other-data cadence (monthly, PLAN_AMFI_DATA_SOURCES)
+
+Monthly jobs (scheduler `monthly_amfi_otherdata`, days 8-12 IST, after the AMFI
+disclosure window; CLI `python main.py amfi-otherdata <job>` or
+`python -m src.amfi_otherdata <job>`):
+
+| Job | Data | AMFI endpoint | Cadence | Output |
+|---|---|---|---|---|
+| `mutual-funds` | MF directory + quarters + tracking months | page payloads (scheme-wise-disclosure, tracking-error) | Monthly | `data/reference/amfi_mutual_funds.json` |
+| `tracking` | tracking error + tracking difference, all schemes | `/api/tracking-error-data`, `/api/tracking-difference` | Monthly | `data/reference/amfi_tracking.json` |
+| `disclosure` | scheme-wise disclosure (SEBI 25-Aug-22) | `/api/schemewisedisclosure-investment` | Quarterly (job runs monthly, picks latest quarter) | `data/reference/amfi_scheme_wise_disclosure.json` |
+| `risk-params` | SEBI risk parameters (large/small cap) | `/api/risk-parameter-data-revised` | Monthly | `data/reference/amfi_risk_parameters.json` |
+| `aum` | AAUM fundwise + schemewise (AMFI_Code join), direct-plan bifurcation, state-wise | `/api/average-aum-*`, `/api/bifurcationaumdata`, `/api/statewise-data` | Monthly | `data/reference/amfi_average_aum.json` |
+| `nfo` | new fund offers | `/api/new-fund-offer` | Monthly | `data/reference/amfi_nfo.json` |
+
+`scheme-details` (scheme metadata, SSD documents, dividends) is a per-scheme fetcher
+(`python -m src.amfi_otherdata scheme-details --mf <MF_ID> --scheme <scheme_id>`); the
+bulk harvest across all 57 MFs is a later-phase job (see the plan tracker).
+
 ## Stock price cadence & endpoints (directive)
 
 - **Primary:** sec_bhavdata_full_{DDMMYYYY}.csv from

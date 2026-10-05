@@ -1,0 +1,24 @@
+{
+ "amc": "Test AMC Mutual Fund",
+ "files": [
+  {
+   "file": "Test AMC Mutual Fund\\07-2026\\portfolio\\IN_MF_MONTHLY_PORTFOLIO_July2026_94296a0535.xls",
+   "status": "ok",
+   "sheets": [
+    {
+     "scheme": "Test Advisorkhoj Fund",
+     "date": "31 Jul 2026",
+     "plans": {
+      "Direct": {
+       "holdings": [
+        {"name": "Alpha Industries Ltd", "isin": "INE001A0101", "pct_nav": 50.0},
+        {"name": "Beta Motors Ltd", "isin": "INE002B0101", "pct_nav": 30.0},
+        {"name": "Gamma Pharma Ltd", "isin": "INE003C0101", "pct_nav": 17.0}
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

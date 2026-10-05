@@ -50,17 +50,13 @@ Collect every raw data point into its folder before any pipeline logic runs.
   events, 128 empty everywhere -> genuinely action-less symbols (recent IPOs,
   never paid). Coverage final: 716 structured + 14 announcements + 10 yahoo =
   740/868 with data; 128 confirmed action-less.
-- Financial-results XBRL dump (DONE 26-Aug-2026):
-  `python -m src.financial_statements --download-fr-xbrl [--years 5]` — sweeps
-  monthly filing-date windows of `/api/corporates-financial-results`
-  (`index=equities&period=Quarterly`, NO `fo_sec` filter — that restricts to the
-  ~203-symbol F&O list; unfiltered covers ~2,063 symbols/quarter back to 2015+).
-  Metadata merges by seqNumber into `data/raw/financial_results_xbrl/_metadata.json`;
-  each filing's XBRL XML lands under `<SYMBOL>/<SYMBOL>_<seq>.xml`. RESULT
-  (Sep-2021 -> Aug-2026): 17,432 filings kept / 710 of our 868 symbols /
-  17,277 XMLs on disk (692 MB) / 155 permanent 404s at source (0.9%, 59 symbols,
-  verified dead links). Every row carries audited/unaudited +
-  consolidated/standalone flags — the fill/AI-extraction phase prefers Audited.
+- Financial-result statements now come ONLY from the SEBI-submitted result
+  PDFs companies file under NSE "corporate actions" — the per-symbol
+  corporate-announcements feed (`scripts/pull_annual_results.py`, quarterly +
+  annual, audited + unaudited), replacing the discontinued NSE XBRL
+  financial-results window deployment (throttled empty responses for 2025+).
+- The historical XBRL dataset (17,432 filings, 2021-2026) was removed from the
+  repo; stock docs are rebuilt from the corporate-announcements PDFs alone.
 - Extraction of the downloaded files into JSON (`stock_history/<ISIN>.json`,
   `stock_actions/<ISIN>.json`) happens ONLY in the final phase, done by AI.
 

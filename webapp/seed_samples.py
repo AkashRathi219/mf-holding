@@ -26,8 +26,15 @@ from . import userdata
 from .strategy_rules import parse_rules
 
 ROOT = Path(__file__).resolve().parent.parent
-CAS_SAMPLE_JSON = ROOT / "CAS_sample_portfolio_holdings.json"
-CAS_TRANSACTIONS_TXT = ROOT / "CAS_sample_extracted_transactions.txt"
+DATA_DIR = ROOT / "data"
+# [cleanup] the CAS sample fixtures live under data/ since the 31-Aug root
+# cleanup; fall back to the historical root location for older checkouts.
+CAS_SAMPLE_JSON = (DATA_DIR / "CAS_sample_portfolio_holdings.json"
+                   if (DATA_DIR / "CAS_sample_portfolio_holdings.json").exists()
+                   else ROOT / "CAS_sample_portfolio_holdings.json")
+CAS_TRANSACTIONS_TXT = (DATA_DIR / "CAS_sample_extracted_transactions.txt"
+                        if (DATA_DIR / "CAS_sample_extracted_transactions.txt").exists()
+                        else ROOT / "CAS_sample_extracted_transactions.txt")
 
 STRATEGY_NAME = "Full Coverage Playbook"
 MODEL_NAME = "CAS Sample Portfolio"

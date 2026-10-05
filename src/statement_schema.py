@@ -269,11 +269,11 @@ def match_label(label: str, min_score: float = 0.72) -> tuple[str | None, float]
 
 _UNIT_PATTERNS = (
     (re.compile(r"(₹|rs\.?|inr)\s*(amount)?\s*in\s*(lakhs?|lacs?|lac)\b", re.I),
-     0.10),                                   # lakh -> crore
+     0.01),                                   # lakh -> crore
     (re.compile(r"(₹|rs\.?|inr)\s*in\s*crores?\b", re.I), 1.0),
     (re.compile(r"in\s+crore", re.I), 1.0),
-    (re.compile(r"(₹|rs\.?|inr)?\s*in\s*millions?\b", re.I), 10.0),
-    (re.compile(r"figures?\s+in\s+(lakhs?|lacs?)\b", re.I), 0.10),
+    (re.compile(r"(₹|rs\.?|inr)?\s*in\s*millions?\b", re.I), 0.1),
+    (re.compile(r"figures?\s+in\s+(lakhs?|lacs?)\b", re.I), 0.01),
 )
 
 
@@ -415,9 +415,12 @@ def classify_period(text: str, default: str = "Q") -> str:
     return default
 
 
-def fiscal_year(period_end: tuple[int, int], kind: str) -> str:
-    """Indian FY label: Apr-Mar boundary (e.g. (2026,6) -> FY27)."""
-    y, m = period_end
+def fiscal_year(period_end: tuple[int, ...], kind: str) -> str:
+    """Indian FY label: Apr-Mar boundary (e.g. (2026,6) -> FY27).
+
+    Accepts (y, m) or (y, m, d) — callers pass both shapes.
+    """
+    y, m = period_end[0], period_end[1]
     fy_start = y - 1 if m <= 3 else y
     return f"FY{str(fy_start + 1)[-2:]}"
 

@@ -19,6 +19,9 @@ from .stock_common import (ACTIONS_DIR, HISTORY_DIR, IDENTITY_JSON, REPORTS_DIR,
                            load_json)
 from .stock_identity import load_identity
 
+_MON = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
 
 def report() -> dict:
     ident = load_identity()
@@ -33,7 +36,14 @@ def report() -> dict:
     reports_files = _count(REPORTS_DIR)
 
     # Freshness of price data (max last date across completed price files).
-    latest_date = ""
+    # Dates are 'DD-Mon-YYYY': a lexicographic max ranks '28-Jul-2026' above
+    # '02-Oct-2026', so the comparison must go through a real date key.
+    from webapp.market_value import _dtkey
+
+    def _fmt(key) -> str:
+        # _dtkey returns (year, month, day)
+        return f"{key[2]:02d}-{_MON[key[1]]}-{key[0]}" if key != (0, 0, 0) else ""
+    latest_key = (0, 0, 0)
     total_points = 0
     if HISTORY_DIR.is_dir():
         for p in HISTORY_DIR.glob("*.json"):
@@ -41,10 +51,14 @@ def report() -> dict:
                 doc = json.loads(p.read_text(encoding="utf-8"))
             except Exception:
                 continue
-            hist = doc.get("history") or []
+            hist = [h for h in (doc.get("history") or []) if isinstance(h, dict)]
             total_points += len(hist)
-            if hist and (hist[-1].get("date") or "") > latest_date:
-                latest_date = hist[-1].get("date") or ""
+            for h in reversed(hist):
+                k = _dtkey(h.get("date"))
+                if k != (0, 0, 0):
+                    latest_key = max(latest_key, k)
+                    break
+    latest_date = _fmt(latest_key)
 
     pct = lambda n: round(n / total * 100, 1) if total else 0.0  # noqa: E731
     return {
