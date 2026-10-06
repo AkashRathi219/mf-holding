@@ -132,6 +132,47 @@ Notes: `railway link` settings persist per-directory in `.railway/`
 (gitignored). `railway up` is handy for hotfixes but git-push remains the
 canonical deploy path — always land changes on main too.
 
+### Which project/service is this? (auto-generated name)
+
+The Railway project is **not** named after the product — it was created
+through the CLI and got a random slug. Two projects contain a service called
+`mf-holding`; only one is production:
+
+| | project | service |
+|---|---|---|
+| **production** | `adventurous-tenderness` | `mf-holding` |
+| stale/unused | `independent-delight` | `mf-holding` (no R2 vars) |
+
+Discriminator: production carries `R2_*` + `MF_READONLY_DB` and owns both
+live domains. `railway link` auto-creates a *new* service domain if you point
+it at the wrong project — if that happens, `railway domain delete
+<name> --yes` to undo it.
+
+    railway link --project adventurous-tenderness --service mf-holding
+
+### Pushing new data (not code)
+
+Data reaches Railway through R2, and `webapp/remote_store.ensure()` returns
+early when the file already exists locally — so **a running container never
+re-picks-up an updated `webapp.db`**. After uploading, the container has to be
+recreated. Git-push to `main` auto-deploys and does recreate it, which is the
+simplest way to force the refresh:
+
+    python deploy/prepare_data.py     # restage deploy/data + manifest.json
+    python deploy/upload_r2.py        # uploads only changed objects
+    git push origin main              # recreates the container -> bootstrap refetches
+
+Confirm it landed by reading the scheme count off the health endpoint; it must
+match `webapp.db` locally:
+
+    curl https://mf-holding-production-7baa.up.railway.app/api/health
+    # {"checks":{"db":{"ok":true,"schemes":3736}, ...}}
+
+Known quirk: every `upload_r2.py` run re-uploads `webapp.db` (~76 MB) because
+`deploy/upload_r2.py:148` only skips when the R2 ETag is a 32-char md5, and
+multipart uploads never are. A "1 to upload" summary on an otherwise-unchanged
+tree is expected, not a real change.
+
 ## Public URL & custom domain
 
 Railway never exposes a service publicly until you generate a domain:
