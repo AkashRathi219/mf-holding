@@ -37,7 +37,25 @@ SECTION_KEYWORDS = {
     "listed / awaiting listing on stock exchanges",
     "units issued by invits", "units issued by mutual funds",
     "money market instruments", "others", "unclassified",
+    # ICICI-style section headings: a heading carries an aggregate
+    # market value/% in the numeric columns, so it looks like a holding
+    # unless it is recognised as a label.
+    "units of mutual fund", "units of mutual funds",
+    "equity & equity related instruments", "debt instruments",
+    "total net assets", "net assets", "total", "grand total",
+    "total net asset",
 }
+
+# Substring rules for headings that carry trailing text, e.g.
+# "Equity & Equity Related Instruments (Note -1)" or "Units of Mutual Fund - 1".
+_SECTION_SUBSTRINGS = (
+    "equity & equity related instrument",
+    "debt instrument",
+    "units of mutual fund",
+    "units issued",
+    "total net asset",
+    "grand total",
+)
 
 _ISIN_PATTERN = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
 
@@ -138,6 +156,8 @@ def _parse_sheet(df: pd.DataFrame, sheet_name: str) -> dict:
     }
 
     _extract_metadata(df, result)
+    if result.get("date"):
+        result["date"] = _norm_as_of(result["date"])
 
     header_row = _find_header_row(df)
     if header_row is None:
@@ -252,9 +272,55 @@ def _is_section_label(val: str) -> bool:
         return True
     if any(low.startswith(p) or stripped.startswith(p) for p in _SECTION_PREFIXES):
         return True
+    if any(s in low or s in stripped for s in _SECTION_SUBSTRINGS):
+        return True
+    # An aggregate total is never a holding, whatever its exact wording.
+    if low.startswith("total") and _num(val) is None:
+        return True
     if v.isupper() and len(v.split()) <= 12 and not any(c.isdigit() for c in v):
         return True
     return False
+
+
+def _norm_as_of(text: str) -> str:
+    """Normalise a disclosure's as-of caption to ``YYYY-MM-DD``.
+
+    AMC sheets carry the date inside prose ("Portfolio as on Aug 31,2026",
+    "as on 31-Aug-2026", "Portfolio as on 31 July 2026"). The DB loader stores
+    this verbatim as ``schemes.as_of`` and sorts on it, so an unparsed string
+    leaves the scheme's as_of empty and breaks month-over-month comparisons.
+    Anything without a recognisable date is returned unchanged.
+    """
+    s = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not s:
+        return s
+    months = {n.lower(): i for i, n in enumerate(
+        ["January", "February", "March", "April", "May", "June", "July",
+         "August", "September", "October", "November", "December"], 1)}
+    months.update({n.lower(): i for i, n in enumerate(
+        ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
+         "Aug", "Sep", "Oct", "Nov", "Dec"], 1)})
+
+    # "31-Aug-2026" / "31 Aug 2026" / "31/Aug/2026"
+    m = re.search(r"\b(\d{1,2})\s*[-/ ]\s*([A-Za-z]{3,9})\s*[-/ ]\s*(\d{4})\b", s)
+    if m:
+        mo = months.get(m.group(2).lower())
+        if mo:
+            return f"{int(m.group(3)):04d}-{mo:02d}-{int(m.group(1)):02d}"
+    # "Aug 31,2026" / "August 31 2026"
+    m = re.search(r"\b([A-Za-z]{3,9})\s+(\d{1,2})\s*,?\s*(\d{4})\b", s)
+    if m:
+        mo = months.get(m.group(1).lower())
+        if mo:
+            return f"{int(m.group(3)):04d}-{mo:02d}-{int(m.group(2)):02d}"
+    # "2026-08-31" already ISO, or "31.08.2026"
+    m = re.search(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b", s)
+    if m:
+        return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    m = re.search(r"\b(\d{1,2})[.](\d{1,2})[.](\d{4})\b", s)
+    if m:
+        return f"{int(m.group(3)):04d}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+    return s
 
 
 def _extract_metadata(df: pd.DataFrame, result: dict) -> None:
@@ -299,6 +365,14 @@ def _extract_metadata(df: pd.DataFrame, result: dict) -> None:
             "quantity", "rating", "scheme code", "amc", "product labelling",
             "risk-o-meter", "riskometer", "market/fair value", "market value",
             "name of mutual fund", "yield", "ytm", "coupon",
+            # Column headers, so a header row can never become the fund name
+            # (ICICI sheets label the first column "Company/Issuer/Instrument
+            # Name", which used to win the fallback and create a scheme
+            # literally named "Company/Issuer/Instrument Name").
+            "company/issuer", "instrument name", "issuer/instrument",
+            "exposure/market value", "market/fair value", "face value",
+            "industry/rating", "sr. no", "sr no", "serial no",
+            "amount in", "nav total", "total %", "% to nav", "to nav",
         )
         for i in range(min(10, len(df))):
             row_vals = [str(v).strip() if pd.notna(v) else "" for v in df.iloc[i]]

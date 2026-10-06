@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import urllib.parse
+import uuid
 from datetime import datetime
 
 import httpx
@@ -71,14 +73,84 @@ def _parse_month_year(header_sub_heading: str) -> tuple[int | None, int | None]:
 
 
 class ICICIAdapter(AMCAdapter):
-    """ICICI Prudential "Prudent Fact Sheet" digital factsheets.
+    """ICICI Prudential monthly portfolio disclosures + digital factsheets.
 
-    The legacy downloads REST API lists monthly portfolio disclosure ZIPs, but
-    the actual files live on `archive.icicipruamc.com`, which has no DNS
-    A-record on this network. Instead we scrape the digital factsheet site
-    (active + passive), which serves one factsheet PDF per scheme for the
-    current month, directly downloadable with plain httpx.
+    Monthly holdings come from the downloads REST API
+    (``POST apimf.icicipruamc.com/nms/v1/downloads/files``). Two details are
+    easy to get wrong and both fail silently rather than loudly:
+
+    * the gateway rejects the POST with **405** unless the request carries
+      ``env: api``, ``sourceurl: DOWNLOADS`` and ``requestapiid`` - a
+      byte-identical payload without them is refused;
+    * ``record['url']`` looks absolute but is only served under the
+      ``https://www.icicipruamc.com/blob`` prefix. Fetching it from the API
+      host 404s, and from the bare domain it returns the SPA shell.
+
+    The response is a ZIP holding one XLSX per scheme, which is exactly what
+    ``parse_zip``/``parse_excel`` consume. History goes back to 2013.
+
+    ``discover_documents_all`` still returns the undated per-scheme factsheet
+    PDFs, which are only used for returns/benchmark extraction.
     """
+
+    API = "https://apimf.icicipruamc.com/nms/v1/downloads/files"
+    BLOB = "https://www.icicipruamc.com/blob"
+    # "Monthly Portfolio Disclosures" category id, from the site's own request.
+    CATEGORY_ID = "26a073d7-08d2-4a95-95fa-f83a4ee51e40"
+
+    def _api_headers(self) -> dict[str, str]:
+        return {
+            "User-Agent": UA,
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://www.icicipruamc.com/",
+            "Origin": "https://www.icicipruamc.com",
+            "env": "api",
+            "sourceurl": "DOWNLOADS",
+            "requestapiid": str(uuid.uuid4()),
+        }
+
+    async def discover_documents(
+        self,
+        portfolio_url: str,
+        factsheet_url: str,
+        target_month: int,
+        target_year: int,
+    ) -> list[PDFLink]:
+        """The single monthly-disclosure ZIP for ``target_month``/``target_year``."""
+        payload = {"categoryId": self.CATEGORY_ID, "schemeCategory": "",
+                   "userType": "Investor", "fileType": "All", "page": "1",
+                   "size": "100", "filter": [], "categoryName": "OTHERS"}
+        async with httpx.AsyncClient(verify=False, timeout=45,
+                                     headers=self._api_headers()) as client:
+            resp = await client.post(self.API, json=payload)
+            resp.raise_for_status()
+            files = ((resp.json().get("success") or {}).get("data")
+                     or {}).get("files") or []
+
+        want = MONTH_NAMES[target_month - 1].lower()
+        for rec in files:
+            if "monthly" not in (rec.get("categoryName") or "").lower():
+                continue
+            title = (rec.get("title") or {}).get("text", "")
+            # Trust the title's own month: the API's applicableMonth timestamp
+            # is stamped inconsistently across years.
+            if want not in title.lower():
+                continue
+            if str(target_year) not in title:
+                continue
+            rel = rec.get("url") or ""
+            if not rel:
+                continue
+            url = self.BLOB + urllib.parse.quote(rel)
+            fname = urllib.parse.unquote(rel.rsplit("/", 1)[-1])
+            logger.info("ICICI %s disclosure -> %s", title, url)
+            return [PDFLink(url=url, filename=fname, month=target_month,
+                            year=target_year, scheme_name=title.strip())]
+
+        logger.info("ICICI: no monthly portfolio disclosure published for %s-%s",
+                    target_year, target_month)
+        return []
 
     async def discover_documents_all(
         self,
