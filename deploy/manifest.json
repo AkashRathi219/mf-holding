@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-05T22:40:39Z",
+  "generated_at": "2026-10-06T07:58:34Z",
   "schema": 1,
   "files": [
     {
@@ -47503,6 +47503,2191 @@
       "sha256": "bd577e3a06df8a0de60e634c8b126b26ba5e6500356f462a99bd0d8fc001b009"
     },
     {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/BHARAT 22 ETF.json",
+      "size": 8920,
+      "sha256": "b3218d2fd301f6dbe72c8dc1eac10ac7112ffa26bfe913705f4effb221d536ae"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Active Momentum Fund.json",
+      "size": 22418,
+      "sha256": "4050db39f56a74219000ff58d0a3ae03fbc83d99cd18fcba49e3278994d62ce1"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Aggressive Hybrid Active FOF.json",
+      "size": 5733,
+      "sha256": "e5112a1ccdaa0b8cbcbc90e511d2d5a5fd90d952da8e0e8fe78600ee4120da3b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential All Seasons Bond Fund.json",
+      "size": 42597,
+      "sha256": "70d796408eae5131664012da6b68975eabaa6f96a24a7ebf5bea955e8bfeddeb"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Arbitrage Fund.json",
+      "size": 163012,
+      "sha256": "a1d54cd616f167f0cb31d644c5b27f43a069c51713971467fe3b02a70ea0aac3"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Balanced Advantage Fund.json",
+      "size": 102344,
+      "sha256": "d84711662cbbe23319717f9c9f5aab5cb6f8b223958eccc693d42aa2be76fc40"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Banking & Financial Services Fund.json",
+      "size": 24564,
+      "sha256": "89467003e8fe97c382010a4402195643897db99a755deccb73fbcfe4c4f76653"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Banking & PSU Debt Fund.json",
+      "size": 43962,
+      "sha256": "42d18511635c69532cc17362478e666e1f3f1fbe97e5a8baa302a2b568ba3baa"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential BHARAT 22 FOF.json",
+      "size": 1985,
+      "sha256": "6084adf0bcf26f502bcad0d3df4fd366613b533198e189a045f63f6607fced64"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Bharat Consumption Fund.json",
+      "size": 26085,
+      "sha256": "91fca18bddab75f29d8e8248bb7e029be639603aa6f18ce615a97e5e8439947f"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Bond Fund.json",
+      "size": 18676,
+      "sha256": "51b096a94de45743b85e6de7247bb6aca1c67fa022f04d023823f190c6501202"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential BSE 500 ETF FOF.json",
+      "size": 2561,
+      "sha256": "26c8a859ea8a3ff793cf3d2d286055548086fc230dbe490922974c8b7e95513b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential BSE 500 ETF.json",
+      "size": 189712,
+      "sha256": "b39de2ab43531db30ca2bee0ba0a7292c75b9da97969ecec43dd79dc225cb3c5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential BSE Liquid Rate ETF - Growth.json",
+      "size": 463,
+      "sha256": "462c1371baf74b662b768a8bd994580ef3a2aae04955372a621d07ae57c4b0b6"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential BSE Liquid Rate ETF - IDCW.json",
+      "size": 461,
+      "sha256": "2750db9626a08687fb0a2132d4ecfd37b02db94ff8c0c4f06738019d9674f747"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential BSE Midcap Select ETF.json",
+      "size": 12090,
+      "sha256": "57895b46986b4d21737b0d12d9f86555b7af4e82746b6254054b8c7a9b37abf1"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential BSE Sensex ETF.json",
+      "size": 12046,
+      "sha256": "4fe012b8699b30daf885cb8cd5e7710decfc73620fd6cc7e17f19ca0b7298b4a"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential BSE Sensex Index Fund.json",
+      "size": 11987,
+      "sha256": "30ccf3cd252cc5e6931ad822d8a79e0e77b3403786cd580ce32cbe350be8817f"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Business Cycle Fund.json",
+      "size": 33649,
+      "sha256": "8111377c68b9c443b99ee0092e11577cc7f89e6ee0d566e417324ddbb5b6c26b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Children\u2019s Fund.json",
+      "size": 34980,
+      "sha256": "9d9e8e26f8c5f76bb490034b38ed3ae71fc1074d7a282002297c77d873de6744"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Commodities Fund.json",
+      "size": 21420,
+      "sha256": "0bc14ceb374f2b23a3c59d65be90297f8f471cb2b79fe629885aea64498bd410"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Conglomerate Fund.json",
+      "size": 17897,
+      "sha256": "b5e6a77e8e16eadf46a03d0ebadde31b22105d36485d758ef3aa0eff4d8acfa3"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Constant Maturity Gilt Fund.json",
+      "size": 7020,
+      "sha256": "e48ec61d2f3a1fae7ec7b4794d6df6298426c8014a9fbbb38776b7e7f0828673"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Corporate Bond Fund.json",
+      "size": 82874,
+      "sha256": "ac63670059a4b44f4b36b7671ed7b1b08e41a43d505d6aa0fbe5db392ab68816"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Credit Risk Fund.json",
+      "size": 40814,
+      "sha256": "731f9ad8d2218266b51b5556a738215ca3043f78dcd631464a8f5d52e40c909d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential CRISIL-IBX Financial Services 3-6 Months Debt Index Fund.json",
+      "size": 8313,
+      "sha256": "6107cf0de82b5edbdec3be81df67f9fb0f93045fb76597bb20523c0ef3c56089"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Diversified Debt Strategy Active FOF.json",
+      "size": 3757,
+      "sha256": "a125ea4e148a709d855df7deedb9eede400246a4bd0b5cd00ef1e0e048d66716"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Diversified Equity All Cap Active FOF.json",
+      "size": 3546,
+      "sha256": "ea724df25104e30640f34853339f38eaacffb369e2dc024bdc6c9e6bf8baf294"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Diversified Equity All Cap Omni FOF.json",
+      "size": 5896,
+      "sha256": "8c5934da55e4cf93e66cef182acbb397237957b990f30332ab9fada0cb7ce7f4"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Dividend Yield Equity Fund.json",
+      "size": 31432,
+      "sha256": "ea2c06f9d02adebc342ad1341f97959ce4cb0ccbf72ff549b3d46f0374841c77"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Dynamic Asset Allocation Active FOF.json",
+      "size": 13134,
+      "sha256": "cbd3357660978bf04929167c9ee2171e94fa3e4ec1521d789105e46a357175a8"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential ELSS Tax Saver Fund.json",
+      "size": 35765,
+      "sha256": "f4468bbd7dd6402420d3611be69315fc7160510268732486a663911fd4aafc1d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Energy Opportunities Fund.json",
+      "size": 34209,
+      "sha256": "f6fdfa6becf650457852d0ebdd1ad240e8c1be3868894c51ad29c1e66f24e6c3"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Equity & Debt Fund.json",
+      "size": 105236,
+      "sha256": "c4aa35cf3fa9f0f665a33e8e068c3e55f66e8c7659a689b686976c9729468520"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Equity Minimum Variance Fund.json",
+      "size": 15470,
+      "sha256": "831f746145ca054963ebc49cd1c9c37c9a3679c01b71bfef9179aace0cd5f527"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Equity Savings Fund.json",
+      "size": 76242,
+      "sha256": "424fa990a68151c4c124ac56cc215e2c7b4f4a8f48e2d349d52ed0ff89fc8017"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential ESG Exclusionary Strategy Fund.json",
+      "size": 24895,
+      "sha256": "5973a1f4f83de25120af3a9b302454f09f9f55a1ea3e9b0962ade290d030dbf5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Exports and Services Fund.json",
+      "size": 28424,
+      "sha256": "f8c5259d8abc42c681898a4d3e6379dfc43eb4b34bfa6a1c20a4460fd1831488"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Fixed Maturity Plan - Series 85 - 10 Years Plan I.json",
+      "size": 11130,
+      "sha256": "2989111209676326474bd9b039fd20747e07c954e1322df1355a1415b0d848e8"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Fixed Maturity Plan - Series 88 - 1303 Days Plan S.json",
+      "size": 3992,
+      "sha256": "3db0c69ebdbd2d9a235a8183d8ad5bf0ddbd574f1039a2ff6223f5107701684c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Flexicap Fund.json",
+      "size": 29817,
+      "sha256": "38b9cca288a688181837111a231049e2080674b7b01ba2a841c55e92d230e0af"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Floating Interest Fund.json",
+      "size": 60891,
+      "sha256": "3858277ce7cf1d5731fbf7b76cfd7497e6d12e74e9fc735b28e8a763911cb30b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential FMCG Fund.json",
+      "size": 15067,
+      "sha256": "4caad62ad9dee32747a8f241c51b82f3e9eaeb86ab89de587481a1db9877e961"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Focused Equity Fund.json",
+      "size": 15721,
+      "sha256": "d887a9790a6d3a8ae0d84a67d598be85ec1ac7e5b0d78efa5311fa49e5931787"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Gilt Fund.json",
+      "size": 21229,
+      "sha256": "8c02de3ec9c83bd0b0a0551d1c0958f6e2d1a8829926155eb3b17435b8c34e48"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Global Advantage Fund (FOF).json",
+      "size": 4421,
+      "sha256": "704bd55b4ae9f28fb744f220c8dc36f4ae4881d57b165559f20442b1351bdf0b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Global Stable Equity Fund (FOF).json",
+      "size": 2865,
+      "sha256": "5a483e119c0e48a1d8ab7eeac94ee0b353b95e04b2c291fd3333d923204121c1"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Gold ETF FOF.json",
+      "size": 2557,
+      "sha256": "fa46e29804b9067424d628d0b2be7e513e6968900ad4a002223eb598bcf0e06b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Gold ETF.json",
+      "size": 1902,
+      "sha256": "67b4930fc4b273357a13d2ce9509e162e99050ec93a54e4d607ba37cfb635354"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI PRUDENTIAL HOUSING OPPORTUNITIES FUND.json",
+      "size": 22084,
+      "sha256": "0da1003a18db642c6e11c5a42e8256a18c8392e58f778b146849abfd6bcbeb42"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Income plus Arbitrage Omni FOF.json",
+      "size": 4129,
+      "sha256": "e4fd4ae192c9b70d67d606c915c632bd73c15c07c96d357b9e47d0257b4f7a99"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential India Opportunities Fund.json",
+      "size": 34458,
+      "sha256": "c6932600f7530a41139dc810d783a23fed1373996ece91b49a72ab500143056c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Infrastructure Fund.json",
+      "size": 29833,
+      "sha256": "2cd272e2137c2d248694ceb29450d9ebfae925c3bc6ad6e19cfd1cf7dc6707cd"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Innovation Fund.json",
+      "size": 32923,
+      "sha256": "28db0a4f8106a4c7b9c9b490b5e5382ab01862dc55e55cc4aa55bba7170b3d86"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Large & Mid Cap Fund.json",
+      "size": 45329,
+      "sha256": "850ccfaefa03e4cb03f6bb46ad8001105e339458c1aae4de976b579bcd689f9e"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Large Cap Fund.json",
+      "size": 38667,
+      "sha256": "5569a12746d522ea55a0e0ba0fb5720818d4ec3d5bd7f2c3ec6d503363b31f9b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Liquid Fund.json",
+      "size": 62877,
+      "sha256": "252718a2268b80c7490ca75d52839cc2f590f8870d6a8c7398cd327db4ed7004"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Long Term Bond Fund.json",
+      "size": 7865,
+      "sha256": "9707ad55d7a3ea787f6516ae5abc12819779972d4f1f8a9dc0e41e55450d49ee"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Long Term Wealth Enhancement Fund.json",
+      "size": 10371,
+      "sha256": "0754686c76cf61ef4398fb86c7e6d58eb0cce45f9251f7fd00e4f2ea56816f92"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Manufacturing Fund.json",
+      "size": 33344,
+      "sha256": "96fbac4745a4e04b87c43d325f1089f8e6f49a12570aa8b1de852bebd01c9c5d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Medium Term Bond Fund.json",
+      "size": 42940,
+      "sha256": "b304a38b6122d96e6c1ea665b703d8c49feafefb82823b2e57c0e54c405df1bb"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Midcap Fund.json",
+      "size": 31742,
+      "sha256": "7aa4ddf81aafa339b413036d34c9c12962545a168f24859ecfd12ca173baf014"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential MNC Fund.json",
+      "size": 24534,
+      "sha256": "caa5403c0f902fbdee31588bdb15ca33cd910c0830f17d274e9905c30d3078d3"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Money Market Fund.json",
+      "size": 43373,
+      "sha256": "0c07f9a4ef443511687a7ad1befb1915472e67ffdfb12f90c7b089e083744d74"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Multi Sector Passive FOF.json",
+      "size": 6344,
+      "sha256": "572a3949a92a69cec19dc434744dcd16554aa9edff9e4bce51be17b33ea51930"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Multi-Asset Fund.json",
+      "size": 109376,
+      "sha256": "0506a3aabe1f145af4100db395a2b0205d76bcdeb337f0c6ade240b81ab9aac1"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Multicap Fund.json",
+      "size": 63516,
+      "sha256": "5a8fed7bcb4bc12a458c0d96a05b537f0c2d13090a3001f4dfc5b79da4e57039"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential NASDAQ 100 Index Fund.json",
+      "size": 39766,
+      "sha256": "208651e055c1687e2a2297ad6c155c2605667bc217f1f5b01ff671a8a955277c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty 10 yr Benchmark G-Sec ETF.json",
+      "size": 1089,
+      "sha256": "c8d4815b2b4791cdc0ae5e978662f608a54243fd0a9c41ea86bd66db1ade307e"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty 100 ETF.json",
+      "size": 38334,
+      "sha256": "d18f2071bc8b1fc0a96d1f85e0a8c2de4fcebf1b5ffd6b72dc038740ba1bc33c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty 100 Low Volatility 30 ETF FOF.json",
+      "size": 2623,
+      "sha256": "99b686b07aa512c26f7c7f062bfc66d094dd2148477e500cbe35f538116aedcb"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty 100 Low Volatility 30 ETF.json",
+      "size": 12123,
+      "sha256": "5ce99a1344c6020822c923f68fb6017b09a33a77ed58d080deb0948c0f4652e5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty 200 Momentum 30 ETF.json",
+      "size": 12153,
+      "sha256": "2cc9b3f64a12c73cb5a1d6a5a67f1c98c5f8269d5550e7b44f42dc30d8253742"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty 200 Momentum 30 Index Fund.json",
+      "size": 12170,
+      "sha256": "87cf5a6e5b2b27a85c0bcf83369c6a84d7664d570b69681452359f8272e8b0e7"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty 200 Quality 30 ETF.json",
+      "size": 12089,
+      "sha256": "c0031d2cdbd9bc617908c3815875fbe19e0a4131147c7a629b8b35ac8370a978"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty 5 yr Benchmark G-SEC ETF.json",
+      "size": 1082,
+      "sha256": "a3b81d03078facfdd7247f338c690f5a702df71b82b4632c428f57617ed90c3c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty 50 ETF.json",
+      "size": 19738,
+      "sha256": "5918cd57593f99bf1e095ae2b51a7d6b494f462a9aded997ee5fbdfe18d22a15"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty 50 Index Fund.json",
+      "size": 454,
+      "sha256": "b2d514722b482ca218990becfb5afa55275de3a1b64c3acfac08ade6f2fdaaaf"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty 500 Index Fund.json",
+      "size": 189112,
+      "sha256": "b3112221f870032070c53ef93ae8e2ae8921348af892c410d3c86bcf2ab7ad22"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Alpha Low - Volatility 30 ETF FOF.json",
+      "size": 2640,
+      "sha256": "6dfa0311649b3083a08d48cab7bf6729ddacca4363723abd2c93b5aa1da6f0fd"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Alpha Low- Volatility 30 ETF.json",
+      "size": 12177,
+      "sha256": "47224252f30c936b92ff6397978870dbf8be7e3584bc83a74cbc005272e8e469"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Auto ETF.json",
+      "size": 6396,
+      "sha256": "de6f2d29e154c2d2c14652179494ccf5b50931dba4f6566f181caf080900f798"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Auto Index Fund.json",
+      "size": 6411,
+      "sha256": "6a7cf720458c81cc1fe3cb726a847a934b7289020049904644f9cf35af0ffc96"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Bank ETF.json",
+      "size": 5851,
+      "sha256": "ee91d749465515c20765f7aa9584906f54cd6a180051230a8512e69f47f848d9"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Bank Index Fund.json",
+      "size": 5849,
+      "sha256": "d9fd6cd8e19a4fa42a994e141507dabbe03b77e7c46956eaa8bfd5dd884ffc78"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Commodities ETF.json",
+      "size": 11971,
+      "sha256": "d30a19d928f0ca8854fdb9b73831b5de4929aea438a66dd4127f8151c03074fc"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty EV & New Age Automotive ETF FOF.json",
+      "size": 2634,
+      "sha256": "3e8b024d4503e25906cc7d7f851c28050404d288f7e6cb003ea4ca32c7e525c6"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty EV & New Age Automotive ETF.json",
+      "size": 15184,
+      "sha256": "783edb9338f9875c29ed427830d029107c2a581ae4e5c624ea804d117a407bf3"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Financial Services Ex-Bank ETF.json",
+      "size": 12148,
+      "sha256": "b482a1a2784c5d6b3272d03e77aed1d522916d6692479b470bad783cd2938e89"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty FMCG ETF.json",
+      "size": 6407,
+      "sha256": "0937c2ffa9781f1db2d4f360cea2e0ac34e21782e888e96eddffe07e1a4bd94b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty G-sec Dec 2030 Index Fund.json",
+      "size": 3186,
+      "sha256": "c5eb23fc0a1ae7b849ad1ee058c66a5fb004301f6e1c298e05fcb5b7b538f3e8"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Healthcare ETF.json",
+      "size": 8562,
+      "sha256": "9ee0639c32ebfd263eb611bc9363d4a71f2f60b2dc88b966037ef459adc86926"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty India Consumption ETF.json",
+      "size": 11952,
+      "sha256": "aaa8d23307e59b03fb804098623836029623501cafdd428d7b96e9014ded3cd9"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Infrastructure ETF.json",
+      "size": 12201,
+      "sha256": "693da80030796f1e5085a45830a34ca9d37d33d860ef9b61c4e5362ca16a2dde"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty IT ETF.json",
+      "size": 4442,
+      "sha256": "d6d6d991390334523e4f4e190049e3674ff13d8647679f90bb701cc28c953677"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty IT Index Fund.json",
+      "size": 4464,
+      "sha256": "c246546aae289e39e98dd560363da8a15a0d09ded3c0a8c21b3b1f46cef2581e"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty LargeMidcap 250 Index Fund.json",
+      "size": 95040,
+      "sha256": "d440941867e1b76907f23de6d4bd49e021598f47d9088fac1f819bef4dc2da1a"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Metal ETF.json",
+      "size": 6426,
+      "sha256": "6e7e664be670ea56a5e363b29b90e82d9847e71bd638281e640ec1a27cca9c60"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Midcap 150 ETF.json",
+      "size": 57628,
+      "sha256": "e1afddaa8796728730480287c440bb4b29f3fd7fbe9d285fc8f3a22a3b34afd8"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Midcap 150 Index Fund.json",
+      "size": 57696,
+      "sha256": "79a6e1d4b792c6b5d394d8d88db5ce0bd7cdc7178c295e10edf48d9bba19a258"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Next 50 ETF.json",
+      "size": 19747,
+      "sha256": "fb49e0fd14b55da8245af7bf348540b6ea0d3a1844b0c05733422a143e732867"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Next 50 Index Fund.json",
+      "size": 19831,
+      "sha256": "fa70702b403f00b129dbe466d77da7cd94433908d10771167b2fd36f32b1f233"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Oil & Gas ETF.json",
+      "size": 6342,
+      "sha256": "77c9e07f0b551d8f17ab280a5ad5d134ae20577ee1315e6426d54537c36bfa12"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Pharma Index Fund.json",
+      "size": 8585,
+      "sha256": "20cc706adb1aed1fec279e25aa7abd47ebafdd2058eab810388f3d8ff34f2821"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Private Bank ETF.json",
+      "size": 4386,
+      "sha256": "c31e1bd35e8c5753d01f1f3c63ef5e9a92fa63f8e944083065fd82788716c9d2"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Private Bank Index Fund.json",
+      "size": 4356,
+      "sha256": "825070a129e98dc3bef2714197d9fdae1a61609415fff2f44bce0bf0b38fb5c1"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty PSU Bank ETF.json",
+      "size": 5070,
+      "sha256": "8d60196024823ce850813c59a59d0b3922307bf3c8db19c5bef938b56c276382"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty PSU Bond Plus SDL Sep 2027 4060 Index Fund.json",
+      "size": 33039,
+      "sha256": "9e3274096468c313bda7828c4b60a1d172398fea6bbfcbd85a63dca16d959336"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty SDL Dec 2028 Index Fund.json",
+      "size": 13956,
+      "sha256": "b3d2df747feb8330622318c148000707516e5daa387571e87e9793b65a6b38ef"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty SDL Sep 2026 Index Fund.json",
+      "size": 4666,
+      "sha256": "066c204d47878d9a34bd0934dba83fc74d27515cd664f099614d2af363b19c31"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty SDL Sep 2027 Index Fund.json",
+      "size": 15728,
+      "sha256": "2632846f18c42d7a20b28170b305397d1df24fc067ab92d0833b46de3048852a"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Smallcap 250 ETF.json",
+      "size": 95105,
+      "sha256": "e19d12f20a00fc3a46a3d0a976403f9080455531c85f6a7bf98a3450ed45a8ed"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Smallcap 250 Index Fund.json",
+      "size": 96095,
+      "sha256": "9688aee974b9c58f246ebff5cecdd257e6be25c18334bbe81daf601faf1ac512"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Top 15 Equal Weight ETF.json",
+      "size": 6271,
+      "sha256": "3b241fcacd09fee532d5bf7a90bd4b733dc8cde71c11f1fed27cace042a89d83"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty Top 15 Equal Weight Index Fund.json",
+      "size": 6301,
+      "sha256": "bfb950e2d86c65880ef68f50de931d70b4ee6b382f65ebd0fabb0c2be8043223"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty200 Quality 30 Index Fund.json",
+      "size": 12063,
+      "sha256": "765c36c9e0d517858290c9dd31426968ef2b7a8b7f6e00fa953fd334e81b4ac1"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty200 Value 30 ETF.json",
+      "size": 11879,
+      "sha256": "577ef086c27d26c6d8f16f13a65f561aecf1692447d9d21243da6eadd9d478f0"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty200 Value 30 Index Fund.json",
+      "size": 11923,
+      "sha256": "800ae02b7ee3473970e9af394dbedefe5f5cd4ea5d256d2a04b41730aeba7d16"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty50 Equal Weight Index Fund.json",
+      "size": 19547,
+      "sha256": "5c1a8073301dad2327fa4aafc3a4f88647f262499dc299879372e5b4493c189e"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty50 Value 20 ETF.json",
+      "size": 8165,
+      "sha256": "c62d71d8702c1c094e93394f2fcc330b9cc75e3bbfd2161a370aee6f0108eeee"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Nifty50 Value 20 Index Fund.json",
+      "size": 8166,
+      "sha256": "b19752fa7b3e490c3e7b214aac0ec6ef9dcf340e8bc2126f84ae9f9bda1d69c3"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Overnight Fund.json",
+      "size": 3880,
+      "sha256": "1118154a84f6a4f15b3877c1dcb4b8e73cfce3acf8e07c94069480c034b22556"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Passive Multi-Asset Fund of Funds.json",
+      "size": 13571,
+      "sha256": "4be66f4627fbc1e42a7917fc61b105bf361252edbfeaf159b3f264e733f7909e"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Pharma Healthcare and Diagnostics (P.H.D) Fund.json",
+      "size": 14880,
+      "sha256": "898edc678598cb29856db383bde2ada6df6da55f3eeb01fa63aef0246dea1abe"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI PRUDENTIAL PSU EQUITY FUND.json",
+      "size": 20526,
+      "sha256": "c89c51c326aa82299b266c37a09933d73a82b03bff7763b4c51c4657ba47e86e"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Quality Fund.json",
+      "size": 27762,
+      "sha256": "a547e45f10a3243b0cf69800fa5053695496607e3b1058cfe5f87f4dad6d8828"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Quant Fund.json",
+      "size": 19828,
+      "sha256": "1875fc85b992f76a00ec9ed54d26a7365fd2835055fef5653ccde295af2d00e8"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Regular Savings Fund.json",
+      "size": 56824,
+      "sha256": "95604ed6604cd74060ea032cdfaf9de80d205c2be991cc018e471faea1f6f04b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Retirement Fund - Hybrid Aggressive Plan.json",
+      "size": 38508,
+      "sha256": "642604005f1f01d1b6c46b5712f43621bc24229a559930fc09d9f893c829f3cb"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Retirement Fund - Hybrid Conservative Plan.json",
+      "size": 15172,
+      "sha256": "41b8732ac367be2d86648af3da9ab54f31a6f428b66eb777a947da86e6f72377"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Retirement Fund - Pure Debt Plan.json",
+      "size": 6908,
+      "sha256": "c657a32af2673fb93c6f301616ca959722ef7b41e755f67451a69d7b5b3ec7e2"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Retirement Fund - Pure Equity Plan.json",
+      "size": 37473,
+      "sha256": "40525efbf17b70400694a299211055cd29727d95f796118e3b3f1fbc9eb0562f"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Rural Opportunities Fund.json",
+      "size": 21344,
+      "sha256": "ee79c0c3cd18e62d857358cec029f9eccc69fcb4367efcbac7b99b4cdb9f3d07"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Savings Fund.json",
+      "size": 72301,
+      "sha256": "6a5f715543894b7729c177732f1dd4f9c1a5bc4d334663504ca9bcfa2342035e"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Short Term Fund.json",
+      "size": 77556,
+      "sha256": "0b3b5afd509313788742a08b70d977e2176612229da6ee92372ed54b567fe798"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Silver ETF FOF.json",
+      "size": 2562,
+      "sha256": "92814ee593d24c0f0d941da0a8e14652906af57ee32b040c028e2f09a9802e7d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI PRUDENTIAL SILVER ETF.json",
+      "size": 1911,
+      "sha256": "ce9ac985f4c937597c330600fdf08e0a998e6e940743c294d5f570fcddab2556"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Smallcap Fund.json",
+      "size": 57030,
+      "sha256": "b8d1233f2d1e70962af78ef4dfc3b1e108e681c2f9f197a82f04e797efb1a4c2"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Strategic Metal and Energy Equity Fund of Fund.json",
+      "size": 2900,
+      "sha256": "7ff9adb1a82cf8d73f9f9ae01a196b182f0deb6a6c434fa84b7d9b5a1335c7eb"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Technology Fund.json",
+      "size": 29942,
+      "sha256": "879fc959ced536a8688e16ad7f0736b49baf5adb0ba913f34055bd4eaa254872"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Transportation and Logistics Fund.json",
+      "size": 18559,
+      "sha256": "265d8d40138506b508808c9753f0cf5666c6544e819c2c25dd954fd892a93a5d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Ultra Short Term Fund.json",
+      "size": 78162,
+      "sha256": "cb723a1e052455a98d428a56bfe495a81601b3cbaa73ec4cbbd248b57b0a6954"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential US Bluechip Equity Fund.json",
+      "size": 25170,
+      "sha256": "6e60c9e8536cb6a7fe1dd4f48966ebc5b53457b343aaa0bf4cfaf2e5ae206de3"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/06/ICICI Prudential Value Fund.json",
+      "size": 30469,
+      "sha256": "7f1e57c778dc93500f6cbf4750552a6337c7f1a67f04310b8cf50df59d7da99d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/BHARAT 22 ETF.json",
+      "size": 8918,
+      "sha256": "68529e602465930b0c03569fa03a769ed7cd41353e23279b940b7b580ce6cd8b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Active Momentum Fund.json",
+      "size": 19586,
+      "sha256": "ff4c4c5fee6a9fe7885edffc6dd09c94761451f5ed8dd9939149bd932c938ab6"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Aggressive Hybrid Active FOF.json",
+      "size": 5735,
+      "sha256": "dfbe56fc8c10852f1959812085693ad5580abb28f1c1e683f74fb49f4fcf57f5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential All Seasons Bond Fund.json",
+      "size": 48492,
+      "sha256": "681902f32c18b39dcc3a342b8c1817f87fde2432ebdc06c65b65f6de87e3abd0"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Arbitrage Fund.json",
+      "size": 182429,
+      "sha256": "8397218e20fb8842f7d74ca5b893687112c6a5f79e20017530ea583c0702dd2b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Balanced Advantage Fund.json",
+      "size": 106091,
+      "sha256": "919a040680aebc5a53568c4d0842fd6f28260ca35ba3f0c5a5eee7241054c495"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Balanced Hybrid Fund.json",
+      "size": 17075,
+      "sha256": "b5eb1096f47537a48a78913d94254c3074117762124166f08693b37c35157974"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Banking & Financial Services Fund.json",
+      "size": 28485,
+      "sha256": "7f7af18bba2b39ca029eea8106dd6d3a936e19df5d4d77cfac030b32abe9cec5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Banking & PSU Debt Fund.json",
+      "size": 44006,
+      "sha256": "440d5c388366c5376d1aeee2bf3ad6753942018b1cfe5c992d9ae13aa2755d24"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential BHARAT 22 FOF.json",
+      "size": 1985,
+      "sha256": "4fc738bb65930f35df02529bb74e348fcb8edb897e93135945034645a6aac57b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Bharat Consumption Fund.json",
+      "size": 26142,
+      "sha256": "f12eca89a04829cd4d0d77f8fe97c4c633a19977f656db3371f19c4f459bbbdb"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Bond Fund.json",
+      "size": 19041,
+      "sha256": "5562ea3dee8d957ba9aab77ec82ee3f491b84bd1e81a98b2e0698bf88b1cd3d7"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential BSE 500 ETF FOF.json",
+      "size": 2561,
+      "sha256": "ab865e2d4928f1fcd89ce0b01b7e3c9fc3b0a5cc53c0dccba880ba29e5d6bc60"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential BSE 500 ETF.json",
+      "size": 190058,
+      "sha256": "48f5bc2e37bbea1e268115c3951b4eb2e58d5963964c1456ff61b6b5525c8cd3"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential BSE Liquid Rate ETF - Growth.json",
+      "size": 463,
+      "sha256": "a68e07bc6729ff638def5c098adffba93e3e3086d6bfdbdd03db06e29e62c616"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential BSE Liquid Rate ETF - IDCW.json",
+      "size": 461,
+      "sha256": "57c470cd57c7de5774a65ec04f4daceff63efe9b6aa73569d030a5eb8271e4dc"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential BSE Midcap Select ETF.json",
+      "size": 12096,
+      "sha256": "0c00ab8a8885cdea18e95e53151f1fccc0d3f9d8e065212a80694f3edb3f0bf4"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential BSE Sensex ETF.json",
+      "size": 12044,
+      "sha256": "21851dfd407a8dbaa0811f190fee14b11c8834afe3b4e04571f1d57aaa3fe03d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential BSE Sensex Index Fund.json",
+      "size": 11987,
+      "sha256": "dc3acfbc692d6b3122a35cb8c9c2d4d3f8986c9e5e0d88e11044d8b6f7a3440d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Business Cycle Fund.json",
+      "size": 37538,
+      "sha256": "821c942fd8a1a46c2263aad256d19a793d198e1cfda4f5c97daf8c0577512e7c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Children Fund.json",
+      "size": 31281,
+      "sha256": "f26130e47464059fc6450d5c7cdffe77c540033b07825ccfbe5521ad7c014d53"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Commodities Fund.json",
+      "size": 22137,
+      "sha256": "1eca6dc7fe812ee42939d5fce1cddb07dd702fb41c995b372acf8822c8fca719"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Conglomerate Fund.json",
+      "size": 16809,
+      "sha256": "9d4e67f771ec41b8438b1fca761e3cdf98b24277a1ce30b2e493dc0f89d4734a"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Constant Maturity Gilt Fund.json",
+      "size": 3911,
+      "sha256": "4eca94467d245f345f54b2356d12d117c8d8efcf8e9809d76577e41449dbbd75"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Corporate Bond Fund.json",
+      "size": 85007,
+      "sha256": "e113f54dc008ebbe402f71280b14300235301e114758afcb72ac66aebf7e1db0"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Credit Risk Fund.json",
+      "size": 44374,
+      "sha256": "e539ded418b33d7c770e44cca8678b846351699fda79bb27f1012e4589cd2ac6"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential CRISIL-IBX Financial Services 3-6 Months Debt Index Fund.json",
+      "size": 7642,
+      "sha256": "8f4e5444fcdb64e786e50fadf60ea9766b11881297ff85b071b99ff4f7bd683f"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Diversified Debt Strategy Active FOF.json",
+      "size": 3755,
+      "sha256": "6bd81f22c2439a74946d41e993b49f15260f6c5279b50f459008e20d1ef2dac1"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Diversified Equity All Cap Active FOF.json",
+      "size": 3854,
+      "sha256": "188bd1a56791d36b3c87bec0a17fb3e5ec1f7c96935040eef687636af60c7a9d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Diversified Equity All Cap Omni FOF.json",
+      "size": 5899,
+      "sha256": "e65e2f002b5dc530fffd5521338c955cb001d55b23956a49346f5b487e195603"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Dividend Yield Equity Fund.json",
+      "size": 31841,
+      "sha256": "48c8a15a32d18cca9c787012a67a489e38f521ead2dfb067318924b64dff5ce6"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Dynamic Asset Allocation Active FOF.json",
+      "size": 13136,
+      "sha256": "a8bc4915fa4ff52d6328a8c61298998d07c8c67582bf6903b961b1b5e3761dd2"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential ELSS Tax Saver Fund.json",
+      "size": 34661,
+      "sha256": "36ded4e2de6d1f5f101a070544b1d449ddbeea096492d224e21a5faf6a4a50f0"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Energy Opportunities Fund.json",
+      "size": 36976,
+      "sha256": "9eaacbdc6a5055bc2491b00bb3412599c159d9682178252cb40d94167f13d6c9"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Equity & Debt Fund.json",
+      "size": 110405,
+      "sha256": "2a5c56d87b627be28447a707b96d961b9d2177e138d9d7572c1cf6973e1e5efe"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Equity Minimum Variance Fund.json",
+      "size": 17485,
+      "sha256": "1fa4b492652b12b7a266fa561cd9d44e3dab63d3af04e2c6f25b34274d8e2175"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Equity Savings Fund.json",
+      "size": 86419,
+      "sha256": "c860ed3dbe8ea573e095a25c34e02c05d770d277fe4c817f714e75aebe263c64"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential ESG Exclusionary Strategy Fund.json",
+      "size": 24349,
+      "sha256": "4b9fb9b22263b4714f60a4fcdbc5eaa3b810717ef41792ed893cc2ef74c8f519"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Exports and Services Fund.json",
+      "size": 28681,
+      "sha256": "dcfc7852e1d5feb47b943496a94ac9911517a64eb0617561f3003582d736f12b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Fixed Maturity Plan - Series 85 - 10 Years Plan I.json",
+      "size": 11129,
+      "sha256": "837f4950daee5d0e25703cd01b7f1c9659a5b04e8f00f2300411824175855150"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Fixed Maturity Plan - Series 88 - 1303 Days Plan S.json",
+      "size": 3989,
+      "sha256": "d0e2cc71e568acfea4329e7f7dd46f1f574825bfa6beca0bf599ba8cc4f7110f"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Flexicap Fund.json",
+      "size": 31325,
+      "sha256": "b03c396c2d7c29c5b9c667c3d96a0f5a3b7105c5952753d3e94aabef4580d808"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Floating Interest Fund.json",
+      "size": 64810,
+      "sha256": "06e05c40ab2de4dc4279e8d438e1cfa4702ae5cb22b65087a6b4bcf0fb388f3e"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential FMCG Fund.json",
+      "size": 16945,
+      "sha256": "18b5fa72e14a238c2107d51a2575381063ea353d5fb60bfafde5310e95e68ebb"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Focused Equity Fund.json",
+      "size": 16109,
+      "sha256": "cd3ca143ff585c37f3016a2a76660f722bc45a2e7e19f1b19a42beb4b8eefa4c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Gilt Fund.json",
+      "size": 19201,
+      "sha256": "c08c511bb13337ff579869e28e35c55b547201795fb9b1ac481f13cc4f1d172b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Global Advantage Fund (FOF).json",
+      "size": 4423,
+      "sha256": "52887c967bb7a0bb2d6b6660b0f41a311f77490b4ed8f0901ba482022324cd28"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Global Stable Equity Fund (FOF).json",
+      "size": 2865,
+      "sha256": "837428d3316d001c952fd3ae1482896b37222e10641faf65856fbb76151f8ba9"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Gold ETF FOF.json",
+      "size": 2558,
+      "sha256": "afb3be50e32505d501d03ea3cc8bae1c6af8b50382bf08dc4c327d7c5abda393"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Gold ETF.json",
+      "size": 1901,
+      "sha256": "bcfec5a884cac9ad254e362a3300a1add5c6612a4316fa553aa0ecc368e3d30b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI PRUDENTIAL HOUSING OPPORTUNITIES FUND.json",
+      "size": 23204,
+      "sha256": "b71e0c06f272f78d740799258bb0b3f6ac64b27c0b00091f75c31dcf45e59603"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Income plus Arbitrage Omni FOF.json",
+      "size": 4128,
+      "sha256": "a4aa1adb69ccfb643fcd23660614af0a534b97db1dfd18e638958c4bb70f50e6"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential India Opportunities Fund.json",
+      "size": 33958,
+      "sha256": "b260114d900786ceb03b94b18b77a921d592b3ab1cfc78f69e9acd432dbd0429"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Infrastructure Fund.json",
+      "size": 31174,
+      "sha256": "fafcfceacf07ab5acf76fc03366d4661623cc349414732a891ed489d87c29dac"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Innovation Fund.json",
+      "size": 32226,
+      "sha256": "b8852878ab1409c268aab687f98cd3638b8dbed1632be9b79fe83c458332c8b0"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Large & Mid Cap Fund.json",
+      "size": 51008,
+      "sha256": "d33cbbf36f1e98912f1028321117d30e00e08df1fcad74c0c56368bf3e66b249"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Large Cap Fund.json",
+      "size": 41257,
+      "sha256": "e1ef2d6906feb89571df64f4beba5f6b03090fb94a4f7fea24e51a279bd56c31"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Liquid Fund.json",
+      "size": 62682,
+      "sha256": "5a7270792d5630ff4a05de056d1e1827c541d20b88bffc07ded4f1550957e0a1"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Long Term Bond Fund.json",
+      "size": 7866,
+      "sha256": "6ffc31c07987e4611a26ce2632196c2f5a1fe6516cb2c9e087658c39caf519b1"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Long Term Wealth Enhancement Fund.json",
+      "size": 10752,
+      "sha256": "dc8418c3294e49ccf5129711936c46317e15929ee8ca94361c2dc4685247be9c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Manufacturing Fund.json",
+      "size": 31982,
+      "sha256": "56d5130007cede1ceb1be35a4b7fb97df21ad3e54eaacbc4982ac737a48d2be2"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Medium Term Bond Fund.json",
+      "size": 46537,
+      "sha256": "ff5e41b2d8b0fcb340d804cdbee19f2a4bb55d5a9a4852dbdebe8018658f8fd5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Midcap Fund.json",
+      "size": 30547,
+      "sha256": "050bca507ac515652fb9e3f0fcd9f86c3d4597f8ad17956e9f5b6653858674cf"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential MNC Fund.json",
+      "size": 22531,
+      "sha256": "e7b53d64384485fbdeea4adabe064b98f562df059100d9e631daf56c82480b1c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Money Market Fund.json",
+      "size": 48234,
+      "sha256": "afafccca00f95ee20ec16c866fa6503d394835a53255ccf15e349bea29416519"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Multi Sector Passive FOF.json",
+      "size": 6344,
+      "sha256": "38aa44685640e7944225b3c552fa845438dcc7b193180b54bc5f9734e51ff8a5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Multi-Asset Active FOF.json",
+      "size": 8786,
+      "sha256": "0e88530c98af31914a71095fe5890a48a4a8eb5a1c4fc39972b3f2eae0798caa"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Multi-Asset Fund.json",
+      "size": 126084,
+      "sha256": "69ef38f69fdd85affef03b319462b46425e812ba4560beb626f5b4168a7f8625"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Multicap Fund.json",
+      "size": 63901,
+      "sha256": "f321a5cbb955fdf8f1677ac499139cf817e168b8eb575088f5d005bbeb566ddc"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential NASDAQ 100 Index Fund.json",
+      "size": 40183,
+      "sha256": "7f852a4311bdaaf97a47794884c700fd690a9290d716e40497bb72e9ee7806b7"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty 10 yr Benchmark G-Sec ETF.json",
+      "size": 1089,
+      "sha256": "9a1da4d0d41d828db7eedc18392e183024c97b0b5dfebf9879fa75efeb009cf7"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty 100 ETF.json",
+      "size": 38341,
+      "sha256": "a9e91d46c0e9299ff06095776086f22f5cb73374024a2703f9b5335e2dc6eea1"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty 100 Low Volatility 30 ETF FOF.json",
+      "size": 2625,
+      "sha256": "05ddb2249f2e5f58584573421d3c98f667939c4e00acb117ffbec31e1e8d239a"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty 100 Low Volatility 30 ETF.json",
+      "size": 12130,
+      "sha256": "9dcb71bb66098260e78ed31ffcfab5a4e165ff68606cbb6bc29b72b134d2b387"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty 200 Momentum 30 ETF.json",
+      "size": 12152,
+      "sha256": "f4b6e51fa7d269f5f2e1c617798c9920c0e874cb6eecb742df1ea5c20ed5c8a9"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty 200 Momentum 30 Index Fund.json",
+      "size": 12165,
+      "sha256": "5bcd9f31292b9e3fd1998e4d6e0497d4351a7fa8e181224842ae9affb7339102"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty 200 Quality 30 ETF.json",
+      "size": 12093,
+      "sha256": "1445a2104752c5422cdf3e3903e9443e7b18fc592990eac5a6491c45ee13c155"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty 5 yr Benchmark G-SEC ETF.json",
+      "size": 1082,
+      "sha256": "e09d8d1a7046fcdfcc5fb7601981ee4159e7fe4bc60438105b7140d25266b412"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty 50 ETF.json",
+      "size": 19740,
+      "sha256": "f8abfed7f21f3b925529415c63b9d22431d28c27f1a21d29da9dc9663fef87b0"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty 50 Index Fund.json",
+      "size": 454,
+      "sha256": "365820f1d9c17b2b1967bc35704e16fcd0a8d9ad80cadad1f62fc541fa53d232"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty 500 Index Fund.json",
+      "size": 189091,
+      "sha256": "4d09a20263290f68975a1f5867e9793b4389bbf0ccfb00bf63a8b138fe5437ab"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Alpha Low - Volatility 30 ETF FOF.json",
+      "size": 2640,
+      "sha256": "de47e358da99743a8f328a3a0799df534b88d448d352bb7d79dc96efd5f01aad"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Alpha Low- Volatility 30 ETF.json",
+      "size": 12178,
+      "sha256": "3c8b3c8e7e4b4caa2dfec52f65694442672860b5f6accb7fc080a81fbe8e84d8"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Auto ETF.json",
+      "size": 6395,
+      "sha256": "100a3b7301c5113165e3117db964843be859ed090dc13e05cade4dc6a76dfc00"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Auto Index Fund.json",
+      "size": 6409,
+      "sha256": "1b7f562243d8786b8ce7c61db67d7d6e39585562713726ee9e175dc892c22a96"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Bank ETF.json",
+      "size": 5849,
+      "sha256": "d75677223a7c7f13071c70dd6d5fff0da761ccb8ce72e51aab9ec86c094d7cef"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Bank Index Fund.json",
+      "size": 5846,
+      "sha256": "a3a77032dcb6bfec39cfaeaef486f0df04087a31b3c801dc85e7d40a570072ad"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Commodities ETF.json",
+      "size": 11974,
+      "sha256": "7d27e07fdb023fbc3c5438b19d8ce140787f487e16d2c9b10bbb05eac38007b8"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty EV & New Age Automotive ETF FOF.json",
+      "size": 2633,
+      "sha256": "02c4291f6cb52ae078ad11c09590e7397fb0ff611170d74d411184ab5acd8052"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty EV & New Age Automotive ETF.json",
+      "size": 15181,
+      "sha256": "867034041ef3300257bae2705e41a56cefd180b2689a9f68ff0c3701bbd9c0e1"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Financial Services Ex-Bank ETF.json",
+      "size": 12153,
+      "sha256": "76cd05899e2843185a82e495a4518bde29cac131fe8dc8246cb0780c200cc60c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty FMCG ETF.json",
+      "size": 6405,
+      "sha256": "ac4d60ab80155d9b124701bfe18888e3da9a8c086e2a2983273a1cc48ccf3536"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty G-sec Dec 2030 Index Fund.json",
+      "size": 3188,
+      "sha256": "fd3b421de4e27000c2e035607c6c33c07edc84aed6363d012d5fe4127e8ed7ab"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Healthcare ETF.json",
+      "size": 8566,
+      "sha256": "ba2d6bf8766b2d29bb077e3d9718c7454fc7eda1c2d42407e279ec6742ec00ee"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty India Consumption ETF.json",
+      "size": 11943,
+      "sha256": "131ad0e49b8a81bda5b8cfdd53bb768c35c78fc31905c22eef7cdca16c536d48"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Infrastructure ETF.json",
+      "size": 12203,
+      "sha256": "b52fcc18a42177f569c08307d9be9861f866e6da3648ba848bb29889f52e60a3"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty IT ETF.json",
+      "size": 4446,
+      "sha256": "59a83b782d9ac7e2d86fd571fd4014d5031860949dea5b775da9c4ad8d448d43"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty IT Index Fund.json",
+      "size": 4466,
+      "sha256": "b7ca67700fdd4bde01a4a8ac493ff215f7c598da1e68702afd5137f438341b2c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty LargeMidcap 250 Index Fund.json",
+      "size": 95067,
+      "sha256": "38403a8622c603fb08fd48758921152ffc4cf89f277ac797f0f4c52b30557150"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Metal ETF.json",
+      "size": 6425,
+      "sha256": "4535abf889b1878c28657a9e8466184a2d3ed46b05f88fb9a4c663763ddf03fe"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Midcap 150 ETF.json",
+      "size": 57624,
+      "sha256": "be9a03e9e844593d3e6dd213713bb009ad2eb25fda312d32957dc7eac18f9708"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Midcap 150 Index Fund.json",
+      "size": 57724,
+      "sha256": "0079b668d240c3b310200a2e141bfd96fb04ca779caae377fb2b3b87ea7622d4"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Next 50 ETF.json",
+      "size": 19745,
+      "sha256": "47d9268c2f05fb862d8e6ff35d16cbe79138ebba22f7aa7baec50ce908cd8d13"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Next 50 Index Fund.json",
+      "size": 19828,
+      "sha256": "8d2c36a986da1bfbbf3d7d14726f20563ba53f63335e6c641841698fd87d23b1"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Oil & Gas ETF.json",
+      "size": 6345,
+      "sha256": "e257e8efcb92b227d685f697bbb586e5515593d7b570cb95587c593924fd4d85"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Pharma Index Fund.json",
+      "size": 8569,
+      "sha256": "2eaef70898459a81449e33f5b32d59eb0fcd6fc149a43ebb39fa51fe60661f9b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Private Bank ETF.json",
+      "size": 4386,
+      "sha256": "f56460df2d876cdb1bbcfd0145cf2d49ce706179eb6dfc4a9d637f2288eecbb6"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Private Bank Index Fund.json",
+      "size": 4360,
+      "sha256": "233b1d9cc1b5bd6b6e470957749a7a330ffa1655baa213eb168c396307a04b5b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty PSU Bank ETF.json",
+      "size": 5073,
+      "sha256": "330f86af42a9a0725c3fdcffec10698ee074797d90d650645df4cfe38c463fea"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty PSU Bond Plus SDL Sep 2027 4060 Index Fund.json",
+      "size": 33039,
+      "sha256": "495e797dd1f1271e66ec9416fc43cc340c55bdb5ef0d6eb474ef790643b5cde9"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty SDL Dec 2028 Index Fund.json",
+      "size": 13957,
+      "sha256": "7c1e793e66e8c623681d92f5816fb2970caa1d694a8e395b6731a6c873bac12b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty SDL Sep 2026 Index Fund.json",
+      "size": 4671,
+      "sha256": "5bd37a3d0320bea0fb5c21dc93d84a823a8169f629328ee901852217811106b9"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty SDL Sep 2027 Index Fund.json",
+      "size": 16091,
+      "sha256": "555405848b642d13b3823f08fe23ce9c7a6033f835a7ce59f35d7383177ef948"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Smallcap 250 ETF.json",
+      "size": 95076,
+      "sha256": "a76c1d63c85c81200f309bb17de9400e856dd2db484786c667cf6d232e11118c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Smallcap 250 Index Fund.json",
+      "size": 96066,
+      "sha256": "e6acd1f14219f92756d7f73195cb0e0f898f80137db8669c9c78a910a405ac5d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Top 15 Equal Weight ETF.json",
+      "size": 6269,
+      "sha256": "a8682a2a92f4a251a665b4e06d08b3fa0b5e58a4947e646c0788186c0693493a"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty Top 15 Equal Weight Index Fund.json",
+      "size": 6308,
+      "sha256": "5ad7c2ee83b0d9a434cd921944843a381248ac9c8c7a5e4083e9c778a9cd17c0"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty200 Quality 30 Index Fund.json",
+      "size": 12068,
+      "sha256": "4632112963bcd464cf8220006e4fa63eb36e326f110731ad621e097e16a8102d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty200 Value 30 ETF.json",
+      "size": 11877,
+      "sha256": "f374f3fb4ebcc26f4279e1e7a1d1c7e91956e820770ac2a245ae2aa7dc7629ef"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty200 Value 30 Index Fund.json",
+      "size": 11917,
+      "sha256": "029cf763094fe2c3d67ea955d581826db87abdaca38bd18e50775811a8f0fa5d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty50 Equal Weight Index Fund.json",
+      "size": 19556,
+      "sha256": "97d050ecafdedaf52caf1fc8c6fef580e5a1a0481883252e996c22bb4d6eea2b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty50 Value 20 ETF.json",
+      "size": 8168,
+      "sha256": "c7443df8a605ae6cf3a2f645c140d8db38eb710252a7b788aa4c392c0401658b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Nifty50 Value 20 Index Fund.json",
+      "size": 8166,
+      "sha256": "d23ca479d1f9143f5b7bb56decb5113a5a180831965f015bfd27bc51fdbae696"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Overnight Fund.json",
+      "size": 4567,
+      "sha256": "c37d4375c8a7b164f9499e4579dbd5070085795d08c1faabd52f7541ff7af764"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Passive Multi-Asset Fund of Funds.json",
+      "size": 14243,
+      "sha256": "eb8927feda7ceef698e7a9d325224e179f3b33fc2245f835fa1a4906dc865bb2"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Pharma Healthcare and Diagnostics (P.H.D) Fund.json",
+      "size": 14867,
+      "sha256": "6a06680564d4f0c883d857d522012cc50baf8233c2d18544b38b21060057e9c8"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI PRUDENTIAL PSU EQUITY FUND.json",
+      "size": 21196,
+      "sha256": "f06cbdb3cf75cf9f555a2ec2407c4e660bc8e9ef970928afd98ccdff167c7576"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Quality Fund.json",
+      "size": 26672,
+      "sha256": "e12850fac596e1250de4d3d139f1a50338d74b0bc7a9d7f9d1fdfbd0da7d1dff"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Quant Fund.json",
+      "size": 20252,
+      "sha256": "e4147339591e5c750d72a4740d8f938f4f020236ed890f00bae8c9cc2da23d28"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Regular Savings Fund.json",
+      "size": 57633,
+      "sha256": "e8a62998d4a80ce28f4c952078843740c336560a71d376bab2921e8ffc98591d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Retirement Fund - Hybrid Aggressive Plan.json",
+      "size": 34702,
+      "sha256": "4ac791f3184cb3eab9756594d36fbf000697cc011a23eb32017ce96d084137de"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Retirement Fund - Hybrid Conservative Plan.json",
+      "size": 14519,
+      "sha256": "bec7eb0470c10151239c818afd3ef2c2a817ff39cfe5844925078ac5e6ab3a33"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Retirement Fund - Pure Debt Plan.json",
+      "size": 6956,
+      "sha256": "56a7808725ba75b7447cfd6d9153bdd7248309c63363f6e3ae1df2ebbd70a5e5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Retirement Fund - Pure Equity Plan.json",
+      "size": 36398,
+      "sha256": "489cd6e2b7610e03fe159df4036bf405d20eb2e059ea0e692b733e61ba213ae5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Rural Opportunities Fund.json",
+      "size": 20636,
+      "sha256": "20e92489505aefc6ae16db075597b9a48e3c2da06ef78214e6558a38c9ffce4c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Savings Fund.json",
+      "size": 66671,
+      "sha256": "4c03c88ede87952a9f169fa9f124cec42bfe0fe3cf7ecf824ba6aeaf832ad708"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Short Term Fund.json",
+      "size": 79301,
+      "sha256": "0d4eed90faa8efea621c77dfb97ddb5742d3fccbc64385cff9fcfe551e93cf2e"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Silver ETF FOF.json",
+      "size": 2562,
+      "sha256": "df36bddf220836520f835b708af39a1781f00f4b634b70462f48200043a20efa"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI PRUDENTIAL SILVER ETF.json",
+      "size": 1910,
+      "sha256": "71315bc1995befd65c0c0fbd7f00328cb8c0f54290064e7e909f14319fb235cc"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Smallcap Fund.json",
+      "size": 51825,
+      "sha256": "222d54ccb8d40786c11754d699ab42cb8483b22d3c7aa10fa50d277c41ac1eb5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Strategic Metal and Energy Equity Fund of Fund.json",
+      "size": 2899,
+      "sha256": "9d3c2e097bf3ce9ec634b3584a44649b74b3ebba21f06d99318b4aea0db37785"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Technology Fund.json",
+      "size": 30045,
+      "sha256": "5bb0f593e88f6aabc5247a8278ba0fdf3f327974be575dea918db45ec676474a"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Transportation and Logistics Fund.json",
+      "size": 18720,
+      "sha256": "3d754e19faa9fa0b5ca5727bed2bdb768da3d6da23b1c0d6d4edf85900c2ae2e"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Ultra Short Term Fund.json",
+      "size": 81512,
+      "sha256": "e6ebc6fd2f648be2c0a075a65d53ed58ab3dacda365e8ac9536e04ba000b07fc"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential US Bluechip Equity Fund.json",
+      "size": 24433,
+      "sha256": "74c4a12111005bc8a1f7ad205d46ad97c2bf5b624bb6894c747d3f0c548f8c4c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/07/ICICI Prudential Value Fund.json",
+      "size": 32173,
+      "sha256": "2e5c5fa036048cd08165e3951b47d4e796cab57770a03e5d18787d4ce008dfc4"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/BHARAT 22 ETF.json",
+      "size": 8921,
+      "sha256": "b9215bf949776ff237d1958d4beb4772373f981aef716d08e340c804ca6e7946"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential 10 year Constant Maturity Gilt Fund.json",
+      "size": 3581,
+      "sha256": "b6edb507dfdbc9b4fb7df4395bd1ceab9b11ec88403a1ccccfabbf3855bcf893"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Active Momentum Fund.json",
+      "size": 19441,
+      "sha256": "26ee1d9ba7835f017098da73b26034d05b8ad2d51e988fdf0d7152ff8125e274"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Aggressive Hybrid Active FOF.json",
+      "size": 6100,
+      "sha256": "f9e90eb017581c62818643fffc48fca3485deaedaa08f2e717275fd5ad2c86bc"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Aggressive Hybrid Fund.json",
+      "size": 104556,
+      "sha256": "7e44d8988885e42985de30bbbafd9e192d123f38a9c5d70f77a6dd0063f20c92"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Arbitrage Fund.json",
+      "size": 210231,
+      "sha256": "40b670a8941bb6f8a60709fd1a64270e0f367653983c1b0018205186b62f63eb"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Balanced Advantage Fund.json",
+      "size": 104444,
+      "sha256": "34b9bed5462755cc7a5f9f5b6b46d5130fba3cd5678a3d9365ba8f8e2a82555a"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Balanced Hybrid Fund.json",
+      "size": 21638,
+      "sha256": "eaa911f6fb1aeb697dd94be7c99430d8b1bb67eadb5b52ff615f3ef56b7fc41a"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Banking & Financial Services Fund.json",
+      "size": 25781,
+      "sha256": "db7dd79554fe8ff6aab0a06c3e1c592b380608ba4518981ba9be53a7ab59eb5c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Banking and PSU Debt Fund.json",
+      "size": 39555,
+      "sha256": "f38b235f49e6369a41a1e9ac1d08b835f53827f3f9adcbf12ca43f0a6e538291"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential BHARAT 22 FOF.json",
+      "size": 1985,
+      "sha256": "efe2553b91a1446cd5a676b0a4685a3ec0bb363f0f8622c4a8ff5ff3b950a5b3"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Bharat Consumption Fund.json",
+      "size": 23466,
+      "sha256": "4a4967e0129acd16ebb8d35b00142b4e18b9860d58adde4e7f5a3865927b4a9f"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential BSE 500 ETF FOF.json",
+      "size": 2561,
+      "sha256": "b4a3d90d3061ece486d01c6a02575400afa8b7d7e02147934e448c5558df01ed"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential BSE 500 ETF.json",
+      "size": 190019,
+      "sha256": "71b97e5e3c9cb8b78a4c002c8afc2081ff3fee2275e7407694a213adb33b85c9"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential BSE Insurance ETF.json",
+      "size": 5715,
+      "sha256": "2daf439adf6996e2f977d89cbb04231c16f600369cf6c4d8b2ec10f1b314e920"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential BSE Liquid Rate ETF - Growth.json",
+      "size": 463,
+      "sha256": "a43a511addb73dd98348b6cd137ead533e8649d7fb87738aa756c507f6e281c0"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential BSE Liquid Rate ETF - IDCW.json",
+      "size": 461,
+      "sha256": "b4d33de1e8321de63a70d5bc5e7efc778a70990bb05d33c62817c6474c3e8a18"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential BSE Midcap Select ETF.json",
+      "size": 12096,
+      "sha256": "8f8f49f438e658348f9b03a5c80909c8d46b7041d1649ad858e54ec5a21e66f2"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential BSE Sensex ETF.json",
+      "size": 12054,
+      "sha256": "11e49abd3062c457a695c8830892a7be12270eedfc3b2a2debe8d8d7b652297d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential BSE Sensex Index Fund.json",
+      "size": 11985,
+      "sha256": "aa0960256cde60930c9d6efce8a8aed416d9b892822e32e7b2af1afdf9ed3d6a"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Business Cycle Fund.json",
+      "size": 37579,
+      "sha256": "fc608f65010eef940554af267a64cea22ef7f1256ab20634209b13e8f1041fa4"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Child Care Fund (Gift Plan).json",
+      "size": 29923,
+      "sha256": "b093b27f5e1fdb93f59744ee7a2806296eced190344276a977be5557314d6a7f"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Commodities Fund.json",
+      "size": 21439,
+      "sha256": "d972990fc7048d59e274e299bd95e4730f34af3720a27fc3f71321e9b84ba9ea"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Conglomerate Fund.json",
+      "size": 19031,
+      "sha256": "d2f9fc18165eee3e9ca6340af52e71b68271012410440b0c6502dbc97ee790dc"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Conservative Hybrid Fund.json",
+      "size": 55035,
+      "sha256": "54c48ec6c6e5c40e6dc7fb9a86805254d78715ec4b5519a461f5e0454ec04df0"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Corporate Bond Fund.json",
+      "size": 80290,
+      "sha256": "6baeb96bbe99ca9b2f1d0be3f9f5095ce31ca233df61172857e900f2a9b0f872"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Credit Risk Fund.json",
+      "size": 42766,
+      "sha256": "8603235d425b300b972ddd1d178fad858019c466e70339b4d9373cfe23726a2d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential CRISIL-IBX Financial Services 3-6 Months Debt Index Fund.json",
+      "size": 7886,
+      "sha256": "49b1835194de0e53bde3e960deb52a027427e326e29f7782ded80efa53bb166a"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Diversified Debt Strategy Active FOF.json",
+      "size": 4121,
+      "sha256": "2058f670b7d693ace7072c10ea3a5c436bf272cef1c3c0f4bdc369c7555eb2fd"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Diversified Equity All Cap Active FOF.json",
+      "size": 3550,
+      "sha256": "8bffdbea84c4db153f71a9fd0570956109b28b3b16bcbd5e0c4cbded2abf610b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Diversified Equity All Cap Omni FOF.json",
+      "size": 6258,
+      "sha256": "78792fc8ca0d393d02238cbdb837d9a0cf976f9c857ddb57db55e2d1eb55adf6"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Dividend Yield Fund.json",
+      "size": 31507,
+      "sha256": "db583ea7bcf1620831cda74b64437c0638ccb559cf11b3d2a65d5e58a90813b7"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Dynamic Asset Allocation Active FOF.json",
+      "size": 13135,
+      "sha256": "ba71c83c243223c89b4e787cdd9067289c5a4cfe446b74973e19d5453962ac29"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Dynamic Term Fund.json",
+      "size": 46877,
+      "sha256": "4c46f28094ff41512169e3a794f23d8ed414078bd0fad51df2786f415b6528cc"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential ELSS -Tax Saver Fund.json",
+      "size": 33926,
+      "sha256": "c5a6393da311233e9496da20b7c007b16b5f3f1d214f9ef0d16cbfcc33930623"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Energy Opportunities Fund.json",
+      "size": 35936,
+      "sha256": "d9be9f3a5d04dbaae4a4b5c33d6f9c8151695ebb2f56fd2d5111047f7f49bba7"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Equity Minimum Variance Fund.json",
+      "size": 16998,
+      "sha256": "f4e1dda3f47c426c7b12f163e75e2c67af4f70708bd832f62968c1e1e5624d35"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Equity Savings Fund.json",
+      "size": 86513,
+      "sha256": "9d3b254df1c72ee0c7652df2ecfa28ba6770980b557a0c8142165cfc3a8c21bd"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential ESG Exclusionary Strategy Fund.json",
+      "size": 27326,
+      "sha256": "7f251144efdafc836185300efde4addd3369ac927b7f3067e50cda6638931d4f"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Exports and Services Fund.json",
+      "size": 27670,
+      "sha256": "cc354d1e9a45492e5593d4c0fe9c75b1fd6f8c72b8beaf132e22ae2aaabd058c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Fixed Maturity Plan - Series 85 - 10 Years Plan I.json",
+      "size": 11131,
+      "sha256": "831ec66da9e280c4033dd29c34ecd5dcc5218828f32b3cd88c290f45a05a2dc6"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Fixed Maturity Plan - Series 88 - 1303 Days Plan S.json",
+      "size": 2568,
+      "sha256": "75f7e4f459d7422da0a7f15c66096b043670b39d23c411f6c87aea190d98ca25"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Flexi Cap Fund.json",
+      "size": 32304,
+      "sha256": "d21872809b155bc0b91b49aa8c9ff2ca5a7a7e5aacaa13e102cfca259915c2bc"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Floating Interest Rates Fund.json",
+      "size": 62014,
+      "sha256": "3a84c1758f2a20efc0ab9f5cba11985b035a4cce3974fa8f490a6eba3023a612"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential FMCG Fund.json",
+      "size": 17044,
+      "sha256": "cd0c5e0fd7b04cb5d9556de84986bb8c3f26fda6a5b9a70b7c40886ffb7e9b34"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Focused Fund.json",
+      "size": 16429,
+      "sha256": "297b134995d416f448e4f89c2bb913768bfeedcb06be0306fbf9abf53ced8524"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Gilt Fund.json",
+      "size": 22748,
+      "sha256": "b36498c58d6334cd71335d0967784be43fd1193a2e18f537cf3aca760b24bf84"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Global Advantage Fund (FOF).json",
+      "size": 4421,
+      "sha256": "f2bd15df482b02f1c20b5b94d55a9a162094fca909ba39ca7eb4ff480e7e3d4c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Global Stable Equity Fund (FOF).json",
+      "size": 2865,
+      "sha256": "74335574e821e7a2c87db9a8447b3da52b0e5db43e611cc0d832af5fd4f5c59a"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Gold ETF FOF.json",
+      "size": 2558,
+      "sha256": "c1f23f7dd4a2b497d1c861d19da40b29b6280f82504bbc8f9dccfb29639fe91f"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Gold ETF.json",
+      "size": 1901,
+      "sha256": "5e7a754e9cfc3156f69f7f85151d8d11c797a184727182d1b02d2687cbe418f9"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Healthcare Fund.json",
+      "size": 14784,
+      "sha256": "d5358b7efe0a9cac5edf1b5bc26d1c17fc27c996606e7a1d759427b3b60b5842"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI PRUDENTIAL HOUSING OPPORTUNITIES FUND.json",
+      "size": 22821,
+      "sha256": "d8ed8a36383d5586d273d153e53dbdc8ec050ec11c3937cd1a03631166ddfa28"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Income plus Arbitrage Omni FOF.json",
+      "size": 4126,
+      "sha256": "f300ae401f9cbbd53050fb2b79ac295d8ac669940aad682ba011eadeb229316e"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential India Opportunities Fund.json",
+      "size": 34285,
+      "sha256": "4390b7d9f0c84c7199b40ce3dd4735f95bce7164693c4d132ffa423e0553f4b3"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Infrastructure Fund.json",
+      "size": 31386,
+      "sha256": "15b73c4ad5f56c4c2c0f82370638b2ef53512aa37be636ff8da011cbc59efce9"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Innovation Fund.json",
+      "size": 33320,
+      "sha256": "80e0fd16efc6b8dd139c20034d9d1527eb4b999fddaad1168c1c8b855348b308"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Large & Mid Cap Fund.json",
+      "size": 48437,
+      "sha256": "9e523858e95d29f4f33ab1f3d495765dd0923cb3877ddd737ebb92d3483b3868"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Large Cap Fund.json",
+      "size": 39867,
+      "sha256": "a0bb72bf22ed81ce3f6b0f0273d4b37f3ae9c49e88fc53bf9441a35785698278"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Liquid Fund.json",
+      "size": 61091,
+      "sha256": "72dd50ff9de1673b5c557e827aaf89d128f0fbda5452210e1ed8fd8cb5bdadd5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Long Term Fund.json",
+      "size": 7861,
+      "sha256": "3712dd7f3d9b8d162aac73f5d728a531a5fc810feafbed2158fbfc8219398325"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Long Term Wealth Enhancement Fund.json",
+      "size": 10378,
+      "sha256": "96ab7c4805b4114f8975ef20eb60517e771adf761f2c614eadcf692fcd444c1e"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Manufacturing Fund.json",
+      "size": 27688,
+      "sha256": "8a555d6df13ac9c699ab91805542f44e4e66aee564a710d85fdd1710594ef928"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Medium Term Fund.json",
+      "size": 43941,
+      "sha256": "61d2a0b15f19b5575ffee08a7726291f07323938497a8696451aaf3ed8d24e73"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Medium to Long Term Fund.json",
+      "size": 21794,
+      "sha256": "05a906032722de111a435e44da0a21746aa43a64ff1e6e436f8a7f642a535548"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Mid Cap Fund.json",
+      "size": 32096,
+      "sha256": "dd35f95a35fbebb7c27bd04bbbababe384c659407c67ee7b86cb2ee1f9b8d6c8"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential MNC Fund.json",
+      "size": 21345,
+      "sha256": "7ad98ac01094a242ea56b7160bd167a18daccba44d7e7fd0d82b2e63139471fc"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Money Market Fund.json",
+      "size": 51097,
+      "sha256": "91c6a733c3b8a972bcb112a359ed674976f765e05b68edc4673b4e3575ff7d9b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Multi Asset Allocation Fund.json",
+      "size": 108778,
+      "sha256": "1996ed9b948fb284d91719a2793f2267e3b124b0d007376959cc2e0d98495a76"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Multi Cap Fund.json",
+      "size": 64000,
+      "sha256": "f58a12054eacfb5ff59a8f8dca5192c999d266e81aa4077e1b3228809df67b36"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Multi Sector Passive FOF.json",
+      "size": 6685,
+      "sha256": "a81bd7426e8dcd437ee1d8e119762da16070c09089f7962ab9038bf960e05f91"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Multi-Asset Active FOF.json",
+      "size": 9090,
+      "sha256": "639af3b82590b731b98137c51167ae6672bca13114ef07bebecd267b8c789dbf"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential NASDAQ 100 Index Fund.json",
+      "size": 39776,
+      "sha256": "59d82fda27deb9d3aa6f68dd1713f31d43f9c5c7766703c38c00980087e9c404"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty 10 yr Benchmark G-Sec ETF.json",
+      "size": 1089,
+      "sha256": "e1a5e083f28b2eb7026d7753613529fd72343333abd060d4e88d20417254007c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty 100 ETF.json",
+      "size": 38333,
+      "sha256": "f0582747b5d36cdda6950ec11b8efcb52108159f5b7474341e79b3bcccaf61a9"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty 100 Low Volatility 30 ETF FOF.json",
+      "size": 2627,
+      "sha256": "9ad75ad7c0a61b8dd8d070df47b4604613fc215c32168e95bd109245449eb151"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty 100 Low Volatility 30 ETF.json",
+      "size": 12132,
+      "sha256": "540b8595349dac5a1e4d0204af8dc2ce316e81a723eabd03ccd46e63b7b09801"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty 200 Momentum 30 ETF.json",
+      "size": 12150,
+      "sha256": "1cf2ffafb404da7c17d27714b1549e7de624ae988e650187499fe8af06f32a17"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty 200 Momentum 30 Index Fund.json",
+      "size": 12162,
+      "sha256": "2437c173ead655a02046311ccf9a012e48f17129f873a2394517f0f9f202c00d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty 200 Quality 30 ETF.json",
+      "size": 12091,
+      "sha256": "b52fcf0afa78624943e869b521893734f9e5f79cf3fa75a069214c1580399f47"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty 5 yr Benchmark G-SEC ETF.json",
+      "size": 1082,
+      "sha256": "185778b064ffb242688ab0e959404c46eaf1e30f71d709fc104a9ba70731caa7"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty 50 ETF.json",
+      "size": 19732,
+      "sha256": "87c9f998cc493248c4532deab2728268d1bc6aad36de04be0a583de86190a816"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty 50 Index Fund.json",
+      "size": 454,
+      "sha256": "f047bb562cedd4b84d16862f06fbad3223304faa6fe7cd096621fb341f43a6fc"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty 500 Index Fund.json",
+      "size": 189085,
+      "sha256": "4b97eb243989e0c72fddac0192b3f8a3bbd41961a40bc21cf8c3757a26b142fe"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Alpha Low - Volatility 30 ETF FOF.json",
+      "size": 2639,
+      "sha256": "1bfd3b13802092ae82671d560ab2721e886103e57f218777c9d6eedbf39901a1"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Alpha Low- Volatility 30 ETF.json",
+      "size": 12174,
+      "sha256": "1c0c66168686e43256f03c176ca40b9235de92864a282efb8aa26b16d4bf160f"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Auto ETF.json",
+      "size": 6393,
+      "sha256": "37a73f1a357c98b638dc2a0da5d2d30ec4f0a1fb545e5cd989e2e923d3ca5b1e"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Auto Index Fund.json",
+      "size": 6410,
+      "sha256": "23cba0f9d2152debae0ad021c01df77d738ffadf0385d5aa1df40c748cdefe48"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Bank ETF.json",
+      "size": 5851,
+      "sha256": "0986379ce74eb4f586400e3cc5a688fe0c946cb77c3dfe42ac362e32c6c096a5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Bank Index Fund.json",
+      "size": 5849,
+      "sha256": "43db09113ce91491bfaab09f8785426d8382979c82fa2e1c7931eac4fc3efb6b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Commodities ETF.json",
+      "size": 11961,
+      "sha256": "0bf26e6423e1ff95ec66d7f58691b25d35987d5e9708b54091b8ccedb0bd5c28"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty EV & New Age Automotive ETF FOF.json",
+      "size": 2632,
+      "sha256": "b6f5368d869e51a73ae55307780a52479bd28f64a3bd4310ef490288861155f5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty EV & New Age Automotive ETF.json",
+      "size": 15191,
+      "sha256": "30383831201aaa16c15c1e6f955e7bf1ff54fb8533149074d991405a6f2af6d4"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Financial Services Ex-Bank ETF.json",
+      "size": 12159,
+      "sha256": "097bb7a8f1a3254a3fd655094cb51d08e1e8b9086ab0ed5d3d2aa5ae7cd08356"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty FMCG ETF.json",
+      "size": 6402,
+      "sha256": "9f767f7a1d5d554de693d1c1491e6d8e8ed617d366ded2ac345c1cf4d351b082"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty G-sec Dec 2030 Index Fund.json",
+      "size": 3186,
+      "sha256": "b3fb34351ea2d6dd2082dade85fade8884b5fbe05331450ecf027c328f89f7fd"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Healthcare ETF.json",
+      "size": 8563,
+      "sha256": "fb41700b6cd7464e3c1c715da0376d54c87183a3c6f5cabae2d5096fcf6f1b65"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty India Consumption ETF.json",
+      "size": 11940,
+      "sha256": "f0a09bf4b5bf713b8fa382dd28b098102128f63487da56b03ae53762c9b5e1d5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Infrastructure ETF.json",
+      "size": 12188,
+      "sha256": "33e425ed9b41b0a5e8080d1bf4bbb432475d254226b18e0b63039de30299bd07"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty IT ETF.json",
+      "size": 4444,
+      "sha256": "c7acfce6ae1ad905e3b49a9176316bb26ac857a967b16b08796418b09ac4d043"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty IT Index Fund.json",
+      "size": 4465,
+      "sha256": "d319372c504614fee46de76f875b447fb18d67e02a4eb7b3ec5e7bdc678dd9dc"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty LargeMidcap 250 Index Fund.json",
+      "size": 95064,
+      "sha256": "8c0d7de3ba148703c29f3a45714ba9e2b5fb9bf365804f6e24b8083a2c926e3b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Metal ETF.json",
+      "size": 6426,
+      "sha256": "0b15be5f07c44debfd2b531e4ca749fd71ffa3e479a814a6bbb704a31a9a67cf"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Midcap 150 ETF.json",
+      "size": 57639,
+      "sha256": "44cf5d7e0e2927464a702191f2287057e28accb713ce4078ec7b4f41547bd11f"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Midcap 150 Index Fund.json",
+      "size": 57704,
+      "sha256": "1a553bfe588c8734c5feb48393988c4c0d2efca729b7a9bb33c9708f323235b0"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Next 50 ETF.json",
+      "size": 19746,
+      "sha256": "32dab1c05fe997ff23d7022c47026e795aadde6d79f6c41834517a4b8299c007"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Next 50 Index Fund.json",
+      "size": 19829,
+      "sha256": "877b47fc54041ac9126fcce6dc9e69171055a0de228e72dd2a2155029fa8c7a2"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Oil & Gas ETF.json",
+      "size": 6348,
+      "sha256": "447a1f0a5db13092efe49a5b851501e70c51652e30ee1e1fbf2614d9d2e366f0"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Pharma Index Fund.json",
+      "size": 8569,
+      "sha256": "5a08850422c0ce4444590ca0095c095768c7dfca49e0e36f6df6e2c9335679d2"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Private Bank ETF.json",
+      "size": 4387,
+      "sha256": "46747ba6c84170c2c3fff156e028e1973e0d2c822d56bce48085b4c551517174"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Private Bank Index Fund.json",
+      "size": 4365,
+      "sha256": "ca30e39a33d23680f17e953cf40f5e28d6c0a633492190793d4488a5f50d496f"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty PSU Bank ETF.json",
+      "size": 5071,
+      "sha256": "4b826810be930bfe6eb6ef7deb2b74f41eacbc88520bdf3e758440d4528e626c"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty PSU Bond Plus SDL Sep 2027 4060 Index Fund.json",
+      "size": 32654,
+      "sha256": "01f6d8b0c702d11edb0a25f06d76663c5e5faf84a2ef29a3e38a48308b37a16a"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty SDL Dec 2028 Index Fund.json",
+      "size": 13956,
+      "sha256": "2fd9aeb7a6da154b7e0d4f6edbc199e1ec8c367e02a7cfa8c15b6d1093e8ec52"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty SDL Sep 2026 Index Fund.json",
+      "size": 3575,
+      "sha256": "5141996182df79104ab0337c8ac8316fa3a88f079b5302394c2581bebb5b952b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty SDL Sep 2027 Index Fund.json",
+      "size": 16091,
+      "sha256": "520584e7bbdcc52992339602b3a61dd29f3d05a15b60960da01046f753ff6815"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Smallcap 250 ETF.json",
+      "size": 95061,
+      "sha256": "d3fc67740f091fa9404aff7e0ff5cdffc342ad415cba866b5cc719de8d75673f"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Smallcap 250 Index Fund.json",
+      "size": 96042,
+      "sha256": "5bb32fbe28b67564e68d4ab532270b983239d1b4f28a5765c99f8e7dac299f18"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Top 15 Equal Weight ETF.json",
+      "size": 6269,
+      "sha256": "fa50b2caec484825f42d171a28274b886c4f971b1d819ea98a13686717b72178"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty Top 15 Equal Weight Index Fund.json",
+      "size": 6306,
+      "sha256": "b04b5a8b462b868bd7404282cdf5d87d6805b80af34de64d0b44b530ba8968c1"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty200 Quality 30 Index Fund.json",
+      "size": 12064,
+      "sha256": "5f1cc46539a5981cc5941a0dd42fc2f7f0b72618f89ceb9565b7b1218eb239de"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty200 Value 30 ETF.json",
+      "size": 11877,
+      "sha256": "742ba66fa98d21361519a0f6597e8106a9e328db9f839cc7870bff1580930686"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty200 Value 30 Index Fund.json",
+      "size": 11924,
+      "sha256": "75c02d5da0b990f64ee1cce1245dac35ef90093142b96f66b9fb680cde219702"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty50 Equal Weight Index Fund.json",
+      "size": 19557,
+      "sha256": "0c87493c2e1ce9b278129f91aa9e1afe0bc86db95103e1c0df76c69e00aaf04b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty50 Value 20 ETF.json",
+      "size": 8166,
+      "sha256": "6fe1edac2b95c3e4d2243d08c77596c8c59486d96aec7336d7b013714388f76d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Nifty50 Value 20 Index Fund.json",
+      "size": 8165,
+      "sha256": "307eebcd3f677a4b182c90350bb2aeeb75724e95e2a4ae43e79b1671f65a2e83"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Overnight Fund.json",
+      "size": 3206,
+      "sha256": "77af1a48d72c15727164595855a82d140a76edac2ed9dcab3fda7d6acc57f902"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Passive Multi-Asset Fund of Funds.json",
+      "size": 13901,
+      "sha256": "4acc3c20d2dd204d532a409825c42ca8c87880f5c4ed5bf2b5535eeea092a0bb"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI PRUDENTIAL PSU EQUITY FUND.json",
+      "size": 20871,
+      "sha256": "ac722f14c4a6e58e50eb24c431b3442a6c68a0031d48e50deb4235602344eb63"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Quality Fund.json",
+      "size": 29066,
+      "sha256": "b40379d640c7cb0ea032211180c04acac73007dc7166b8d201b5cb467f4045ab"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Quant Fund.json",
+      "size": 20684,
+      "sha256": "c4ec05149529379c8d3c17f5baf1d32310216504fa36cde4ce1452615c3d8d5b"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Retirement Fund - Hybrid Aggressive Plan.json",
+      "size": 33567,
+      "sha256": "b176d933dc41bed1e94d3e9b42565b09661d339b8828bc7977ee8e56dab2c8df"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Retirement Fund - Hybrid Conservative Plan.json",
+      "size": 14132,
+      "sha256": "573220c9299cee2438e0e8b929f789635118e5c66662a1955068348e74393847"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Retirement Fund - Pure Debt Plan.json",
+      "size": 6944,
+      "sha256": "acca6622816766afae92f6e97daf599b42335d81177eb49e628a0bde292cffbe"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Retirement Fund - Pure Equity Plan.json",
+      "size": 34493,
+      "sha256": "24f04ecbb65f96a0f3e615f736a4529c10540116616a4786b758877b2d4e01b2"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Rural Opportunities Fund.json",
+      "size": 19023,
+      "sha256": "a9846ee9cffaffde1fb6652812f4ad4e8884a6c65da06c1a2adbbd8e37200545"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Short Term Fund.json",
+      "size": 70872,
+      "sha256": "1f2a8c19a3010eb31720da5d66c720ed51909936cfa3e930da64fd0a00fde52d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Silver ETF FOF.json",
+      "size": 2561,
+      "sha256": "8f16f281df0ca9d6bb4a4b816469b8744b328376368f85b0884dc2918a126e24"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI PRUDENTIAL SILVER ETF.json",
+      "size": 1908,
+      "sha256": "e4e4a9b0b189178dd3f473091a65a5b7a01e351f23f058942bf44161dd66984d"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Small Cap Fund.json",
+      "size": 47820,
+      "sha256": "e3a4690ababecf4469f7a43ae38064f3d6c647eb54d3ea817996a95cb3294063"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Strategic Metal and Energy Equity Fund of Fund.json",
+      "size": 2897,
+      "sha256": "2982a83080591f564f84b1f46ba52a6a5afec861a4092c6b6cab1213fed85322"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Technology Fund.json",
+      "size": 30650,
+      "sha256": "cb89e3ca7d5ef724788c3683646919a7cca560aa30ab4f045dc4f44ce8db5ffb"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Transportation and Logistics Fund.json",
+      "size": 18071,
+      "sha256": "879ac2509315d173f0dd5fcfc5a11302ab4d2fa2bccc101def1be6e1b9391535"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Ultra Short Term Fund.json",
+      "size": 82479,
+      "sha256": "a962833d41ea8717e00e757bb97681448da995a83d823f00a542cc37091a22aa"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Ultra Short to Short Term Fund.json",
+      "size": 64972,
+      "sha256": "121677d866ea37478b2ad3fd494c6e7181b4530fce48fc26a810c4860f97b2c5"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential US Bluechip Equity Fund.json",
+      "size": 24071,
+      "sha256": "5dac5394b9673d438e4883b4eeddb0707ea4a98b0dc4f948241d9bd8cb169723"
+    },
+    {
+      "path": "parsed/amc_websites/ICICI_Prudential_Mutual_Fund/ICICI_Prudential_Mutual_Fund/2026/08/ICICI Prudential Value Fund.json",
+      "size": 28104,
+      "sha256": "665e5225bbe81bff4e71fcb0eca97eb846377e99fdc8c50705da4817477b6eca"
+    },
+    {
       "path": "parsed/amc_websites/IL&FS_Mutual_Fund_(IDF)/2026/06/ILFS_DASHBOARD_REPORT_R1_June_2026.json",
       "size": 10506,
       "sha256": "2387179b3191ee54823f70e96b36633e9124560badd7b9b4ffddd87875c39614"
@@ -70339,8 +72524,8 @@
     },
     {
       "path": "reference/isin_latest_nav.json",
-      "size": 588322,
-      "sha256": "69276bf1706725490b7354e91c6aac7ac02410993d3adf965e39ab45078f20f5"
+      "size": 588323,
+      "sha256": "13190b97a3b0164e33ad7cc13bdcf850b47d8fe567b65b8a81685ae6699e2b64"
     },
     {
       "path": "reference/nav_completeness.json",
@@ -85019,8 +87204,8 @@
     },
     {
       "path": "webapp.db",
-      "size": 76308480,
-      "sha256": "a58834424c827cdc450962138a4b5feb24d9491799b190796d4fc6f03bb0a823"
+      "size": 77172736,
+      "sha256": "fd7a04b5a6f846b4ee6fc1cc9dad2602b273631f63b5895beaf67db6ddfbe97a"
     },
     {
       "path": "webapp_auth.db",
@@ -85028,5 +87213,5 @@
       "sha256": "c856b304795a2d7531f6b127798d6cbca6be767d1f603f801be3fb6d6f729d6b"
     }
   ],
-  "total_bytes": 1510178799
+  "total_bytes": 1522928336
 }
